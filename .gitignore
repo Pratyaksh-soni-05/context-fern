@@ -27,3 +27,5 @@ bench/.pytest_cache/
 .DS_Store
 Thumbs.db
 Desktop.ini
+bench/data/private/
+bench/data/scrubbed/
