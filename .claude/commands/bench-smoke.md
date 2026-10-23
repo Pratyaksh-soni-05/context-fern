@@ -1,0 +1,1 @@
+Run `uv run --project bench bench smoke`. Report router metrics (action accuracy, F1 new, F1 return, over-carry, escalation rate, p50/p95 latency) as a table and compare with the last result in bench/results/latest.json. Flag any metric that moved more than 2 points.

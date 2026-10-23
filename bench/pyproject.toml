@@ -1,0 +1,16 @@
+[project]
+name = "bench"
+version = "0.0.0"
+description = "ReplayBench: scrubber, splicer, runner and metrics for ContextTree"
+requires-python = "==3.12.*"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest==9.1.1"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bench"]

@@ -1,0 +1,12 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/core" },
+    { "path": "packages/store" },
+    { "path": "packages/embed" },
+    { "path": "packages/daemon" },
+    { "path": "packages/cli" },
+    { "path": "packages/plugin-claude-code" },
+    { "path": "packages/ui" }
+  ]
+}

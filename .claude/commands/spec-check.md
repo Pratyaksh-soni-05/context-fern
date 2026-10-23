@@ -1,0 +1,1 @@
+Compare the current branch's diff against docs/spec.md. List anything the diff implements that the spec does not ask for, anything the spec requires for this module that is missing, and any acceptance criterion now testable that has no test. Be brief.
