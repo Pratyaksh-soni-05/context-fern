@@ -29,4 +29,5 @@ Thumbs.db
 Desktop.ini
 bench/data/private/
 bench/data/scrubbed/
+bench/data/labels/
 bench/denylist.txt

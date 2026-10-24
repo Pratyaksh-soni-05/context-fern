@@ -1,0 +1,6 @@
+# tiny test-only stray prompt list, separate from the real bench/data/strays.txt
+what's the weather like in Lisbon this time of year?
+can you recommend a quick pasta recipe for tonight?
+what year did the first moving pictures come out?
+what's the time complexity of a hash map lookup?
+how many time zones does Russia span?

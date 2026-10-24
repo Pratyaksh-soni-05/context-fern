@@ -1,0 +1,65 @@
+# Synthetic off-topic prompts for ReplayBench's "stray" splice variant (spec
+# §13). Deliberately generic — weather, food, trivia, general CS definitions —
+# and unrelated to any code in context. One prompt per line. Lines starting
+# with # are comments; blank lines are ignored. Committed on purpose: ground
+# truth needs a fixed, reproducible list.
+what's the weather usually like in Lisbon in October?
+is it going to rain tomorrow where you are?
+what's the difference between a hurricane and a typhoon?
+why does it get so humid before a thunderstorm?
+what temperature does water freeze at in Fahrenheit?
+what's a quick pasta recipe for a weeknight dinner?
+how do you keep guacamole from turning brown?
+what's the difference between baking soda and baking powder?
+how long should you let steak rest after cooking?
+what's a good substitute for buttermilk in a recipe?
+is sourdough bread healthier than regular white bread?
+what's the best way to reheat leftover rice?
+why does cutting onions make you cry?
+what's the difference between espresso and regular coffee?
+how do you keep bananas from ripening too fast?
+what's the tallest mountain in the world?
+which planet in our solar system has the most moons?
+who invented the telephone?
+what year did the Berlin Wall fall?
+how many bones are in the human body?
+what's the national bird of the United States?
+which ocean is the largest by surface area?
+what's the fastest land animal?
+how many strings does a standard violin have?
+what's the longest river in South America?
+what's the capital of New Zealand?
+who wrote the novel Moby Dick?
+how many players are on a standard soccer team?
+what's the smallest country in the world by area?
+which element has the chemical symbol Au?
+what's the time complexity of a hash map lookup in the average case?
+what's the difference between a stack and a queue?
+what does Big O notation actually measure?
+what's the difference between TCP and UDP?
+what's a recursive function, in plain terms?
+what's the difference between a compiler and an interpreter?
+what does idempotent mean in the context of HTTP methods?
+what's the difference between a process and a thread?
+what's a hash collision and why does it matter?
+what's the difference between depth-first and breadth-first search?
+what's a race condition, roughly speaking?
+what does ACID stand for in databases?
+what's the difference between a linked list and an array?
+what's garbage collection, in simple terms?
+what's the difference between synchronous and asynchronous code?
+how many days are in a leap year?
+what's the boiling point of water at sea level?
+what's the difference between a crocodile and an alligator?
+how many time zones does Russia span?
+what's the world's most spoken native language?
+who painted the Mona Lisa?
+what's the speed of light in a vacuum, roughly?
+how many continents are there?
+what's the difference between a meteor and a meteorite?
+what's the tallest building in the world right now?
+how many hearts does an octopus have?
+what's the difference between a virus and bacteria?
+what's the most populous city in the world?
+how many colors are typically listed in a rainbow?
+what's the freezing point of saltwater compared to fresh water?
