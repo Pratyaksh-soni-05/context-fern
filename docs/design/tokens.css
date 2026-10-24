@@ -1,0 +1,81 @@
+/* Context Fern design tokens · v1 (locked 2026-10-23)
+   Source of truth for packages/ui and site/. Reference boards: docs/design/blueprint/ */
+
+@import url('https://fonts.googleapis.com/css2?family=Doto:wght@700;900&family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap');
+/* Production: self-host these four families (all OFL) in packages/ui/public/fonts. No runtime calls to Google from fern ui. */
+
+:root {
+  /* Ground and surfaces */
+  --paper: #F2EEE6;          /* page ground */
+  --paper-grid: #E8E2D7;     /* engineering grid lines */
+  --surface: #FBFAF7;        /* panels, cards, nav */
+  --surface-raised: #FFFFFF; /* cards inside panels */
+  --sand: #E9E2D5;           /* ticket cards, specimen frames */
+  --sand-strip: #E4DDCF;     /* ticket bottom strip */
+  --charcoal: #242422;       /* dark bands, start screen backdrop */
+  --terminal: #1E1E1C;       /* terminal windows */
+
+  /* Lines */
+  --line: #E2DBCE;           /* panel borders */
+  --line-strong: #D8D1C4;    /* rules, table rows */
+  --line-control: #DCD5C8;   /* control borders */
+  --dot-rule: #9A948A;       /* dotted section rules */
+
+  /* Text */
+  --ink: #141413;            /* body text, primary buttons */
+  --forest: #24402C;         /* serif headlines, wordmark, character fern */
+  --text-2: #5F5B53;         /* secondary text (5.9:1 on paper) */
+  --text-3: #6E6A62;         /* labels, mono metadata (4.9:1 on paper) */
+  --text-faint: #9A948A;     /* grey half of two-tone headlines; large text only */
+
+  /* Frond palette: assign in order; stray and root are fixed */
+  --stem: #1E2A21;
+  --frond-1: #4F8A55;  --frond-1-ink: #3E7344;  /* moss */
+  --frond-2: #3D6FB3;  --frond-2-ink: #2F5C99;  /* lake */
+  --frond-3: #7A5DC0;  --frond-3-ink: #6748AE;  /* iris */
+  --frond-4: #B8862A;  --frond-4-ink: #8A6416;  /* ochre */
+  --frond-5: #C0577F;  --frond-5-ink: #A13F66;  /* rose */
+  --stray: #E8622F;    --stray-ink: #B8461A;    --stray-wash: #FCEDE5;
+  --root: #8A857B;     --root-wash: #EFEAE1;
+  --off: #E8E2D7;      /* empty cells in bars and heat maps */
+  --mode-wash: #E3EEDD; --mode-line: #B9D1B2;  /* suggest-mode pill */
+
+  /* On dark (terminal, charcoal band) */
+  --on-dark: #F2EEE6;
+  --on-dark-2: #A7A39A;
+  --on-dark-line: #34332F;
+  --term-green: #8DB886;
+  --term-lake: #8FB2E6;
+  --term-iris: #B7A4F2;
+  --term-ochre: #E2C792;
+  --term-ember: #F0875A;
+
+  /* Type */
+  --font-display: 'Doto', ui-monospace, monospace;          /* weight 900, uppercase, big words and stat numbers only */
+  --font-serif: 'Instrument Serif', Georgia, serif;         /* weight 400 only; italic for emphasis */
+  --font-sans: 'Geist', system-ui, sans-serif;              /* interface, body */
+  --font-mono: 'Geist Mono', ui-monospace, monospace;       /* data, labels, commands, receipts */
+
+  /* Shape */
+  --radius-control: 8px;
+  --radius-panel: 12px;
+  --radius-pill: 999px;
+  --notch: 14px;            /* ticket corner chamfer */
+  --grid: 80px;             /* engineering grid cell (96px on the marketing site) */
+}
+
+/* Reusable patterns */
+.paper-grid {
+  background-color: var(--paper);
+  background-image: linear-gradient(var(--paper-grid) 1px, transparent 1px),
+                    linear-gradient(90deg, var(--paper-grid) 1px, transparent 1px);
+  background-size: var(--grid) var(--grid);
+}
+.ticket {
+  clip-path: polygon(var(--notch) 0, calc(100% - var(--notch)) 0, 100% var(--notch),
+                     100% calc(100% - var(--notch)), calc(100% - var(--notch)) 100%,
+                     var(--notch) 100%, 0 calc(100% - var(--notch)), 0 var(--notch));
+}
+.dot-field { background-image: radial-gradient(#DDD6C8 0.9px, transparent 1.1px); background-size: 8px 8px; }
+.dot-rule { height: 6px; flex-grow: 1; background-image: radial-gradient(var(--dot-rule) 1px, transparent 1.3px); background-size: 7px 6px; }
+.diamond { width: 9px; height: 9px; border: 1.5px solid var(--ink); transform: rotate(45deg); }

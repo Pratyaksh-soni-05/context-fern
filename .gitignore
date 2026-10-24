@@ -5,8 +5,8 @@ node_modules/
 dist/
 *.tsbuildinfo
 
-# ContextTree runtime data
-.contexttree/
+# Context Fern runtime data
+.fern/
 *.db
 *.db-journal
 *.db-wal

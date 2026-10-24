@@ -1,6 +1,6 @@
 # Security Policy
 
-ContextTree runs a localhost daemon and, in isolate mode, proxies requests to your model provider and forwards your auth headers. Treat anything touching `packages/daemon/src/proxy/`, authentication, the installer, or the journal as sensitive.
+Context Fern runs a localhost daemon and, in isolate mode, proxies requests to your model provider and forwards your auth headers. Treat anything touching `packages/daemon/src/proxy/`, authentication, the installer, or the journal as sensitive.
 
 ## Reporting a vulnerability
 
@@ -14,4 +14,4 @@ We aim to acknowledge reports within a few days. As a solo-maintained project, f
 
 ## Scope
 
-In scope: the daemon, the isolate-mode proxy, the installer scripts, and anything that handles API keys or auth headers. Out of scope: issues requiring local code execution the attacker already has (ContextTree assumes a trusted local machine), and third-party model provider vulnerabilities.
+In scope: the daemon, the isolate-mode proxy, the installer scripts, and anything that handles API keys or auth headers. Out of scope: issues requiring local code execution the attacker already has (Context Fern assumes a trusted local machine), and third-party model provider vulnerabilities.

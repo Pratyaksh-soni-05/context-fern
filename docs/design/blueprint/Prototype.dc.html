@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Context Fern app</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Doto:wght@700;900&amp;family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+input[type=range]{accent-color:#24402C}
+</style>
+</helmet>
+<div style="width: 1440px; height: 960px; background-color: #F2EEE6; background-image: linear-gradient(#E8E2D7 1px, transparent 1px), linear-gradient(90deg, #E8E2D7 1px, transparent 1px); background-size: 80px 80px; color: #141413; font-family: 'Geist', system-ui, sans-serif; font-size: 13px; line-height: 20px; display: flex">
+
+<nav aria-label="App" style="width: 64px; flex-shrink: 0; border-right: 1px solid #E2DBCE; background: #F7F4EE; display: flex; flex-direction: column; align-items: center; padding: 18px 0; gap: 6px">
+<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#24402C" stroke-width="1.6" stroke-linecap="round"><path d="M12 22V3"/><path d="M12 7c2-1 4-1 6 0M12 11c-2.5-1.3-5-1.3-7.5 0M12 15c2.2-1.1 4.4-1.1 6.6 0M12 18.5c-1.6-.8-3.2-.8-4.8 0"/></svg>
+<div style="height: 18px"></div>
+<button type="button" aria-label="Fern view" onClick="{{toFern}}" style="width: 40px; height: 40px; border: 0; border-radius: 9px; background: {{navFern}}; display: grid; place-items: center; cursor: pointer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" fill="none" stroke="#141413" stroke-width="1.4" stroke-linecap="round"><path d="M9 16V2M9 6l4-2M9 9 4.5 6.5M9 12l4.5-2.5"/></svg></button>
+<button type="button" aria-label="List view" onClick="{{toList}}" style="width: 40px; height: 40px; border: 0; border-radius: 9px; background: {{navList}}; display: grid; place-items: center; cursor: pointer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" fill="none" stroke="#141413" stroke-width="1.4" stroke-linecap="round"><path d="M6 4.5h9M6 9h9M6 13.5h9M3 4.5h.01M3 9h.01M3 13.5h.01"/></svg></button>
+<button type="button" aria-label="Categories view" onClick="{{toCats}}" style="width: 40px; height: 40px; border: 0; border-radius: 9px; background: {{navCats}}; display: grid; place-items: center; cursor: pointer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" fill="none" stroke="#141413" stroke-width="1.4"><rect x="2.5" y="2.5" width="5.5" height="5.5" rx="1"/><rect x="10" y="2.5" width="5.5" height="5.5" rx="1"/><rect x="2.5" y="10" width="5.5" height="5.5" rx="1"/><rect x="10" y="10" width="5.5" height="5.5" rx="1"/></svg></button>
+<div style="width: 24px; height: 1px; background: #E2DBCE; margin: 8px 0"></div>
+<button type="button" aria-label="Journal" style="width: 40px; height: 40px; border: 0; border-radius: 9px; background: transparent; display: grid; place-items: center; cursor: pointer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" fill="none" stroke="#6E6A62" stroke-width="1.4" stroke-linecap="round"><path d="M4 3h8l2 2v10H4z"/><path d="M7 8h4M7 11h4"/></svg></button>
+<button type="button" aria-label="Terminal" style="width: 40px; height: 40px; border: 0; border-radius: 9px; background: transparent; display: grid; place-items: center; cursor: pointer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" fill="none" stroke="#6E6A62" stroke-width="1.4" stroke-linecap="round"><path d="m4 5 4 4-4 4M10 13h4"/></svg></button>
+<div style="flex-grow: 1"></div>
+<button type="button" aria-label="Settings" style="width: 40px; height: 40px; border: 0; border-radius: 9px; background: transparent; display: grid; place-items: center; cursor: pointer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" fill="none" stroke="#6E6A62" stroke-width="1.4"><circle cx="9" cy="9" r="2.2"/><path d="M9 2v2M9 14v2M2 9h2M14 9h2M4 4l1.4 1.4M12.6 12.6 14 14M4 14l1.4-1.4M12.6 5.4 14 4"/></svg></button>
+</nav>
+
+<div style="flex-grow: 1; min-width: 0; box-sizing: border-box; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+
+<header style="height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 16px">
+<div style="display: flex; align-items: baseline; gap: 14px">
+<span style="font-family: 'Instrument Serif', Georgia, serif; font-size: 30px; line-height: 32px; color: #24402C">Context <span style="font-style: italic">Fern</span></span>
+<span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; color: #6E6A62">shop-api / session 14 / today</span>
+</div>
+<div role="tablist" aria-label="View" style="display: flex; gap: 2px; padding: 3px; border: 1px solid #DCD5C8; border-radius: 11px; background: #FBFAF7">
+<sc-for list="{{views}}" as="v" hint-placeholder-count="3">
+<button type="button" role="tab" aria-selected="{{v.on}}" onClick="{{v.pick}}" style="min-height: 34px; padding: 0 16px; border: 0; border-radius: 8px; font: 500 13px 'Geist', system-ui, sans-serif; cursor: pointer; background: {{v.bg}}; color: {{v.fg}}">{{v.label}}</button>
+</sc-for>
+</div>
+<div style="display: flex; align-items: center; gap: 12px; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11.5px">
+<span style="display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border: 1px solid #B9D1B2; border-radius: 999px; background: #E3EEDD; color: #24402C"><span style="width: 7px; height: 7px; border-radius: 50%; background: #4F8A55"></span>suggest mode</span>
+<span style="color: #6E6A62">localhost:7420</span>
+</div>
+</header>
+
+<div style="height: 714px; display: grid; grid-template-columns: minmax(0, 1fr) 352px; gap: 14px">
+
+<section aria-label="Context fern" style="position: relative; background: #FBFAF7; border: 1px solid #E2DBCE; display: flex; flex-direction: column; min-width: 0">
+<div style="height: 46px; padding: 0 16px; border-bottom: 1px solid #E8E2D7; display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<span style="display: flex; align-items: center; gap: 10px; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px"><span style="width: 8px; height: 8px; border: 1.5px solid #141413; transform: rotate(45deg)"></span>{{panelTitle}}</span>
+<div style="display: flex; gap: 8px">
+<button type="button" aria-pressed="{{strayPressed}}" onClick="{{toggleStrays}}" style="min-height: 30px; padding: 0 12px; border: 1px dashed {{strayBorder}}; border-radius: 999px; background: {{strayBg}}; color: {{strayFg}}; font: 500 12px 'Geist Mono', ui-monospace, monospace; cursor: pointer">strays</button>
+<button type="button" aria-pressed="{{rootPressed}}" onClick="{{toggleRoots}}" style="min-height: 30px; padding: 0 12px; border: 1px solid {{rootBorder}}; border-radius: 999px; background: {{rootBg}}; color: {{rootFg}}; font: 500 12px 'Geist Mono', ui-monospace, monospace; cursor: pointer">roots</button>
+<button type="button" onClick="{{clearSel}}" style="min-height: 30px; padding: 0 12px; border: 1px solid #DCD5C8; border-radius: 999px; background: transparent; color: #6E6A62; font: 500 12px 'Geist Mono', ui-monospace, monospace; cursor: pointer">show all</button>
+</div>
+</div>
+
+<div style="height: 610px; position: relative; overflow: hidden">
+<sc-if value="{{isFern}}" hint-placeholder-val="{{ true }}">
+<div style="position: absolute; inset: 14px; background-image: radial-gradient(#DDD6C8 0.9px, transparent 1.1px); background-size: 8px 8px"></div>
+<div style="position: absolute; left: 14px; top: 14px; width: 12px; height: 12px; border-left: 1.5px solid #141413; border-top: 1.5px solid #141413"></div>
+<div style="position: absolute; right: 14px; top: 14px; width: 12px; height: 12px; border-right: 1.5px solid #141413; border-top: 1.5px solid #141413"></div>
+<div style="position: absolute; left: 14px; bottom: 14px; width: 12px; height: 12px; border-left: 1.5px solid #141413; border-bottom: 1.5px solid #141413"></div>
+<div style="position: absolute; right: 14px; bottom: 14px; width: 12px; height: 12px; border-right: 1.5px solid #141413; border-bottom: 1.5px solid #141413"></div>
+<svg width="100%" height="610" viewBox="0 0 920 600" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Session fern: the stem is the task, each coloured frond is a topic, leaflets are turns, dashed orange shoots are off-topic questions, roots are memories" style="position: relative; display: block">
+<sc-for list="{{particles}}" as="p" hint-placeholder-count="8"><path d="{{p.d}}" fill="none" stroke="{{p.stroke}}" stroke-width="1.6" stroke-linecap="round" opacity="{{p.op}}"></path></sc-for>
+<sc-for list="{{lines}}" as="l" hint-placeholder-count="8"><path d="{{l.d}}" fill="none" stroke="{{l.stroke}}" stroke-width="{{l.w}}" stroke-dasharray="{{l.dash}}" stroke-linecap="round" opacity="{{l.op}}"></path></sc-for>
+<sc-for list="{{nodes}}" as="n" hint-placeholder-count="12"><circle cx="{{n.x}}" cy="{{n.y}}" r="{{n.r}}" fill="{{n.fill}}" stroke="{{n.stroke}}" stroke-width="{{n.sw}}" opacity="{{n.op}}"></circle></sc-for>
+<sc-for list="{{labels}}" as="t" hint-placeholder-count="8"><text x="{{t.x}}" y="{{t.y}}" fill="{{t.fill}}" font-family="Geist Mono, monospace" font-size="{{t.size}}" text-anchor="{{t.anchor}}" opacity="{{t.op}}">{{t.text}}</text></sc-for>
+<sc-for list="{{hits}}" as="h" hint-placeholder-count="12"><circle cx="{{h.x}}" cy="{{h.y}}" r="11" fill="#000000" fill-opacity="0" onClick="{{h.pick}}" style="cursor: pointer"><title>{{h.title}}</title></circle></sc-for>
+</svg>
+</sc-if>
+
+<sc-if value="{{isList}}" hint-placeholder-val="{{ false }}">
+<div style="height: 610px; overflow-y: auto">
+<div style="position: sticky; top: 0; background: #FBFAF7; padding: 10px 16px; border-bottom: 1px solid #E8E2D7; display: grid; grid-template-columns: 44px 160px 84px minmax(0, 1fr) 132px 48px; gap: 14px; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: #6E6A62"><span>turn</span><span>frond</span><span>kind</span><span>prompt</span><span>context</span><span>conf</span></div>
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="10">
+<button type="button" onClick="{{r.pick}}" style="width: 100%; padding: 10px 16px; border: 0; border-bottom: 1px solid #EFEAE1; background: {{r.bg}}; color: #141413; text-align: left; cursor: pointer; display: grid; grid-template-columns: 44px 160px 84px minmax(0, 1fr) 132px 48px; gap: 14px; align-items: center; font: 400 13px 'Geist', system-ui, sans-serif">
+<span style="font-family: 'Geist Mono', ui-monospace, monospace; color: #6E6A62">{{r.n}}</span>
+<span style="display: flex; align-items: center; gap: 8px; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px"><span style="width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; box-sizing: border-box; background: {{r.color}}; border: 1.5px {{r.dotStyle}} {{r.ring}}"></span>{{r.frond}}</span>
+<span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; color: {{r.kindColor}}">{{r.kind}}</span>
+<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.prompt}}</span>
+<span style="display: flex; gap: 2px" aria-label="{{r.tokLabel}}"><sc-for list="{{r.cells}}" as="c" hint-placeholder-count="12"><span style="width: 7px; height: 7px; border-radius: 1px; background: {{c.bg}}"></span></sc-for></span>
+<span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; color: #6E6A62">{{r.conf}}</span>
+</button>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{isCats}}" hint-placeholder-val="{{ false }}">
+<div style="height: 610px; overflow-y: auto; box-sizing: border-box; padding: 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-content: start">
+<sc-for list="{{cards}}" as="c" hint-placeholder-count="4">
+<button type="button" onClick="{{c.pick}}" style="min-height: 168px; padding: 16px; border: 1px solid #E2DBCE; border-top: 3px {{c.topStyle}} {{c.color}}; border-radius: 2px; background: #FFFFFF; color: #141413; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 10px; font: 400 13px 'Geist', system-ui, sans-serif">
+<span style="display: flex; justify-content: space-between; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px"><span style="color: {{c.ink}}">{{c.name}}</span><span style="color: #6E6A62">{{c.count}}</span></span>
+<span style="font-family: 'Instrument Serif', Georgia, serif; font-size: 23px; line-height: 26px; color: #24402C">{{c.headline}}</span>
+<span style="color: #6E6A62; font-size: 12.5px; line-height: 19px">{{c.sub}}</span>
+<span style="margin-top: auto; display: flex; gap: 2px"><sc-for list="{{c.cells}}" as="x" hint-placeholder-count="20"><span style="width: 8px; height: 8px; border-radius: 1px; background: {{x.bg}}"></span></sc-for></span>
+</button>
+</sc-for>
+<div style="grid-column: 1 / -1; padding: 16px; border: 1px solid #E2DBCE; background: #FFFFFF; display: flex; flex-direction: column; gap: 10px">
+<span style="display: flex; justify-content: space-between; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11.5px; color: #6E6A62"><span style="color: #141413">topic switching over the session</span><span>turn 1 → {{turn}}</span></span>
+<sc-for list="{{heat}}" as="h" hint-placeholder-count="6">
+<div style="display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; align-items: center">
+<span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11.5px; color: {{h.ink}}">{{h.name}}</span>
+<span style="display: grid; grid-template-columns: repeat(20, minmax(0, 1fr)); gap: 3px"><sc-for list="{{h.cells}}" as="x" hint-placeholder-count="20"><span style="height: 14px; border-radius: 2px; background: {{x.bg}}"></span></sc-for></span>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+</div>
+
+<div style="height: 56px; margin-top: auto; padding: 0 16px; border-top: 1px solid #E8E2D7; display: flex; align-items: center; gap: 14px">
+<button type="button" onClick="{{play}}" style="min-height: 34px; padding: 0 14px; border: 0; border-radius: 8px; background: #141413; color: #F2EEE6; font: 500 12px 'Geist Mono', ui-monospace, monospace; cursor: pointer">{{playLabel}}</button>
+<label for="fern-scrub" style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11.5px; color: #6E6A62">growth</label>
+<input id="fern-scrub" type="range" min="1" max="20" step="1" value="{{turn}}" onChange="{{scrub}}" style="flex-grow: 1">
+<span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; width: 96px; text-align: right">turn {{turnPad}} / 20</span>
+</div>
+</section>
+
+<aside aria-label="Inspector" style="background: #FBFAF7; border: 1px solid #E2DBCE; display: flex; flex-direction: column; min-height: 0">
+<div style="padding: 14px 16px 8px; display: flex; align-items: center; gap: 10px; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px"><span style="width: 8px; height: 8px; border: 1.5px solid #141413; transform: rotate(45deg)"></span>this fern<span style="flex-grow: 1; height: 6px; background-image: radial-gradient(#B5AFA4 1px, transparent 1.3px); background-size: 6px 6px"></span></div>
+<div style="padding: 0 8px 10px; display: flex; flex-direction: column; gap: 2px; border-bottom: 1px solid #E8E2D7">
+<sc-for list="{{legend}}" as="g" hint-placeholder-count="7">
+<button type="button" onClick="{{g.pick}}" style="min-height: 34px; padding: 0 8px; border: 0; border-radius: 7px; background: {{g.bg}}; color: #141413; display: flex; align-items: center; gap: 10px; cursor: pointer; font: 400 13px 'Geist Mono', ui-monospace, monospace; text-align: left">
+<span style="width: 18px; height: 0; border-top: 2px {{g.lineStyle}} {{g.color}}; flex-shrink: 0"></span>
+<span style="flex-grow: 1; font-weight: {{g.weight}}">{{g.name}}</span>
+<span style="font-size: 11.5px; color: #6E6A62">{{g.count}}</span>
+</button>
+</sc-for>
+</div>
+<div style="flex-grow: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px">
+<span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11.5px; color: {{detail.ink}}">{{detail.kicker}}</span>
+<span style="font-family: 'Instrument Serif', Georgia, serif; font-size: 27px; line-height: 30px; color: #24402C">{{detail.title}}</span>
+<sc-for list="{{detail.fields}}" as="f" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; gap: 3px; padding-top: 10px; border-top: 1px solid #E8E2D7">
+<span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: #6E6A62">{{f.k}}</span>
+<span style="font-size: 13.5px; line-height: 21px">{{f.v}}</span>
+</div>
+</sc-for>
+</div>
+<div style="padding: 12px 16px; border-top: 1px solid #E8E2D7; display: flex; gap: 8px">
+<button type="button" style="flex: 1; min-height: 36px; border: 1px solid #DCD5C8; border-radius: 8px; background: #FFFFFF; color: #141413; font: 500 12px 'Geist Mono', ui-monospace, monospace; cursor: pointer">open brief</button>
+<button type="button" style="flex: 1; min-height: 36px; border: 0; border-radius: 8px; background: #141413; color: #F2EEE6; font: 500 12px 'Geist Mono', ui-monospace, monospace; cursor: pointer">undo routing</button>
+</div>
+</aside>
+</div>
+
+<div style="height: 120px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px">
+<sc-for list="{{stats}}" as="s" hint-placeholder-count="4">
+<div style="background: #FBFAF7; border: 1px solid #E2DBCE; padding: 14px 18px; display: flex; flex-direction: column; justify-content: space-between">
+<span style="display: flex; justify-content: space-between; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: #6E6A62"><span style="color: #141413">{{s.k}}</span><span>{{s.note}}</span></span>
+<span style="font-family: 'Doto', ui-monospace, monospace; font-weight: 900; font-size: 44px; line-height: 44px; color: {{s.color}}">{{s.v}}</span>
+<span style="display: flex; gap: 3px"><sc-for list="{{s.cells}}" as="x" hint-placeholder-count="24"><span style="flex: 1; height: 3px; border-radius: 1px; background: {{x.bg}}"></span></sc-for></span>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":960}}'>
+var STEM = '#1E2A21', EMBER = '#E8622F', EMBER_INK = '#B8461A', ASH = '#8A857B', MUTE = '#6E6A62', OFF = '#E8E2D7', PAPER = '#FBFAF7';
+var FRONDS = [
+  { id: 'auth', name: 'auth-refactor', color: '#4F8A55', t: 0.22, side: 1, len: 330, ang: 22, turns: [2, 3, 8, 9, 17, 18, 20], goal: 'Move sessions to signed tokens', decided: 'Refresh tokens stay server-side; keys load from Vault', open: 'Token lifetime for mobile', files: 'auth/session.ts, api/login.ts, tests/auth.spec.ts' },
+  { id: 'docker', name: 'docker-build', color: '#3D6FB3', t: 0.40, side: -1, len: 262, ang: 22, turns: [5, 6, 13, 19], goal: 'Find why the image build is slow', decided: 'Cache the install layer; pin the base image digest', open: 'Confirm the CI cache key', files: 'Dockerfile, .github/workflows/build.yml' },
+  { id: 'flaky', name: 'flaky-test', color: '#7A5DC0', t: 0.56, side: 1, len: 214, ang: 24, turns: [10, 11, 12], merged: 12, goal: 'Stop checkout.spec failing at random', decided: 'A missing await caused a race; fixed and merged', open: 'None', files: 'tests/checkout.spec.ts' },
+  { id: 'readme', name: 'readme', color: '#B8862A', t: 0.72, side: -1, len: 172, ang: 24, turns: [15, 16], goal: 'Fix the install section', decided: 'List curl, npx, pip and brew', open: 'Windows instructions', files: 'README.md' }
+];
+var TURNS = [
+  null,
+  { b: 'stem', p: 'Set up: shop-api. Refactor auth and fix CI this week.', a: 'stem', c: '1.00', s: 'session start', k: 6 },
+  { b: 'auth', p: 'Refactor session handling to use signed tokens', a: 'new', c: '0.95', s: 'first task prompt', k: 9 },
+  { b: 'auth', p: 'Update api/login.ts to issue the new token', a: 'continue', c: '0.93', s: 'file overlap: api/login.ts', k: 11 },
+  { b: 'stray', parent: 'auth', after: 3, short: 'PKCE?', p: 'What does PKCE stand for again?', a: 'stray', c: '0.81', s: 'definition question, no file context', k: 1 },
+  { b: 'docker', p: 'Side question: why is the docker build so slow?', a: 'new', c: '0.86', s: 'cue phrase, no file overlap', k: 8 },
+  { b: 'docker', p: 'Try caching the dependency install layer', a: 'continue', c: '0.90', s: 'file overlap: Dockerfile', k: 10 },
+  { b: 'stray', parent: 'docker', after: 6, short: 'podman vs docker?', p: 'Is podman faster than docker?', a: 'stray', c: '0.78', s: 'general question, no task link', k: 1 },
+  { b: 'auth', p: 'Ok, back to the tokens: what lifetime should mobile get?', a: 'return', c: '0.88', s: 'cue phrase, centroid match', k: 7 },
+  { b: 'auth', p: 'Write tests for token refresh', a: 'continue', c: '0.92', s: 'file overlap: auth/session.ts', k: 12 },
+  { b: 'flaky', p: 'CI says checkout.spec is flaky, can you look?', a: 'new', c: '0.84', s: 'new file set, CI log', k: 9 },
+  { b: 'flaky', p: 'The retry hides a race. Fix the missing await', a: 'continue', c: '0.91', s: 'file overlap: checkout.spec.ts', k: 8 },
+  { b: 'flaky', p: 'Merge the fix notes back to main', a: 'merge', c: '0.97', s: '/fern merge, by you', k: 2 },
+  { b: 'docker', p: 'Pin the base image digest', a: 'return', c: '0.83', s: 'file overlap: Dockerfile', k: 5 },
+  { b: 'stray', parent: 'stem', short: 'lunch spots?', p: 'Any good lunch spots near the office?', a: 'stray', c: '0.96', s: 'off-topic, no code context', k: 1 },
+  { b: 'readme', p: 'The README install section is out of date', a: 'new', c: '0.74', s: 'low similarity, escalated to LLM', k: 6 },
+  { b: 'readme', p: 'List curl, npx, pip and brew', a: 'continue', c: '0.89', s: 'file overlap: README.md', k: 4 },
+  { b: 'auth', p: 'Does the docker change affect where signing keys load at build time?', a: 'combine', c: '0.71', s: 'two fronds match, escalated to LLM', k: 9, w: 'docker' },
+  { b: 'auth', p: 'Rotate the keys via Vault in staging', a: 'continue', c: '0.90', s: 'root used: keys live in Vault', k: 7 },
+  { b: 'docker', p: 'Push the slimmer image to staging', a: 'return', c: '0.85', s: 'cue: image, file overlap', k: 5 },
+  { b: 'auth', p: 'Summarise the decisions for the PR', a: 'return', c: '0.87', s: 'cue phrase', k: 4 }
+];
+var ROOTS = [
+  { id: 'm1', text: 'prefers pnpm', x: 300, y: 574, frond: 'docker', turn: 6 },
+  { id: 'm2', text: 'keys live in Vault', x: 452, y: 584, frond: 'auth', turn: 18 },
+  { id: 'm3', text: 'CI on GitHub Actions', x: 612, y: 574, frond: 'flaky', turn: 10 }
+];
+var R0 = [460, 520], RC = [410, 290], R2 = [480, 40];
+function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function qb(a, b, c, t) { var u = 1 - t; return [u * u * a[0] + 2 * u * t * b[0] + t * t * c[0], u * u * a[1] + 2 * u * t * b[1] + t * t * c[1]]; }
+function qt(a, b, c, t) { var x = 2 * (1 - t) * (b[0] - a[0]) + 2 * t * (c[0] - b[0]), y = 2 * (1 - t) * (b[1] - a[1]) + 2 * t * (c[1] - b[1]), m = Math.sqrt(x * x + y * y) || 1; return [x / m, y / m]; }
+function rot(v, deg) { var r = deg * Math.PI / 180, c = Math.cos(r), s = Math.sin(r); return [v[0] * c - v[1] * s, v[0] * s + v[1] * c]; }
+function f1(n) { return n.toFixed(1); }
+function dot(x, y) { return 'M' + f1(x) + ' ' + f1(y) + 'h0'; }
+function leaflets(a, b, c, stations, maxL, minL, seed) {
+  var r = rng(seed), d = ['', ''];
+  for (var m = 0; m < stations; m++) {
+    var u = 0.04 + 0.93 * m / Math.max(stations - 1, 1), P = qb(a, b, c, u), T = qt(a, b, c, u), L = maxL * (1 - u) + minL;
+    for (var side = -1; side <= 1; side += 2) {
+      var D = rot(T, side * 58);
+      for (var j = 1; j <= 4; j++) {
+        var f = j / 4, x = P[0] + D[0] * L * f + T[0] * L * 0.3 * f + (r() - 0.5) * 1.8, y = P[1] + D[1] * L * f + T[1] * L * 0.3 * f + (r() - 0.5) * 1.8;
+        d[r() < 0.55 ? 0 : 1] += dot(x, y);
+      }
+    }
+  }
+  return d;
+}
+function geom(fr, v) {
+  var n = fr.turns.length, len = fr.len * (0.32 + 0.68 * v / n), S = qb(R0, RC, R2, fr.t), a = fr.ang * Math.PI / 180;
+  var E = [S[0] + fr.side * len * Math.cos(a), S[1] - len * Math.sin(a)];
+  var C = [S[0] + fr.side * len * 0.5 * Math.cos(a), S[1] - len * 0.5 * Math.sin(a) - len * 0.1];
+  return { S: S, C: C, E: E, len: len };
+}
+var STEM_DOTS = leaflets(R0, RC, R2, 34, 16, 7, 3);
+var INK_OF = { '#4F8A55': '#3E7344', '#3D6FB3': '#2F5C99', '#7A5DC0': '#6748AE', '#B8862A': '#8A6416' };
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { view: 'fern', turn: 20, strays: true, roots: true, sel: null, playing: false };
+  }
+  componentWillUnmount() { if (this.timer) clearInterval(this.timer); }
+  togglePlay() {
+    var self = this;
+    if (this.state.playing) { clearInterval(this.timer); this.setState({ playing: false }); return; }
+    var start = this.state.turn >= 20 ? 1 : this.state.turn;
+    this.setState({ playing: true, turn: start });
+    this.timer = setInterval(function () {
+      var t = self.state.turn + 1;
+      if (t > 20) { clearInterval(self.timer); self.setState({ playing: false }); return; }
+      self.setState({ turn: t });
+    }, 520);
+  }
+  renderVals() {
+    var self = this, s = this.state, T = s.turn, sel = s.sel;
+    var selFrond = sel && sel.kind === 'frond' ? sel.id : null;
+    var selTurn = sel && sel.kind === 'turn' ? sel.n : null;
+    var dimOf = function (id) { return selFrond && selFrond !== id ? 0.18 : 1; };
+    var pickTurn = function (n) { return function () { self.setState({ sel: { kind: 'turn', n: n } }); }; };
+    var pickFrond = function (id) { return function () { self.setState({ sel: { kind: 'frond', id: id } }); }; };
+    var particles = [], lines = [], nodes = [], labels = [], hits = [], pos = {};
+    var stemDim = selFrond ? 0.3 : 1;
+    particles.push({ d: STEM_DOTS[0], stroke: STEM, op: (0.22 * stemDim).toFixed(2) });
+    particles.push({ d: STEM_DOTS[1], stroke: STEM, op: (0.5 * stemDim).toFixed(2) });
+    lines.push({ d: 'M' + R0[0] + ' ' + R0[1] + 'Q' + RC[0] + ' ' + RC[1] + ' ' + R2[0] + ' ' + R2[1], stroke: STEM, w: 1.8, dash: '0', op: (0.95 * stemDim).toFixed(2) });
+    pos[1] = qb(R0, RC, R2, 0.06);
+    labels.push({ x: f1(R0[0] + 14), y: f1(R0[1] + 4), text: 'stem · main', fill: MUTE, size: 11, anchor: 'start', op: 1 });
+    FRONDS.forEach(function (fr, i) {
+      var vis = fr.turns.filter(function (n) { return n <= T; });
+      if (!vis.length) return;
+      var g = geom(fr, vis.length), op = dimOf(fr.id);
+      var st = Math.round(8 + 18 * g.len / 330), dd = leaflets(g.S, g.C, g.E, st, 20 * (0.55 + 0.45 * g.len / 330), 4, 40 + i * 7);
+      particles.push({ d: dd[0], stroke: fr.color, op: (0.35 * op).toFixed(2) });
+      particles.push({ d: dd[1], stroke: fr.color, op: (0.75 * op).toFixed(2) });
+      var merged = fr.merged && T >= fr.merged;
+      lines.push({ d: 'M' + f1(g.S[0]) + ' ' + f1(g.S[1]) + 'Q' + f1(g.C[0]) + ' ' + f1(g.C[1]) + ' ' + f1(g.E[0]) + ' ' + f1(g.E[1]), stroke: fr.color, w: 1.8, dash: '0', op: ((merged ? 0.55 : 1) * op).toFixed(2) });
+      vis.forEach(function (n, k) { pos[n] = qb(g.S, g.C, g.E, (k + 1) / (vis.length + 0.5)); });
+      labels.push({ x: f1(g.E[0] + fr.side * 12), y: f1(g.E[1] + 4), text: fr.name + (merged ? ' · merged' : '') + ' · ' + vis.length, fill: INK_OF[fr.color], size: 12, anchor: fr.side > 0 ? 'start' : 'end', op: op });
+      if (merged) {
+        var back = qb(R0, RC, R2, 0.63), last = pos[fr.turns[fr.turns.length - 1]];
+        lines.push({ d: 'M' + f1(last[0]) + ' ' + f1(last[1]) + 'L' + f1(back[0]) + ' ' + f1(back[1]), stroke: fr.color, w: 1.1, dash: '1 4', op: (0.9 * op).toFixed(2) });
+      }
+    });
+    if (T >= 17 && pos[17] && pos[13]) lines.push({ d: 'M' + f1(pos[17][0]) + ' ' + f1(pos[17][1]) + 'L' + f1(pos[13][0]) + ' ' + f1(pos[13][1]), stroke: STEM, w: 1.1, dash: '1 4', op: selFrond ? 0.25 : 0.7 });
+    if (s.roots) {
+      var rp = rng(77), rd = '';
+      ROOTS.forEach(function (m) {
+        var cx = m.x * 0.4 + R0[0] * 0.6, c = [cx, 556];
+        lines.push({ d: 'M' + R0[0] + ' ' + R0[1] + 'Q' + f1(cx) + ' 556 ' + m.x + ' ' + m.y, stroke: ASH, w: 1.1, dash: '2 3', op: selFrond ? 0.3 : 0.85 });
+        for (var j = 0; j < 16; j++) { var q = qb(R0, c, [m.x, m.y], j / 15); rd += dot(q[0] + (rp() - 0.5) * 4, q[1] + (rp() - 0.5) * 4); }
+        if (T >= m.turn && pos[m.turn]) lines.push({ d: 'M' + m.x + ' ' + m.y + 'L' + f1(pos[m.turn][0]) + ' ' + f1(pos[m.turn][1]), stroke: ASH, w: 0.9, dash: '1 5', op: selFrond && selFrond !== m.frond ? 0.12 : 0.45 });
+        nodes.push({ x: m.x, y: m.y, r: 5, fill: PAPER, stroke: ASH, sw: 1.5, op: 1 });
+        nodes.push({ x: m.x, y: m.y, r: 1.7, fill: ASH, stroke: 'none', sw: 0, op: 1 });
+        labels.push({ x: m.x + 10, y: m.y + 4, text: m.text, fill: MUTE, size: 10.5, anchor: 'start', op: selFrond && selFrond !== m.frond ? 0.35 : 1 });
+      });
+      particles.push({ d: rd, stroke: ASH, op: 0.4 });
+    }
+    if (s.strays) {
+      for (var n = 1; n <= T; n++) {
+        var tr = TURNS[n];
+        if (!tr || tr.b !== 'stray') continue;
+        var A, sd;
+        if (tr.parent === 'stem') { A = qb(R0, RC, R2, 0.64); sd = -1; }
+        else { A = pos[tr.after]; sd = FRONDS.filter(function (f) { return f.id === tr.parent; })[0].side; }
+        if (!A) continue;
+        var Z = [A[0] + sd * 52, A[1] + 40], op2 = selFrond && selFrond !== tr.parent ? 0.25 : 1;
+        lines.push({ d: 'M' + f1(A[0]) + ' ' + f1(A[1]) + 'L' + f1(Z[0]) + ' ' + f1(Z[1]), stroke: EMBER, w: 1.4, dash: '4 3', op: op2 });
+        nodes.push({ x: f1(Z[0]), y: f1(Z[1]), r: selTurn === n ? 7 : 4.5, fill: PAPER, stroke: EMBER, sw: 1.6, op: op2 });
+        labels.push({ x: f1(Z[0] + sd * 9), y: f1(Z[1] + 4), text: tr.short, fill: EMBER_INK, size: 10.5, anchor: sd > 0 ? 'start' : 'end', op: op2 });
+        hits.push({ x: f1(Z[0]), y: f1(Z[1]), pick: pickTurn(n), title: 'Turn ' + n + ': ' + tr.p });
+      }
+    }
+    for (var m2 = 1; m2 <= T; m2++) {
+      var t2 = TURNS[m2];
+      if (t2.b === 'stray' || !pos[m2]) continue;
+      var col = t2.b === 'stem' ? STEM : FRONDS.filter(function (f) { return f.id === t2.b; })[0].color;
+      var o = t2.b === 'stem' ? (selFrond ? 0.3 : 1) : dimOf(t2.b);
+      var isSel = selTurn === m2, isLast = m2 === T;
+      nodes.push({ x: f1(pos[m2][0]), y: f1(pos[m2][1]), r: isSel ? 7 : 4.3, fill: col, stroke: isSel || isLast ? '#141413' : PAPER, sw: isSel || isLast ? 2 : 1.5, op: o });
+      hits.push({ x: f1(pos[m2][0]), y: f1(pos[m2][1]), pick: pickTurn(m2), title: 'Turn ' + m2 + ': ' + t2.p });
+    }
+
+    var colorOf = function (b) { return b === 'stem' ? STEM : b === 'stray' ? EMBER : FRONDS.filter(function (f) { return f.id === b; })[0].color; };
+    var inkOf = function (b) { return b === 'stem' ? STEM : b === 'stray' ? EMBER_INK : INK_OF[colorOf(b)]; };
+    var nameOf = function (b) { return b === 'stem' ? 'main' : b === 'stray' ? 'stray' : FRONDS.filter(function (f) { return f.id === b; })[0].name; };
+    var kindColor = { new: '#8A6416', 'return': '#3E7344', 'continue': MUTE, combine: '#2F5C99', merge: '#6748AE', stray: EMBER_INK, stem: STEM };
+    var rows = [];
+    for (var r = 1; r <= T; r++) {
+      var tr2 = TURNS[r], cells = [];
+      for (var c2 = 0; c2 < 12; c2++) cells.push({ bg: c2 < tr2.k ? colorOf(tr2.b) : OFF });
+      var isStray = tr2.b === 'stray';
+      rows.push({ n: (r < 10 ? '0' : '') + r, frond: isStray ? 'stray ← ' + nameOf(tr2.parent) : nameOf(tr2.b), color: isStray ? 'transparent' : colorOf(tr2.b), ring: colorOf(tr2.b), dotStyle: isStray ? 'dashed' : 'solid', kind: tr2.a, kindColor: kindColor[tr2.a] || MUTE, prompt: tr2.p, cells: cells, tokLabel: tr2.k + 'k tokens', conf: tr2.c, bg: selTurn === r ? '#EFEAE1' : 'transparent', pick: pickTurn(r) });
+    }
+    var cards = FRONDS.map(function (fr) {
+      var vis = fr.turns.filter(function (n) { return n <= T; }), cells = [];
+      for (var i = 1; i <= 20; i++) cells.push({ bg: fr.turns.indexOf(i) >= 0 && i <= T ? fr.color : OFF });
+      var strayN = TURNS.filter(function (x) { return x && x.b === 'stray' && x.parent === fr.id && TURNS.indexOf(x) <= T; }).length;
+      return { name: fr.name, color: fr.color, ink: INK_OF[fr.color], topStyle: 'solid', count: vis.length + ' leaflets' + (strayN ? ' · ' + strayN + ' stray' : ''), headline: fr.goal, sub: 'Decided: ' + fr.decided, cells: cells, pick: pickFrond(fr.id) };
+    });
+    var strayList = TURNS.filter(function (x, i) { return x && x.b === 'stray' && i <= T; });
+    var strayCells = [];
+    for (var i3 = 1; i3 <= 20; i3++) strayCells.push({ bg: TURNS[i3].b === 'stray' && i3 <= T ? EMBER : OFF });
+    cards.push({ name: 'strays', color: EMBER, ink: EMBER_INK, topStyle: 'dashed', count: strayList.length + ' caught', headline: 'Off-topic questions, kept off every frond', sub: strayList.map(function (x) { return x.p; }).join(' · ') || 'None yet', cells: strayCells, pick: function () { self.setState({ sel: { kind: 'strays' } }); } });
+    var rootCells = [];
+    for (var i4 = 1; i4 <= 20; i4++) rootCells.push({ bg: ROOTS.some(function (m) { return m.turn === i4; }) && i4 <= T ? ASH : OFF });
+    cards.push({ name: 'roots', color: ASH, ink: MUTE, topStyle: 'dotted', count: ROOTS.filter(function (m) { return m.turn <= T; }).length + ' used', headline: 'Memories from earlier sessions', sub: ROOTS.map(function (m) { return m.text; }).join(' · '), cells: rootCells, pick: function () { self.setState({ sel: { kind: 'roots' } }); } });
+    var heatRows = [{ id: 'stem', name: 'main', color: STEM, ink: STEM }].concat(FRONDS.map(function (f) { return { id: f.id, name: f.name, color: f.color, ink: INK_OF[f.color] }; })).concat([{ id: 'stray', name: 'strays', color: EMBER, ink: EMBER_INK }]);
+    var heat = heatRows.map(function (h) {
+      var cells = [];
+      for (var i = 1; i <= 20; i++) cells.push({ bg: TURNS[i].b === h.id && i <= T ? h.color : OFF });
+      return { name: h.name, ink: h.ink, cells: cells };
+    });
+    var legend = [{ id: 'stem', name: 'main · stem', color: STEM, line: 'solid', count: '1' }].concat(FRONDS.map(function (f) { return { id: f.id, name: f.name, color: f.color, line: 'solid', count: String(f.turns.filter(function (n) { return n <= T; }).length) }; })).concat([{ id: 'strays', name: 'strays', color: EMBER, line: 'dashed', count: String(strayList.length) }, { id: 'roots', name: 'roots', color: ASH, line: 'dotted', count: String(ROOTS.length) }]);
+    legend = legend.map(function (g) {
+      var on = sel && ((sel.kind === 'frond' && sel.id === g.id) || sel.kind === g.id);
+      return { name: g.name, color: g.color, lineStyle: g.line, count: g.count, weight: on ? '600' : '400', bg: on ? '#EFEAE1' : 'transparent', pick: g.id === 'strays' || g.id === 'roots' || g.id === 'stem' ? function () { self.setState({ sel: { kind: g.id } }); } : pickFrond(g.id) };
+    });
+    var detail;
+    var lastReal = T; while (lastReal > 1 && TURNS[lastReal].b === 'stray') lastReal--;
+    var activeB = TURNS[lastReal].b;
+    if (selTurn) {
+      var x = TURNS[selTurn];
+      detail = { kicker: 'turn ' + (selTurn < 10 ? '0' : '') + selTurn + ' · ' + (x.b === 'stray' ? 'stray from ' + nameOf(x.parent) : nameOf(x.b)), ink: inkOf(x.b), title: x.p, fields: [
+        { k: 'routing', v: x.a + ' · confidence ' + x.c + (x.w ? ' · grafted with ' + nameOf(x.w) : '') },
+        { k: 'why', v: x.s },
+        { k: 'router stage', v: x.s.indexOf('escalat') >= 0 ? 'Stage 2 · small LLM on your key' : 'Stage 0 · local, no API call' },
+        { k: 'context this turn', v: x.k + 'k tokens' + (x.b === 'stray' ? ' · answered without touching any frond' : '') }
+      ] };
+    } else if (selFrond) {
+      var fr2 = FRONDS.filter(function (f) { return f.id === selFrond; })[0];
+      detail = { kicker: 'frond · ' + fr2.name, ink: INK_OF[fr2.color], title: fr2.goal, fields: [{ k: 'decided', v: fr2.decided }, { k: 'open', v: fr2.open }, { k: 'files', v: fr2.files }, { k: 'brief', v: '.fern/fronds/' + fr2.name + '.md' }] };
+    } else if (sel && sel.kind === 'strays') {
+      detail = { kicker: 'strays · off-topic', ink: EMBER_INK, title: 'Answered, then kept off every frond', fields: strayList.map(function (x) { return { k: 'turn ' + TURNS.indexOf(x) + ' · from ' + nameOf(x.parent), v: x.p }; }) };
+    } else if (sel && sel.kind === 'roots') {
+      detail = { kicker: 'roots · memory', ink: MUTE, title: 'What earlier sessions taught this one', fields: ROOTS.map(function (m) { return { k: 'feeds ' + nameOf(m.frond) + ' · turn ' + m.turn, v: m.text }; }) };
+    } else {
+      detail = { kicker: 'session · active frond ' + nameOf(activeB), ink: inkOf(activeB), title: 'Twenty turns, four fronds, nothing lost.', fields: [{ k: 'how to read it', v: 'The dark stem is the task. Each coloured frond is a topic; its leaflets are turns. Dashed orange shoots are off-topic questions. Roots are memories from earlier sessions.' }, { k: 'try', v: 'Click a leaflet or a frond above, or press replay to watch the session grow.' }] };
+    }
+    var full = 0, keep = 0;
+    for (var q = 1; q <= T; q++) { full += TURNS[q].k; if (TURNS[q].b === activeB || TURNS[q].b === 'stem') keep += TURNS[q].k; }
+    var out = full - keep;
+    var mk = function (frac, color) { var a = []; for (var i = 0; i < 24; i++) a.push({ bg: i < Math.round(frac * 24) ? color : OFF }); return a; };
+    var frondsLive = FRONDS.filter(function (f) { return f.turns[0] <= T; }).length;
+    var mergedN = FRONDS.filter(function (f) { return f.merged && T >= f.merged; }).length;
+    var rootsUsed = ROOTS.filter(function (m) { return m.turn <= T; }).length;
+    var stats = [
+      { k: 'kept out of this turn', note: 'isolate', v: out + 'K', color: '#3E7344', cells: mk(full ? out / full : 0, '#4F8A55') },
+      { k: 'fronds', note: mergedN + ' merged', v: String(frondsLive), color: '#141413', cells: mk(frondsLive / 4, '#141413') },
+      { k: 'strays caught', note: 'off-topic', v: String(strayList.length), color: EMBER_INK, cells: mk(strayList.length / 3, EMBER) },
+      { k: 'roots used', note: 'memory', v: String(rootsUsed), color: MUTE, cells: mk(rootsUsed / 3, ASH) }
+    ];
+    var views = [{ key: 'fern', label: 'Fern' }, { key: 'list', label: 'List' }, { key: 'cats', label: 'Categories' }].map(function (v) {
+      var on = v.key === s.view;
+      return { label: v.label, on: on ? 'true' : 'false', bg: on ? '#141413' : 'transparent', fg: on ? '#F2EEE6' : '#5F5B53', pick: function () { self.setState({ view: v.key }); } };
+    });
+    var titles = { fern: 'The fern · every turn, connected', list: 'Every turn, in order', cats: 'By frond, stray and root' };
+    return {
+      views: views,
+      navFern: s.view === 'fern' ? '#E8E2D7' : 'transparent',
+      navList: s.view === 'list' ? '#E8E2D7' : 'transparent',
+      navCats: s.view === 'cats' ? '#E8E2D7' : 'transparent',
+      toFern: function () { self.setState({ view: 'fern' }); },
+      toList: function () { self.setState({ view: 'list' }); },
+      toCats: function () { self.setState({ view: 'cats' }); },
+      isFern: s.view === 'fern', isList: s.view === 'list', isCats: s.view === 'cats',
+      panelTitle: titles[s.view],
+      strayPressed: s.strays ? 'true' : 'false', strayBorder: s.strays ? EMBER : '#DCD5C8', strayFg: s.strays ? EMBER_INK : MUTE, strayBg: s.strays ? '#FCEDE5' : 'transparent',
+      rootPressed: s.roots ? 'true' : 'false', rootBorder: s.roots ? ASH : '#DCD5C8', rootFg: s.roots ? '#3F3C36' : MUTE, rootBg: s.roots ? '#EFEAE1' : 'transparent',
+      toggleStrays: function () { self.setState({ strays: !s.strays }); },
+      toggleRoots: function () { self.setState({ roots: !s.roots }); },
+      clearSel: function () { self.setState({ sel: null }); },
+      particles: particles, lines: lines, nodes: nodes, labels: labels, hits: hits,
+      rows: rows, cards: cards, heat: heat, legend: legend, detail: detail, stats: stats,
+      turn: T, turnPad: (T < 10 ? '0' : '') + T,
+      scrub: function (e) { self.setState({ turn: Number(e.target.value) }); },
+      play: function () { self.togglePlay(); },
+      playLabel: s.playing ? 'pause' : 'replay'
+    };
+  }
+}
+</script>
+</body>
+</html>

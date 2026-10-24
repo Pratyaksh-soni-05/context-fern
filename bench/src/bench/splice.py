@@ -1,20 +1,22 @@
 """Interleave scrubbed Claude Code sessions into synthetic streams with
-ground-truth branch ids, for ReplayBench router evaluation (spec §12).
+ground-truth frond ids, for ReplayBench router evaluation (spec §13).
 
-Each scrubbed session is one ground-truth branch: its main thread of
-exchanges (transcript.py already excludes sidechains). Sessions are cut
-into fixed-length segments, and segments from K sessions are interleaved
-into one stream — so a realistic-length conversation produces many topic
+Each scrubbed session is one ground-truth frond: its main thread of
+exchanges (transcript.py already excludes sidechains). The output schema
+keeps the field name `branch_id` for continuity (see docs/decisions.md)
+even though product code calls this a frond. Sessions are cut into
+fixed-length segments, and segments from K sessions are interleaved into
+one stream — so a realistic-length conversation produces many topic
 transitions instead of just one hard cut.
 
-Four variants:
+Four variants (a fifth, `stray`, is spec §13 TODO — see ALL_VARIANTS):
 - hard_cut: segments concatenated back to back, no transition marker.
 - cue_phrase: the real first prompt of a segment gets a cue phrase
   prefixed (e.g. "ok, switching to <hint>: ") — no standalone synthetic turn.
-- return_at_distance: a branch's segment reappears after exactly `d`
-  intervening exchanges from other branches.
+- return_at_distance: a frond's segment reappears after exactly `d`
+  intervening exchanges from other fronds.
 - combine: one synthetic final prompt, clearly marked as synthetic, whose
-  ground truth needs two branches at once (`combine_with`).
+  ground truth needs two fronds at once (`combine_with`).
 
 Everything is driven off a single seeded random.Random per (variant, seed),
 so the same (scrubbed_dir, k, seed, segment_len) always produces
@@ -33,6 +35,9 @@ from bench.transcript import Exchange, parse_session
 
 Variant = Literal["hard_cut", "cue_phrase", "return_at_distance", "combine"]
 ALL_VARIANTS: tuple[Variant, ...] = ("hard_cut", "cue_phrase", "return_at_distance", "combine")
+# TODO (spec §13): add a "stray" variant — insert synthetic, clearly marked
+# off-topic single prompts (from a fixed, committed list) into streams with
+# truth "stray". Not implemented yet.
 
 CUE_TEMPLATES = (
     "ok, switching to {hint}: ",

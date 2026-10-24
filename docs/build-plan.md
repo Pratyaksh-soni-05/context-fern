@@ -1,5 +1,7 @@
 # ContextTree build plan
 
+Historical plan, written under the working name ContextTree. Current scope: docs/spec.md (v0.2).
+
 Oct 23, 2026 · @maintainer
 
 ## What we are building

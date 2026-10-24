@@ -1,7 +1,7 @@
 [project]
 name = "bench"
 version = "0.0.0"
-description = "ReplayBench: scrubber, splicer, runner and metrics for ContextTree"
+description = "ReplayBench: scrubber, splicer, runner and metrics for Context Fern"
 requires-python = "==3.12.*"
 dependencies = []
 

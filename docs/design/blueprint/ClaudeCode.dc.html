@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Context Fern inside the agent</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Doto:wght@700;900&amp;family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1200px; height: 760px; box-sizing: border-box; padding: 48px 56px; background-color: #F2EEE6; background-image: linear-gradient(#E8E2D7 1px, transparent 1px), linear-gradient(90deg, #E8E2D7 1px, transparent 1px); background-size: 80px 80px; color: #141413; font-family: 'Geist', system-ui, sans-serif; display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; align-items: center; gap: 14px; padding-bottom: 12px; border-bottom: 1px solid #D8D1C4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 13px"><span style="width: 9px; height: 9px; border: 1.5px solid #141413; transform: rotate(45deg)"></span>Inside the agent<span style="flex-grow: 1; height: 6px; background-image: radial-gradient(#9A948A 1px, transparent 1.3px); background-size: 7px 6px"></span><span style="color: #6E6A62">003</span></div>
+<h2 style="margin: 0; font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: 50px; line-height: 52px; color: #9A948A">A quiet line on every switch. <span style="color: #24402C">Undo is one command.</span></h2>
+<div style="flex-grow: 1; border-radius: 12px; background: #1E1E1C; color: #F2EEE6; box-shadow: 0 18px 40px rgba(20, 20, 19, 0.14); display: flex; flex-direction: column; overflow: hidden; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 13.5px; line-height: 22px">
+<div style="padding: 12px 18px; border-bottom: 1px solid #34332F; display: flex; justify-content: space-between; font-size: 12px; color: #A7A39A"><span>agent session · ~/code/shop-api</span><span style="color: #8DB886">suggest mode</span></div>
+<div style="flex-grow: 1; padding: 22px 24px; display: flex; flex-direction: column; gap: 10px">
+<div><span style="color: #8DB886">›</span> refactor session handling to use signed tokens</div>
+<div style="padding-left: 18px; color: #A7A39A"><span style="color: #8DB886">✓</span> edit auth/session.ts · <span style="color: #8DB886">✓</span> edit api/login.ts · tests pass</div>
+<div><span style="color: #8DB886">›</span> side question: why is the docker build so slow?</div>
+<div style="margin-left: 18px; padding: 12px 16px; border-left: 3px solid #E2C792; background: #2A2720; display: flex; flex-direction: column; gap: 2px">
+<span style="color: #E2C792">New frond?</span>
+<span>docker-build · 0.86 · cue phrase, no file overlap</span>
+<span style="font-size: 12px; color: #A7A39A">[y] new frond · [n] keep in auth-refactor</span>
+</div>
+<div><span style="color: #8DB886">›</span> y</div>
+<div style="padding-left: 18px; color: #8FB2E6">── fern ▸ on docker-build · auth-refactor rests with its brief</div>
+<div><span style="color: #8DB886">›</span> wait, any good lunch spots near the office?</div>
+<div style="padding-left: 18px; color: #F0875A">╌╌ fern ▸ stray · answered, kept off every frond</div>
+<div><span style="color: #8DB886">›</span> ok, back to the tokens: what lifetime should mobile get?</div>
+<div style="padding-left: 18px; color: #8DB886">── fern ▸ returned to auth-refactor · 0.88 · /fern undo</div>
+</div>
+<div style="padding: 11px 18px; border-top: 1px solid #34332F; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; font-size: 12.5px; color: #A7A39A">
+<span>fern ▸ <span style="color: #8DB886">auth-refactor</span> · 4 fronds · 3 strays · 18k/96k ctx</span>
+<span>/fern status · new · switch · undo · merge · ui</span>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in ContextTree.
+Thanks for your interest in Context Fern.
 
 ## Developer Certificate of Origin
 

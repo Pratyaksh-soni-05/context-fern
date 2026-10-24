@@ -1,5 +1,5 @@
 {
-  "name": "@contexttree/cli",
+  "name": "@context-fern/cli",
   "version": "0.0.0",
   "private": true,
   "type": "module",

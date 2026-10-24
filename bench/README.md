@@ -1,6 +1,6 @@
 # bench — ReplayBench
 
-Scrubber, splicer, runner and metrics for ContextTree's router (spec §12).
+Scrubber, splicer, runner and metrics for Context Fern's router (spec §13).
 Python 3.12 via uv; see root `CLAUDE.md` for the project-wide commands.
 
 ```
@@ -60,7 +60,7 @@ dedicated `agent-*.jsonl` file is *entirely* sidechain (100% of its
 records), while a main session file has none. `transcript.py` excludes
 these from exchanges entirely but still counts their characters, so a
 report can show "this much sidechain activity happened" without it
-polluting the main thread or the branch definition.
+polluting the main thread or the frond definition.
 
 **Absolute paths and usernames** show up scattered across many fields, not
 just one place: `cwd`, `backgroundCwdHint`, tool `input.file_path`,
@@ -132,21 +132,27 @@ produces byte-identical output.
 
 ## Splicing (splice.py)
 
-Each scrubbed session is one ground-truth branch (spec §12; "a branch is
-the main thread of one `sessionId`"). Sessions are cut into fixed-length
-segments (`--segment-len`, default 4 exchanges, order preserved within a
-session) and segments from `--k` sessions are interleaved into one stream,
-so a realistic-length stream has many topic transitions instead of one.
+Each scrubbed session is one ground-truth frond (spec §4's vocabulary —
+this schema keeps the field name `branch_id` for continuity rather than
+chasing the rename through the output format and every fixture; see
+docs/decisions.md). Sessions are cut into fixed-length segments
+(`--segment-len`, default 4 exchanges, order preserved within a session)
+and segments from `--k` sessions are interleaved into one stream, so a
+realistic-length stream has many topic transitions instead of one.
 
 - `hard_cut` — segments concatenated back to back, no transition marker.
 - `cue_phrase` — the real first prompt of a (non-first) segment gets a cue
   phrase prefixed, e.g. `"ok, switching to <topic hint>: "` — no
   standalone synthetic turn is inserted.
-- `return_at_distance` — a branch's segment reappears after exactly `d`
-  intervening exchanges from other branches.
+- `return_at_distance` — a frond's segment reappears after exactly `d`
+  intervening exchanges from other fronds.
 - `combine` — one synthetic final prompt, clearly marked
   (`"[synthetic] combine what we decided about ..."`), whose ground truth
-  needs two branches at once.
+  needs two fronds at once.
+
+**TODO (spec §13):** a `stray` variant — insert synthetic, clearly marked
+off-topic single prompts (from a fixed, committed list) into streams with
+truth `stray`. Not implemented yet.
 
 Output is JSONL, one line per turn:
 
@@ -156,7 +162,7 @@ Output is JSONL, one line per turn:
 ```
 
 `combine` rows add a `combine_with: [branch_id]` field naming the second
-branch the synthetic turn needs. Everything is driven off a single seeded
+frond the synthetic turn needs. Everything is driven off a single seeded
 `random.Random` per `(variant, seed)`, so the same
 `(scrubbed_dir, k, seed, segment_len)` always produces byte-identical
 output.
