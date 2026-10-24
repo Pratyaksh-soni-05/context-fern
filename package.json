@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "lint": "biome check .",
-    "typecheck": "tsc -b",
+    "typecheck": "tsc -b && tsc -p tsconfig.tests.json",
     "test": "bun test packages && uv run --project bench pytest"
   },
   "devDependencies": {
