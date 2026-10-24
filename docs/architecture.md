@@ -20,7 +20,7 @@
 | store | SQLite schema and migrations, markdown mirror, journal writer | core |
 | embed | bundled ONNX embedder, Ollama and provider fallbacks | core |
 | daemon | HTTP API for hooks and UI, proxy for isolate mode, static UI serving | core, store, embed |
-| cli | `fern` commands, terminal fern renderer, installer helpers | core, store, daemon client |
+| cli | `fern` commands, terminal fern renderer, installer helpers | core, store, daemon client, embed (dev-only: `fern route --replay`, spec §10, never the daemon's live routing path) |
 | plugin-claude-code | hooks, slash commands, statusline, MCP tools, marketplace manifest | daemon client |
 | ui | React app: fern graph, brief editor, context lens, journal | daemon HTTP API |
 

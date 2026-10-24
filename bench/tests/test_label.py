@@ -32,11 +32,14 @@ def test_full_session_basic_sequence():
     saved: list[LabelEvent] = []
     responses = iter(
         [
-            "n", "auth-refactor",  # 0: new
+            "n",
+            "auth-refactor",  # 0: new
             "c",  # 1: continue
             "s",  # 2: stray
-            "r", "1",  # 3: return to topic #1 (auth-refactor)
-            "n", "docker-build",  # 4: new
+            "r",
+            "1",  # 3: return to topic #1 (auth-refactor)
+            "n",
+            "docker-build",  # 4: new
         ]
     )
     input_fn, print_fn, printed = _make_io(list(responses))
@@ -153,6 +156,7 @@ def test_build_eval_stream_infers_continue_topic_and_marks_stray(tmp_path: Path)
     rows = build_eval_stream(FIXTURE, labels_path)
 
     assert [r["turn_index"] for r in rows] == [0, 1, 2, 3]
+    assert all(r["stream_id"] == "label-session-one" for r in rows)
     assert rows[0]["branch_id"] == "auth-refactor"
     assert rows[0]["action_truth"] == "new"
     assert rows[1]["branch_id"] == "auth-refactor"  # continue inherits

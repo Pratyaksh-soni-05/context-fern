@@ -1,0 +1,58 @@
+[
+  {
+    "action_truth": "new",
+    "predicted_action": "new",
+    "branch_id": "a",
+    "predicted_branch_id": "a",
+    "latency_ms": 10
+  },
+  {
+    "action_truth": "continue",
+    "predicted_action": "continue",
+    "branch_id": "a",
+    "predicted_branch_id": "a",
+    "latency_ms": 20
+  },
+  {
+    "action_truth": "new",
+    "predicted_action": "continue",
+    "branch_id": "b",
+    "predicted_branch_id": "a",
+    "latency_ms": 30
+  },
+  {
+    "action_truth": "return",
+    "predicted_action": "return",
+    "branch_id": "a",
+    "predicted_branch_id": "a",
+    "latency_ms": 40
+  },
+  {
+    "action_truth": "return",
+    "predicted_action": "return",
+    "branch_id": "b",
+    "predicted_branch_id": "a",
+    "latency_ms": 50
+  },
+  {
+    "action_truth": "stray",
+    "predicted_action": "stray",
+    "branch_id": null,
+    "predicted_branch_id": null,
+    "latency_ms": 60
+  },
+  {
+    "action_truth": "stray",
+    "predicted_action": "continue",
+    "branch_id": null,
+    "predicted_branch_id": "a",
+    "latency_ms": 70
+  },
+  {
+    "action_truth": "combine",
+    "predicted_action": "continue",
+    "branch_id": "a",
+    "predicted_branch_id": "a",
+    "latency_ms": 80
+  }
+]

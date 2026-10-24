@@ -11,12 +11,16 @@
   ],
   "scripts": {
     "lint": "biome check . && uv run --project bench ruff check",
-    "typecheck": "tsc -b && tsc -p tsconfig.tests.json",
-    "test": "bun test packages && uv run --project bench pytest"
+    "typecheck": "tsc -b && tsc -p tsconfig.tests.json && tsc -p tsconfig.bench.json",
+    "test": "bun test packages bench/ts && uv run --project bench pytest"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.2",
     "@types/bun": "1.4.4",
     "typescript": "7.0.2"
-  }
+  },
+  "trustedDependencies": [
+    "onnxruntime-node",
+    "protobufjs"
+  ]
 }

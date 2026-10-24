@@ -136,6 +136,7 @@ def label_session(session_path: Path, labels_dir: Path | None = None) -> Path:
     existing = load_labels(labels_path)
 
     with labels_path.open("a", encoding="utf-8") as f:
+
         def on_label(event: LabelEvent) -> None:
             f.write(json.dumps(event.to_json(), ensure_ascii=False))
             f.write("\n")
@@ -156,10 +157,14 @@ def _active_topic_before(labels: dict[int, LabelEvent], index: int) -> str | Non
 
 def build_eval_stream(session_path: Path, labels_path: Path) -> list[dict]:
     """Turn a labelled session into eval-stream rows shaped like splice.py's
-    output: {turn_index, branch_id, action_truth, variant: "natural", turn}.
-    Unlabelled exchanges are skipped rather than guessed."""
+    output: {stream_id, turn_index, branch_id, action_truth, variant:
+    "natural", turn}. stream_id is the session id — the whole labelled
+    session is one stream, exactly as `fern route --replay` (which groups
+    rows by stream_id to track state) expects. Unlabelled exchanges are
+    skipped rather than guessed."""
     parsed = parse_session(session_path)
     labels = load_labels(labels_path)
+    stream_id = parsed.session_id or session_path.stem
 
     rows: list[dict] = []
     for i, exchange in enumerate(parsed.exchanges):
@@ -174,6 +179,7 @@ def build_eval_stream(session_path: Path, labels_path: Path) -> list[dict]:
             branch_id = _active_topic_before(labels, i)
         rows.append(
             {
+                "stream_id": stream_id,
                 "turn_index": i,
                 "branch_id": branch_id,
                 "action_truth": event.label,

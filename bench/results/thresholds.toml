@@ -1,0 +1,12 @@
+# Written by `bench sweep`. Draft thresholds from a grid search,
+# NOT a maintainer-approved shipped default — see CLAUDE.md.
+
+[thresholds]
+continue_min = 0.4
+new_max = 0.15
+return_min = 0.05
+stray_max_similarity = 0.25
+stray_max_prompt_words = 12
+
+[manifest]
+sha256 = "328e668d68d0e0baed5438dc020f0fadb4419ec039d9524f2a4a48f69f9ad77f"

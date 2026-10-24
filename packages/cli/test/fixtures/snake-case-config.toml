@@ -1,0 +1,6 @@
+[thresholds]
+continue_min = 0.4
+new_max = 0.1
+return_min = 0.35
+stray_max_similarity = 0.08
+stray_max_prompt_words = 10

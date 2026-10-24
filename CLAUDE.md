@@ -33,6 +33,7 @@ uv run --project bench bench smoke   # small ReplayBench run
 - Monorepo packages: `core`, `store`, `embed`, `daemon`, `cli`, `plugin-claude-code`, `ui`. See `docs/architecture.md`.
 - `core` is pure: no file system, no network, no clock, no randomness. Inject them.
 - Only `store` touches disk. Only `daemon` and `embed` touch the network.
+- `embed` may use a model cache under the OS user cache dir; it never writes project data.
 - `ui` talks to the daemon over its localhost HTTP API only.
 - Public types live in `packages/core/src/types.ts`. Changing them needs an entry in `docs/decisions.md`.
 

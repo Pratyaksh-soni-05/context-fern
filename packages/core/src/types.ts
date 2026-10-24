@@ -17,6 +17,16 @@ export type RouterAction = "continue" | "new" | "return" | "combine" | "stray";
  */
 export type DecisionAction = RouterAction | "merge";
 
+/**
+ * Produces embedding vectors for text. Implemented in packages/embed;
+ * declared here (not there) so router code can depend on the shape
+ * without core ever depending on embed. Dependencies point inward:
+ * embed imports this type from core, never the reverse.
+ */
+export interface Embedder {
+  embed(texts: string[]): Promise<Float32Array[]>;
+}
+
 /** One agent conversation in one project directory. Spec §4. */
 export interface Session {
   id: string;

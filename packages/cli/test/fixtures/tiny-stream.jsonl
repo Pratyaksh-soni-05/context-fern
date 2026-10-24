@@ -1,0 +1,4 @@
+{"stream_id":"stream-golden-1","turn_index":0,"branch_id":"session-a","action_truth":"new","variant":"hard_cut","turn":{"prompt_text":"look into the login authentication bug","files_touched":[]}}
+{"stream_id":"stream-golden-1","turn_index":1,"branch_id":"session-a","action_truth":"continue","variant":"hard_cut","turn":{"prompt_text":"did the login authentication fix pass the tests","files_touched":[]}}
+{"stream_id":"stream-golden-1","turn_index":2,"branch_id":"session-b","action_truth":"new","variant":"hard_cut","turn":{"prompt_text":"switching to lunch planning for the team","files_touched":[]}}
+{"stream_id":"stream-golden-1","turn_index":3,"branch_id":"session-a","action_truth":"return","variant":"hard_cut","turn":{"prompt_text":"back to the login authentication bug, any update","files_touched":[]}}
