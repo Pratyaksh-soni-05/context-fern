@@ -1,0 +1,4 @@
+{"type":"user","sessionId":"session-beta-0002","isSidechain":false,"message":{"role":"user","content":[{"type":"text","text":"hello"}]}}
+not-valid-json{{{
+{"type":"assistant","sessionId":"session-beta-0002"}
+{"type":"user","sessionId":"session-beta-0002","isSidechain":false,"message":{"role":"user","content":[{"type":"text","text":"second prompt"}]}}

@@ -1,0 +1,10 @@
+{"type":"mode","mode":"suggest","sessionId":"session-alpha-0001"}
+{"type":"user","sessionId":"session-alpha-0001","isSidechain":false,"message":{"role":"user","content":[{"type":"text","text":"look into the auth bug in src/auth.ts"}]}}
+{"type":"assistant","sessionId":"session-alpha-0001","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"sure, checking now"},{"type":"tool_use","id":"tool-1","name":"Read","input":{"file_path":"src/auth.ts"}}]}}
+{"type":"user","sessionId":"session-alpha-0001","isSidechain":false,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"tool-1","content":[{"type":"text","text":"...file contents..."}]}]}}
+{"type":"assistant","sessionId":"session-alpha-0001","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"found the bug, running a search"},{"type":"tool_use","id":"tool-2","name":"Bash","input":{"command":"grep -n foo src/auth.ts && cat packages/core/src/index.ts"}}]}}
+{"type":"user","sessionId":"session-alpha-0001","isSidechain":false,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"tool-2","content":[{"type":"text","text":"3: foo()"}]}]}}
+{"type":"assistant","sessionId":"session-alpha-0001","isSidechain":true,"agentId":"agent-xyz","message":{"role":"assistant","content":[{"type":"thinking","thinking":"this is a long internal sidechain thought that should be counted separately and never appear in any exchange"}]}}
+{"type":"user","sessionId":"session-alpha-0001","isSidechain":false,"message":{"role":"user","content":[{"type":"text","text":"now check the docker build"}]}}
+{"type":"assistant","sessionId":"session-alpha-0001","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"editing the dockerfile"},{"type":"tool_use","id":"tool-3","name":"Edit","input":{"file_path":"docker/Dockerfile","old_string":"a","new_string":"b"}}]}}
+{"type":"user","sessionId":"session-alpha-0001","isSidechain":false,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"tool-3","content":[{"type":"text","text":"ok"}]}]}}

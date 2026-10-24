@@ -5,8 +5,18 @@ description = "ReplayBench: scrubber, splicer, runner and metrics for ContextTre
 requires-python = "==3.12.*"
 dependencies = []
 
+[project.scripts]
+bench = "bench.cli:main"
+
 [dependency-groups]
-dev = ["pytest==9.1.1"]
+dev = ["pytest==9.1.1", "ruff==0.17.2"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
 
 [build-system]
 requires = ["hatchling"]

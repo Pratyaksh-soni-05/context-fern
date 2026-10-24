@@ -1,0 +1,4 @@
+{"type":"user","sessionId":"branch-two","isSidechain":false,"message":{"role":"user","content":[{"type":"text","text":"topic two message a"}]}}
+{"type":"assistant","sessionId":"branch-two","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"ok"}]}}
+{"type":"user","sessionId":"branch-two","isSidechain":false,"message":{"role":"user","content":[{"type":"text","text":"topic two message b"}]}}
+{"type":"assistant","sessionId":"branch-two","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"ok"}]}}

@@ -10,7 +10,7 @@
     "packages/*"
   ],
   "scripts": {
-    "lint": "biome check .",
+    "lint": "biome check . && uv run --project bench ruff check",
     "typecheck": "tsc -b && tsc -p tsconfig.tests.json",
     "test": "bun test packages && uv run --project bench pytest"
   },

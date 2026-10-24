@@ -1,0 +1,10 @@
+# bench/denylist.txt is gitignored; copy this file there and fill in real
+# names you want scrubbed from transcripts before they're used as benchmark
+# fixtures. One literal per line, matched case-insensitively as a whole
+# word/phrase. Lines starting with # are comments; blank lines are ignored.
+#
+# Your OS username and home-folder name are added automatically at scrub
+# time; you don't need to list them here.
+#
+# Jane Doe
+# Acme Corp

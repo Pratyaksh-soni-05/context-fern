@@ -1,0 +1,6 @@
+{"type":"user","sessionId":"branch-one","isSidechain":false,"message":{"role":"user","content":[{"type":"text","text":"topic one message a"}]}}
+{"type":"assistant","sessionId":"branch-one","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"ok"}]}}
+{"type":"user","sessionId":"branch-one","isSidechain":false,"message":{"role":"user","content":[{"type":"text","text":"topic one message b"}]}}
+{"type":"assistant","sessionId":"branch-one","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"ok"}]}}
+{"type":"user","sessionId":"branch-one","isSidechain":false,"message":{"role":"user","content":[{"type":"text","text":"topic one message c"}]}}
+{"type":"assistant","sessionId":"branch-one","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"ok"}]}}
