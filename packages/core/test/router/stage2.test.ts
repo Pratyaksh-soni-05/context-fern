@@ -11,8 +11,15 @@ import type {
   RouterState,
   Signals,
 } from "../../src/router/types";
+import type { Stage2CallLog } from "../../src/types";
 import { makeFakeJournalSink } from "./fake-journal-sink";
 import { makeFakeLlmClient } from "./fake-llm-client";
+
+// adjudicate() only ever journals Stage2CallLog entries, never a Decision —
+// this narrows the fake sink's JournalEntry union for property access below.
+function stage2Log(entry: unknown): Stage2CallLog {
+  return entry as Stage2CallLog;
+}
 
 function baseSignals(overrides: Partial<Signals> = {}): Signals {
   return {
@@ -191,9 +198,11 @@ test("adjudicate: a malformed (schema-invalid) response falls back to stage0Deci
 
   expect(decision).toBe(stage0Decision);
   expect(journal.entries).toHaveLength(1);
-  expect(journal.entries[0]?.succeeded).toBe(false);
-  expect(journal.entries[0]?.escalatedAction).toBe(stage0Decision.action);
-  expect(journal.entries[0]?.escalatedConfidence).toBe(
+  expect(stage2Log(journal.entries[0]).succeeded).toBe(false);
+  expect(stage2Log(journal.entries[0]).escalatedAction).toBe(
+    stage0Decision.action,
+  );
+  expect(stage2Log(journal.entries[0]).escalatedConfidence).toBe(
     stage0Decision.confidence,
   );
 });
@@ -218,7 +227,7 @@ test("adjudicate: a thrown error (e.g. network failure) falls back to stage0Deci
 
   expect(decision).toBe(stage0Decision);
   expect(journal.entries).toHaveLength(1);
-  expect(journal.entries[0]?.succeeded).toBe(false);
+  expect(stage2Log(journal.entries[0]).succeeded).toBe(false);
 });
 
 test("adjudicate: non-JSON response text falls back and journals succeeded:false", async () => {
@@ -240,5 +249,5 @@ test("adjudicate: non-JSON response text falls back and journals succeeded:false
   );
 
   expect(decision).toBe(stage0Decision);
-  expect(journal.entries[0]?.succeeded).toBe(false);
+  expect(stage2Log(journal.entries[0]).succeeded).toBe(false);
 });

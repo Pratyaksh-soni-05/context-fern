@@ -49,8 +49,6 @@ export interface LlmClient {
  * is deliberately narrower than `Decision` — it's scoped to "an LLM call
  * happened," not the full router-decision journal (Decision.tokensBefore/
  * After are isolate-mode context-payload tokens, a different concept).
- * Journaling every router Decision stays out of scope here, same as the
- * already-merged Stage 0 PR.
  */
 export interface Stage2CallLog {
   model: string;
@@ -63,9 +61,16 @@ export interface Stage2CallLog {
   createdAt: string;
 }
 
+/**
+ * Everything `.fern/journal.jsonl` can carry: a Stage 2 LLM call, or a
+ * full routing `Decision`. See docs/decisions.md, 2026-10-26 (closing the
+ * "Decision journaling/undo stays out of scope" gap from 2026-10-25).
+ */
+export type JournalEntry = Stage2CallLog | Decision;
+
 /** Implemented in packages/store. Declared here for the same inward-dependency reason as Embedder/LlmClient. */
 export interface JournalSink {
-  record(entry: Stage2CallLog): void | Promise<void>;
+  record(entry: JournalEntry): void | Promise<void>;
 }
 
 /** One agent conversation in one project directory. Spec §4. */
@@ -135,16 +140,45 @@ export interface Root {
   createdAt: string;
 }
 
+/**
+ * What undoing a `Decision` restores. `"router"` covers continue/new/
+ * return/combine/stray uniformly (see `buildDecisionInverse` in
+ * packages/core/src/router/decision.ts) — only `activeFrondId` and each
+ * frond's `status` are captured, never centroid/count/files drift, so a
+ * `continue` is a true no-op and undoing `new`/`return`/`combine` restores
+ * the frond tree's topology, not the exact routing signals a later turn
+ * would recompute. `"merge"` is separate because it isn't router-triggered
+ * (no leaflet, no RouterState) and restores a frond's status plus the
+ * stem brief's appended block (located by `decisionId` marker, not by
+ * position — see docs/decisions.md, 2026-10-26).
+ */
+export type DecisionInverse =
+  | {
+      kind: "router";
+      priorActiveFrondId: string | null;
+      priorFrondStatuses: Record<string, FrondStatus>;
+      createdFrondId: string | null;
+    }
+  | {
+      kind: "merge";
+      frondId: string;
+      priorStatus: FrondStatus;
+      priorActiveFrondId: string;
+      decisionId: string;
+    };
+
 /** One routing decision recorded in the journal with its inverse. Spec §4, §5, §11. */
 export interface Decision {
   id: string;
-  leafletId: string;
+  sessionId: string;
+  /** Null only for `merge` — it isn't tied to one exchange. */
+  leafletId: string | null;
   action: DecisionAction;
   target: string | null;
   /** The second frond, for a combine. */
   with?: string;
-  /** Which router stage produced this decision: 0 (local) or 2 (LLM escalation). */
-  stage: 0 | 2;
+  /** Which router stage produced this decision: 0 (local), 2 (LLM escalation), or "manual" (a direct command — /fern stray, the "? " prefix, /fern switch, merge). */
+  stage: 0 | 2 | "manual";
   /** Root ids this decision drew into the leaflet's context, if any. */
   rootsUsed?: string[];
   signals: string[];
@@ -154,5 +188,6 @@ export interface Decision {
   cacheReadTokens: number | null;
   cacheWriteTokens: number | null;
   undone: boolean;
+  inverse: DecisionInverse;
   createdAt: string;
 }

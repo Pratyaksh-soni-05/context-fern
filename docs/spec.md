@@ -113,7 +113,7 @@ Served by the daemon on localhost (default port 7420). No account, no login. Scr
 Frond colours are assigned in order from the palette in `tokens.css` (moss, lake, iris, ochre, rose, then repeat with a pattern); stray is always ember, roots always ash.
 
 ## 12. Storage
-`.fern/fern.db` (SQLite, WAL). Tables: `sessions`, `fronds`, `exchanges` (hashes and counts, no content), `decisions`, `roots`, `embeddings` (sqlite-vec). Briefs in `.fern/fronds/*.md`. Journal mirrored to `.fern/journal.jsonl`. Config in `.fern/config.toml`.
+`.fern/fern.db` (SQLite, WAL). Tables: `sessions`, `fronds`, `leaflets` (hashes and counts, no content), `decisions`, `roots`, `migrations` (versioned; opening a DB with a newer schema version than the running code knows about refuses outright). `embeddings` (sqlite-vec) is deferred — not built yet; frond centroids live as a JSON array directly on `fronds.centroid` in the meantime (see docs/decisions.md). Briefs in `.fern/fronds/*.md`. Journal mirrored to `.fern/journal.jsonl`. Config in `.fern/config.toml`.
 
 ## 13. ReplayBench
 - `bench/scrub.py`, `bench/transcript.py`, `bench/splice.py` as built in Phase 1.

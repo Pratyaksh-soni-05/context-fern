@@ -1,12 +1,12 @@
 // A tiny local fake JournalSink for core's OWN tests — in-memory only,
 // so tests can assert exactly what got journaled without touching disk.
 
-import type { JournalSink, Stage2CallLog } from "../../src/types";
+import type { JournalEntry, JournalSink } from "../../src/types";
 
 export function makeFakeJournalSink(): JournalSink & {
-  entries: Stage2CallLog[];
+  entries: JournalEntry[];
 } {
-  const entries: Stage2CallLog[] = [];
+  const entries: JournalEntry[] = [];
   return {
     entries,
     record(entry) {

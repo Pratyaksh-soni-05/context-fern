@@ -1,6 +1,7 @@
 export * from "./baselines";
 export * from "./config";
 export * from "./decide";
+export * from "./decision";
 export * from "./math";
 export * from "./route-turn";
 export * from "./route-turn-stage2";

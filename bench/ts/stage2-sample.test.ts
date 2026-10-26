@@ -1,6 +1,10 @@
 import { afterEach, expect, test } from "bun:test";
 import { rm, writeFile } from "node:fs/promises";
-import type { JournalSink, Stage2CallLog } from "@context-fern/core";
+import type {
+  JournalEntry,
+  JournalSink,
+  Stage2CallLog,
+} from "@context-fern/core";
 import {
   countingJournalSink,
   groupAndSortByStream,
@@ -31,7 +35,7 @@ function callLog(overrides: Partial<Stage2CallLog> = {}): Stage2CallLog {
 }
 
 test("countingJournalSink counts succeeded and failed separately and still delegates to the inner sink", async () => {
-  const recorded: Stage2CallLog[] = [];
+  const recorded: JournalEntry[] = [];
   const inner: JournalSink = { record: (e) => void recorded.push(e) };
   const counts = { succeeded: 0, failed: 0 };
   const sink = countingJournalSink(inner, counts);
