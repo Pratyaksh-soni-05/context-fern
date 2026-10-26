@@ -15,7 +15,9 @@
       "version": "0.0.0",
       "dependencies": {
         "@context-fern/core": "workspace:*",
+        "@context-fern/daemon": "workspace:*",
         "@context-fern/embed": "workspace:*",
+        "@context-fern/store": "workspace:*",
       },
     },
     "packages/core": {
@@ -25,6 +27,9 @@
     "packages/daemon": {
       "name": "@context-fern/daemon",
       "version": "0.0.0",
+      "dependencies": {
+        "@context-fern/core": "workspace:*",
+      },
     },
     "packages/embed": {
       "name": "@context-fern/embed",
@@ -41,6 +46,9 @@
     "packages/store": {
       "name": "@context-fern/store",
       "version": "0.0.0",
+      "dependencies": {
+        "@context-fern/core": "workspace:*",
+      },
     },
     "packages/ui": {
       "name": "@context-fern/ui",

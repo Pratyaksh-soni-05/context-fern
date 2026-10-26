@@ -116,3 +116,22 @@ export function isShortQuestionForm(text: string, maxWords: number): boolean {
   const first = words[0]?.toLowerCase().replace(/[^a-z]/g, "");
   return QUESTION_WORDS.includes(first ?? "");
 }
+
+// spec §7's "?" prefix: a lone "?" immediately followed by a space, at
+// character 0 of the raw (untrimmed) prompt. Deliberately narrow — "?.."
+// and a bare "?" with nothing after it are real questions, not the stray
+// shorthand, so they must NOT match just because they start with "?".
+const STRAY_PREFIX = "? ";
+
+export function parseStrayPrefix(text: string): {
+  isStray: boolean;
+  prompt: string;
+} {
+  if (!text.startsWith(STRAY_PREFIX)) {
+    return { isStray: false, prompt: text };
+  }
+  return {
+    isStray: true,
+    prompt: text.slice(STRAY_PREFIX.length).replace(/^\s+/, ""),
+  };
+}

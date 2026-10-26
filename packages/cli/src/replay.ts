@@ -6,6 +6,7 @@ import {
   type RouterConfig,
   routeTurn,
 } from "@context-fern/core";
+import { FrondBranchMapper, groupAndSortByStream } from "./replay-common";
 
 export interface ReplayTurnInput {
   stream_id: string;
@@ -33,7 +34,19 @@ export interface ReplayTurnOutput {
   predicted_branch_id: string | null;
   confidence: number;
   signals: string[];
+  /** Total per-turn latency — Stage 0 only here; Stage 0 + Stage 2 (if escalated) in replayStage2(). */
   latency_ms: number;
+  /** Only populated by replayStage2() — undefined for plain Stage 0 replay. */
+  stage0_latency_ms?: number;
+  /** Only populated by replayStage2(); null when that turn never escalated. */
+  stage2_latency_ms?: number | null;
+  /**
+   * What Stage 0 alone would have decided, even on an escalated turn —
+   * only populated by replayStage2(). Lets a real always-escalate pass
+   * be sliced afterward to simulate any other escalation band.
+   */
+  stage0_predicted_action?: string;
+  stage0_confidence?: number;
 }
 
 /**
@@ -43,31 +56,32 @@ export interface ReplayTurnOutput {
  * a frond becomes active, whether via "new" or "return"), so "return"
  * accuracy can be scored downstream without the scorer re-deriving the
  * mapping itself.
+ *
+ * An async generator, not a buffered array: yields each row the moment
+ * it's computed, so a caller (route.ts) can print/checkpoint
+ * incrementally instead of waiting for the whole dataset to finish — a
+ * prior version buffered everything in memory and only emitted output
+ * at the very end, which on a real multi-hour Stage 2 run made no
+ * incremental progress observable at all (see docs/decisions.md). Rows
+ * are no longer globally sorted across streams as a result — only
+ * within each stream, which callers (compute_metrics etc.) never relied
+ * on cross-stream order for anyway.
  */
-export async function replay(
+export async function* replay(
   lines: readonly ReplayTurnInput[],
   embedder: Embedder,
   config: RouterConfig,
   decideFn: DecideFn = decide,
-): Promise<ReplayTurnOutput[]> {
-  const byStream = new Map<string, ReplayTurnInput[]>();
-  for (const line of lines) {
-    const arr = byStream.get(line.stream_id) ?? [];
-    arr.push(line);
-    byStream.set(line.stream_id, arr);
-  }
-
-  const output: ReplayTurnOutput[] = [];
+): AsyncGenerator<ReplayTurnOutput> {
+  const byStream = groupAndSortByStream(lines);
 
   for (const [streamId, streamLines] of byStream) {
-    streamLines.sort((a, b) => a.turn_index - b.turn_index);
     let state = emptyState();
-    const frondToBranch = new Map<string, string | null>();
-    let frondCounter = 0;
+    const mapper = new FrondBranchMapper(streamId);
 
     for (const line of streamLines) {
       const filesTouched = (line.turn.files_touched ?? []).map((f) => f.path);
-      const candidateNewFrondId = `frond-${streamId}-${++frondCounter}`;
+      const candidateNewFrondId = mapper.nextCandidateFrondId();
 
       const start = performance.now();
       const { decision, nextState } = await routeTurn(
@@ -81,17 +95,14 @@ export async function replay(
       );
       const latencyMs = performance.now() - start;
 
-      let predictedBranchId: string | null = null;
-      let target = decision.target;
-      if (decision.action === "new") {
-        frondToBranch.set(candidateNewFrondId, line.branch_id);
-        predictedBranchId = line.branch_id;
-        target = candidateNewFrondId;
-      } else if (decision.target) {
-        predictedBranchId = frondToBranch.get(decision.target) ?? null;
-      }
+      const { target, predictedBranchId } = mapper.resolve(
+        decision.action,
+        decision.target,
+        candidateNewFrondId,
+        line.branch_id,
+      );
 
-      output.push({
+      yield {
         stream_id: line.stream_id,
         turn_index: line.turn_index,
         action_truth: line.action_truth,
@@ -103,18 +114,9 @@ export async function replay(
         confidence: decision.confidence,
         signals: decision.signals,
         latency_ms: latencyMs,
-      });
+      };
 
       state = nextState;
     }
   }
-
-  output.sort((a, b) =>
-    a.stream_id === b.stream_id
-      ? a.turn_index - b.turn_index
-      : a.stream_id < b.stream_id
-        ? -1
-        : 1,
-  );
-  return output;
 }

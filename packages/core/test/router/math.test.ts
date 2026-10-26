@@ -4,6 +4,7 @@ import {
   extractFileMentions,
   isShortQuestionForm,
   jaccard,
+  parseStrayPrefix,
   runningMean,
 } from "../../src/router/math";
 
@@ -73,4 +74,46 @@ test("isShortQuestionForm: long prompts or statements are false", () => {
   expect(
     isShortQuestionForm("please fix the bug in the auth module now", 12),
   ).toBe(false);
+});
+
+test("parseStrayPrefix: '? ' at the very start strips the prefix and any extra whitespace", () => {
+  expect(parseStrayPrefix("? side question about X")).toEqual({
+    isStray: true,
+    prompt: "side question about X",
+  });
+  expect(parseStrayPrefix("?   double space then prompt")).toEqual({
+    isStray: true,
+    prompt: "double space then prompt",
+  });
+});
+
+test("parseStrayPrefix: '?' with no following space does not trigger", () => {
+  expect(parseStrayPrefix("?.. not a stray")).toEqual({
+    isStray: false,
+    prompt: "?.. not a stray",
+  });
+  expect(parseStrayPrefix("?prompt with no space")).toEqual({
+    isStray: false,
+    prompt: "?prompt with no space",
+  });
+});
+
+test("parseStrayPrefix: a bare '?' with nothing after it does not trigger", () => {
+  expect(parseStrayPrefix("?")).toEqual({ isStray: false, prompt: "?" });
+});
+
+test("parseStrayPrefix: '?' not at the very start does not trigger", () => {
+  expect(parseStrayPrefix(" ? leading space before the question mark")).toEqual(
+    {
+      isStray: false,
+      prompt: " ? leading space before the question mark",
+    },
+  );
+});
+
+test("parseStrayPrefix: a real question is untouched", () => {
+  expect(parseStrayPrefix("what's a good name for a pet goldfish?")).toEqual({
+    isStray: false,
+    prompt: "what's a good name for a pet goldfish?",
+  });
 });

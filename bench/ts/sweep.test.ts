@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { DEFAULT_CONFIG } from "@context-fern/core";
+import { computeMetrics, type MetricsRow } from "./metrics";
 import type { OracleRow } from "./sweep";
 import {
   buildThresholdGrid,
@@ -39,21 +40,62 @@ test("buildThresholdGrid only ever produces newMax strictly below continueMin", 
   }
 });
 
-test("objective rewards F1 and penalizes over-carry — hand computed", () => {
-  const metrics = {
-    actionAccuracy: 0,
-    f1New: 0.8,
-    f1Return: 0.6,
-    f1Stray: 1.0,
-    overCarryRate: 0.2,
-    wrongReturnRate: 0,
-    latencyP50Ms: 0,
-    latencyP95Ms: 0,
-    n: 0,
-    nCombineExcluded: 0,
-  };
-  // (0.8+0.6+1.0)/3 - 0.2*0.5 = 0.8 - 0.1 = 0.7
-  expect(objective(metrics)).toBeCloseTo(0.7, 9);
+test("objective is macroF1 over continue/new/return/stray minus a 2x-weighted false-new/stray cost — hand computed", () => {
+  // 2 correct continues, 1 correct new, 1 missed new (FN, truth new ->
+  // predicted continue, costs 1x), 1 false new (FP, truth continue ->
+  // predicted new, costs 2x), 1 correct stray. No return rows at all,
+  // so f1Return is vacuously 1.
+  const rows: MetricsRow[] = [
+    {
+      action_truth: "continue",
+      predicted_action: "continue",
+      branch_id: "a",
+      predicted_branch_id: "a",
+      latency_ms: null,
+    },
+    {
+      action_truth: "continue",
+      predicted_action: "continue",
+      branch_id: "a",
+      predicted_branch_id: "a",
+      latency_ms: null,
+    },
+    {
+      action_truth: "new",
+      predicted_action: "new",
+      branch_id: "b",
+      predicted_branch_id: "b",
+      latency_ms: null,
+    },
+    {
+      action_truth: "new",
+      predicted_action: "continue",
+      branch_id: "c",
+      predicted_branch_id: "a",
+      latency_ms: null,
+    },
+    {
+      action_truth: "continue",
+      predicted_action: "new",
+      branch_id: "a",
+      predicted_branch_id: "d",
+      latency_ms: null,
+    },
+    {
+      action_truth: "stray",
+      predicted_action: "stray",
+      branch_id: null,
+      predicted_branch_id: null,
+      latency_ms: null,
+    },
+  ];
+  const metrics = computeMetrics(rows);
+  // f1Continue = 2/3 (tp=2,fp=1,fn=1), f1New = 1/2 (tp=1,fp=1,fn=1),
+  // f1Stray = 1 (tp=1,fp=0,fn=0), f1Return = 1 (vacuous, never appears).
+  // macroF1 = (2/3 + 1/2 + 1 + 1) / 4 = 19/24
+  // cost = (2*(fp_new=1 + fp_stray=0) + (fn_new=1 + fn_stray=0)) / n=6 = 3/6 = 1/2
+  // objective = 19/24 - 1/2 = 7/24
+  expect(objective(rows, metrics)).toBeCloseTo(7 / 24, 9);
 });
 
 test("minimalState reconstructs enough shape for decide() to see the active frond's signal", () => {

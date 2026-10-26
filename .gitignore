@@ -31,3 +31,22 @@ bench/data/private/
 bench/data/scrubbed/
 bench/data/labels/
 bench/denylist.txt
+# Carries real (scrubbed) prompt/assistant excerpts — analysis working
+# data, not a fixture; only the aggregated counts report is tracked.
+bench/results/ceiling-sample.jsonl
+bench/results/ceiling-answer-key.json
+bench/results/ceiling.jsonl
+# bench eval-stage2 working artifacts (journals, split datasets, sample
+# ids, per-stream outputs) — regenerated per run, not fixtures either.
+bench/results/stage2-sample-ids.json
+bench/results/stage2-sample-journal-*.jsonl
+bench/results/stage2-full-journal-*.jsonl
+bench/results/stage2-full-split/
+bench/results/stage2-full-output-*/
+bench/results/stage2-sample-*.jsonl
+bench/results/stage2-sample-*.log
+bench/results/stage0-full-output.jsonl
+bench/results/stage0-full.log
+bench/results/eval-stage2.log
+bench/results/eval-stage2-console.log
+bench/results/embeddings-cache.bin

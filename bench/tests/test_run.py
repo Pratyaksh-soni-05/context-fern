@@ -10,7 +10,7 @@ so the two languages can never silently drift onto different fixtures.
 import json
 from pathlib import Path
 
-from bench.run import compute_metrics
+from bench.run import compute_metrics, confusion_counts
 
 FIXTURE_PATH = Path(__file__).resolve().parents[1] / "ts" / "fixtures" / "metrics-fixture.json"
 ROWS = json.loads(FIXTURE_PATH.read_text())
@@ -32,6 +32,22 @@ def test_f1_new_hand_computed():
     # F1 = 2*1*0.5/(1+0.5) = 0.6666...
     result = compute_metrics(ROWS)
     assert abs(result.f1_new - 2 / 3) < 1e-9
+
+
+def test_f1_continue_hand_computed():
+    # truth=continue: only row 1 (pred continue, TP). "continue" is also
+    # predicted for row 2 (truth new, FP) and row 6 (truth stray, FP).
+    # precision = 1/3, recall = 1/1 -> F1 = 2*(1/3)*1/(1/3+1) = 0.5
+    result = compute_metrics(ROWS)
+    assert abs(result.f1_continue - 0.5) < 1e-9
+
+
+def test_confusion_counts_hand_computed():
+    main_rows = [r for r in ROWS if r["action_truth"] != "combine"]
+    assert confusion_counts(main_rows, "continue") == {"tp": 1, "fp": 2, "fn": 0}
+    assert confusion_counts(main_rows, "new") == {"tp": 1, "fp": 0, "fn": 1}
+    assert confusion_counts(main_rows, "stray") == {"tp": 1, "fp": 0, "fn": 1}
+    assert confusion_counts(main_rows, "return") == {"tp": 2, "fp": 0, "fn": 0}
 
 
 def test_f1_return_hand_computed():
@@ -66,6 +82,30 @@ def test_latency_percentiles():
     # latencies across ALL 8 rows (combine included): 10..80
     assert result.latency_p50_ms == 45  # midpoint of sorted 10..80
     assert result.latency_p95_ms > result.latency_p50_ms
+
+
+def test_escalation_rate_and_split_latency_percentiles_hand_computed():
+    # 2 of 8 rows actually escalated (a numeric stage2_latency_ms, not
+    # null) out of 8 rows that carry the field at all.
+    result = compute_metrics(ROWS)
+    assert abs(result.escalation_rate - 2 / 8) < 1e-9
+    assert result.latency_p50_stage0_ms == 30
+    assert abs(result.latency_p95_stage0_ms - 76.5) < 1e-9
+    assert abs(result.latency_p50_stage2_ms - 29) < 1e-9
+    assert abs(result.latency_p95_stage2_ms - 38.9) < 1e-9
+
+
+def test_escalation_rate_is_zero_when_no_row_carries_the_field():
+    rows = [
+        {
+            "action_truth": "continue",
+            "predicted_action": "continue",
+            "branch_id": "a",
+            "predicted_branch_id": "a",
+            "latency_ms": 1,
+        },
+    ]
+    assert compute_metrics(rows).escalation_rate == 0.0
 
 
 def test_f1_is_vacuously_perfect_when_an_action_never_appears():

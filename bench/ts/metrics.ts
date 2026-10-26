@@ -11,10 +11,15 @@ export interface MetricsRow {
   branch_id: string | null;
   predicted_branch_id: string | null;
   latency_ms: number | null;
+  /** Only present for Stage 0+2 replay rows (replayStage2 / `route --mode stage2|always-escalate`). */
+  stage0_latency_ms?: number | null;
+  /** Only present for Stage 0+2 replay rows; null on a row that never escalated. */
+  stage2_latency_ms?: number | null;
 }
 
 export interface MetricsResult {
   actionAccuracy: number;
+  f1Continue: number;
   f1New: number;
   f1Return: number;
   f1Stray: number;
@@ -22,8 +27,21 @@ export interface MetricsResult {
   wrongReturnRate: number;
   latencyP50Ms: number;
   latencyP95Ms: number;
+  /** Fraction of rows that escalated to Stage 2 — 0 for plain Stage 0 rows (no stage2_latency_ms field at all). */
+  escalationRate: number;
+  latencyP50Stage0Ms: number;
+  latencyP95Stage0Ms: number;
+  /** Computed only over rows that actually escalated; 0 if none did. */
+  latencyP50Stage2Ms: number;
+  latencyP95Stage2Ms: number;
   n: number;
   nCombineExcluded: number;
+}
+
+export interface ConfusionCounts {
+  tp: number;
+  fp: number;
+  fn: number;
 }
 
 function percentile(sortedValues: number[], pct: number): number {
@@ -38,7 +56,10 @@ function percentile(sortedValues: number[], pct: number): number {
   return d0 + d1;
 }
 
-function f1(rows: readonly MetricsRow[], action: string): number {
+export function confusionCounts(
+  rows: readonly MetricsRow[],
+  action: string,
+): ConfusionCounts {
   let tp = 0;
   let fp = 0;
   let fn = 0;
@@ -47,6 +68,11 @@ function f1(rows: readonly MetricsRow[], action: string): number {
     else if (r.predicted_action === action && r.action_truth !== action) fp++;
     else if (r.predicted_action !== action && r.action_truth === action) fn++;
   }
+  return { tp, fp, fn };
+}
+
+function f1(rows: readonly MetricsRow[], action: string): number {
+  const { tp, fp, fn } = confusionCounts(rows, action);
   if (tp + fp + fn === 0) return 1; // action never appears as truth or prediction
   if (tp === 0) return 0;
   const precision = tp / (tp + fp);
@@ -88,8 +114,22 @@ export function computeMetrics(rows: readonly MetricsRow[]): MetricsResult {
     .filter((l): l is number => l !== null && l !== undefined)
     .sort((a, b) => a - b);
 
+  const stage0Latencies = rows
+    .map((r) => r.stage0_latency_ms)
+    .filter((l): l is number => l !== null && l !== undefined)
+    .sort((a, b) => a - b);
+
+  const rowsWithStage2Field = rows.filter(
+    (r) => r.stage2_latency_ms !== undefined,
+  );
+  const stage2Latencies = rowsWithStage2Field
+    .map((r) => r.stage2_latency_ms)
+    .filter((l): l is number => l !== null)
+    .sort((a, b) => a - b);
+
   return {
     actionAccuracy: accuracy,
+    f1Continue: f1(mainRows, "continue"),
     f1New: f1(mainRows, "new"),
     f1Return: f1(mainRows, "return"),
     f1Stray: f1(mainRows, "stray"),
@@ -97,6 +137,14 @@ export function computeMetrics(rows: readonly MetricsRow[]): MetricsResult {
     wrongReturnRate: wrongReturnRate(mainRows),
     latencyP50Ms: percentile(latencies, 50),
     latencyP95Ms: percentile(latencies, 95),
+    escalationRate:
+      rowsWithStage2Field.length > 0
+        ? stage2Latencies.length / rowsWithStage2Field.length
+        : 0,
+    latencyP50Stage0Ms: percentile(stage0Latencies, 50),
+    latencyP95Stage0Ms: percentile(stage0Latencies, 95),
+    latencyP50Stage2Ms: percentile(stage2Latencies, 50),
+    latencyP95Stage2Ms: percentile(stage2Latencies, 95),
     n: mainRows.length,
     nCombineExcluded: combineRows.length,
   };

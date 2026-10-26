@@ -1,0 +1,9 @@
+{
+  "n_judged": 120,
+  "n_true_new": 60,
+  "n_true_continue": 60,
+  "true_new_judged_continue": 8,
+  "true_new_judged_new": 52,
+  "true_continue_judged_new": 13,
+  "true_continue_judged_continue": 47
+}

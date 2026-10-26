@@ -28,6 +28,7 @@ from pathlib import Path
 @dataclass
 class MetricsResult:
     action_accuracy: float
+    f1_continue: float
     f1_new: float
     f1_return: float
     f1_stray: float
@@ -35,12 +36,18 @@ class MetricsResult:
     wrong_return_rate: float
     latency_p50_ms: float
     latency_p95_ms: float
+    escalation_rate: float
+    latency_p50_stage0_ms: float
+    latency_p95_stage0_ms: float
+    latency_p50_stage2_ms: float
+    latency_p95_stage2_ms: float
     n: int
     n_combine_excluded: int
 
     def to_dict(self) -> dict:
         return {
             "action_accuracy": self.action_accuracy,
+            "f1_continue": self.f1_continue,
             "f1_new": self.f1_new,
             "f1_return": self.f1_return,
             "f1_stray": self.f1_stray,
@@ -48,6 +55,11 @@ class MetricsResult:
             "wrong_return_rate": self.wrong_return_rate,
             "latency_p50_ms": self.latency_p50_ms,
             "latency_p95_ms": self.latency_p95_ms,
+            "escalation_rate": self.escalation_rate,
+            "latency_p50_stage0_ms": self.latency_p50_stage0_ms,
+            "latency_p95_stage0_ms": self.latency_p95_stage0_ms,
+            "latency_p50_stage2_ms": self.latency_p50_stage2_ms,
+            "latency_p95_stage2_ms": self.latency_p95_stage2_ms,
             "n": self.n,
             "n_combine_excluded": self.n_combine_excluded,
         }
@@ -68,10 +80,16 @@ def _percentile(sorted_values: list[float], pct: float) -> float:
     return d0 + d1
 
 
-def _f1(rows: list[dict], action: str) -> float:
+def confusion_counts(rows: list[dict], action: str) -> dict:
     tp = sum(1 for r in rows if r["predicted_action"] == action and r["action_truth"] == action)
     fp = sum(1 for r in rows if r["predicted_action"] == action and r["action_truth"] != action)
     fn = sum(1 for r in rows if r["predicted_action"] != action and r["action_truth"] == action)
+    return {"tp": tp, "fp": fp, "fn": fn}
+
+
+def _f1(rows: list[dict], action: str) -> float:
+    counts = confusion_counts(rows, action)
+    tp, fp, fn = counts["tp"], counts["fp"], counts["fn"]
     if tp + fp + fn == 0:
         return 1.0  # action never appears as truth or prediction: vacuously perfect
     if tp == 0:
@@ -106,8 +124,18 @@ def compute_metrics(rows: list[dict]) -> MetricsResult:
 
     latencies = sorted(r["latency_ms"] for r in rows if r.get("latency_ms") is not None)
 
+    stage0_latencies = sorted(
+        r["stage0_latency_ms"] for r in rows if r.get("stage0_latency_ms") is not None
+    )
+
+    rows_with_stage2_field = [r for r in rows if "stage2_latency_ms" in r]
+    stage2_latencies = sorted(
+        r["stage2_latency_ms"] for r in rows_with_stage2_field if r["stage2_latency_ms"] is not None
+    )
+
     return MetricsResult(
         action_accuracy=accuracy,
+        f1_continue=_f1(main_rows, "continue"),
         f1_new=_f1(main_rows, "new"),
         f1_return=_f1(main_rows, "return"),
         f1_stray=_f1(main_rows, "stray"),
@@ -115,6 +143,13 @@ def compute_metrics(rows: list[dict]) -> MetricsResult:
         wrong_return_rate=_wrong_return_rate(main_rows),
         latency_p50_ms=_percentile(latencies, 50),
         latency_p95_ms=_percentile(latencies, 95),
+        escalation_rate=(
+            len(stage2_latencies) / len(rows_with_stage2_field) if rows_with_stage2_field else 0.0
+        ),
+        latency_p50_stage0_ms=_percentile(stage0_latencies, 50),
+        latency_p95_stage0_ms=_percentile(stage0_latencies, 95),
+        latency_p50_stage2_ms=_percentile(stage2_latencies, 50),
+        latency_p95_stage2_ms=_percentile(stage2_latencies, 95),
         n=len(main_rows),
         n_combine_excluded=len(combine_rows),
     )
@@ -125,15 +160,31 @@ CLI_ENTRY = REPO_ROOT / "packages" / "cli" / "src" / "index.ts"
 
 
 def run_route_replay(
-    stream_file: Path, mode: str = "full", config_file: Path | None = None
+    stream_file: Path,
+    mode: str = "full",
+    config_file: Path | None = None,
+    *,
+    model: str | None = None,
+    ollama_url: str | None = None,
+    journal_file: Path | None = None,
 ) -> list[dict]:
     """Shells out to the real TS CLI (`fern route --replay`), which does
     genuine online/causal replay with the real embedder. Not part of the
     hermetic pytest suite (needs bun + the cached model) — exercised
-    directly by `bench eval`."""
+    directly by `bench eval`/`bench eval-stage2`. The `model`/`ollama_url`/
+    `journal_file` kwargs only matter for `mode` in {"stage2",
+    "always-escalate"}. For sampling a subset of turns, see
+    bench/ts/stage2-sample.ts instead — this path has no way to target a
+    subset without also escalating every other in-band turn."""
     args = ["bun", "run", str(CLI_ENTRY), "route", "--replay", str(stream_file), "--mode", mode]
     if config_file:
         args.extend(["--config", str(config_file)])
+    if model:
+        args.extend(["--model", model])
+    if ollama_url:
+        args.extend(["--ollama-url", ollama_url])
+    if journal_file:
+        args.extend(["--journal", str(journal_file)])
     result = subprocess.run(args, capture_output=True, text=True, cwd=REPO_ROOT)
     if result.returncode != 0:
         print(result.stderr, file=sys.stderr)
@@ -148,16 +199,27 @@ def join_predictions_with_truth(stream_file: Path, predictions: list[dict]) -> l
     this just renames for clarity at the call site."""
     rows = []
     for p in predictions:
-        rows.append(
-            {
-                "stream_id": p["stream_id"],
-                "turn_index": p["turn_index"],
-                "variant": p["variant"],
-                "action_truth": p["action_truth"],
-                "predicted_action": p["predicted_action"],
-                "branch_id": p.get("branch_id"),
-                "predicted_branch_id": p.get("predicted_branch_id"),
-                "latency_ms": p.get("latency_ms"),
-            }
-        )
+        row = {
+            "stream_id": p["stream_id"],
+            "turn_index": p["turn_index"],
+            "variant": p["variant"],
+            "action_truth": p["action_truth"],
+            "predicted_action": p["predicted_action"],
+            "branch_id": p.get("branch_id"),
+            "predicted_branch_id": p.get("predicted_branch_id"),
+            "latency_ms": p.get("latency_ms"),
+            "confidence": p.get("confidence"),
+        }
+        # Only present on Stage 0+2 replay output (route --mode
+        # stage2|always-escalate) — preserve absence, not just null, so
+        # escalation_rate's denominator matches the TS mirror exactly.
+        if "stage0_latency_ms" in p:
+            row["stage0_latency_ms"] = p["stage0_latency_ms"]
+        if "stage2_latency_ms" in p:
+            row["stage2_latency_ms"] = p["stage2_latency_ms"]
+        if "stage0_predicted_action" in p:
+            row["stage0_predicted_action"] = p["stage0_predicted_action"]
+        if "stage0_confidence" in p:
+            row["stage0_confidence"] = p["stage0_confidence"]
+        rows.append(row)
     return rows

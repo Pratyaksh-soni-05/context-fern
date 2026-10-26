@@ -32,4 +32,31 @@ test("a snake_case TOML file (as bench sweep writes) is translated to camelCase 
   // weights/cues fall back to defaults — the TOML file didn't set them
   expect(config.weights).toEqual(DEFAULT_CONFIG.weights);
   expect(config.cues).toEqual(DEFAULT_CONFIG.cues);
+  expect(config.escalation).toEqual(DEFAULT_CONFIG.escalation);
+});
+
+test("an [escalation] section overrides the default low/high band", async () => {
+  const path = `${import.meta.dir}/fixtures/escalation-config.toml`;
+  await Bun.write(
+    path,
+    ["[escalation]", "low = 0.2", "high = 0.6", ""].join("\n"),
+  );
+
+  const config = await loadConfig(path);
+
+  expect(config.escalation).toEqual({ low: 0.2, high: 0.6 });
+  expect(config.thresholds).toEqual(DEFAULT_CONFIG.thresholds);
+});
+
+test("a [suggestion_precision] section overrides the default new/stray tau", async () => {
+  const path = `${import.meta.dir}/fixtures/suggestion-precision-config.toml`;
+  await Bun.write(
+    path,
+    ["[suggestion_precision]", "new = 0.9", "stray = 0.7", ""].join("\n"),
+  );
+
+  const config = await loadConfig(path);
+
+  expect(config.suggestionPrecision).toEqual({ new: 0.9, stray: 0.7 });
+  expect(config.thresholds).toEqual(DEFAULT_CONFIG.thresholds);
 });

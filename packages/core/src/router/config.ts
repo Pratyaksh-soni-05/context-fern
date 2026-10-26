@@ -1,8 +1,10 @@
 import type {
   CueConfig,
+  EscalationConfig,
   RouterConfig,
   RouterThresholds,
   RouterWeights,
+  SuggestionPrecisionConfig,
 } from "./types";
 
 /** Partial<RouterConfig> only makes the top-level fields optional, not the
@@ -11,6 +13,8 @@ export interface PartialRouterConfig {
   thresholds?: Partial<RouterThresholds>;
   weights?: Partial<RouterWeights>;
   cues?: Partial<CueConfig>;
+  escalation?: Partial<EscalationConfig>;
+  suggestionPrecision?: Partial<SuggestionPrecisionConfig>;
 }
 
 /**
@@ -44,6 +48,17 @@ export const DEFAULT_CONFIG: RouterConfig = {
       "random question",
     ],
   },
+  // Draft, pending the sample/full Stage 2 eval — see docs/decisions.md.
+  escalation: {
+    low: 0.25,
+    high: 0.5,
+  },
+  // INTERIM — measured on spliced data only (bench/results/day30-report.md);
+  // re-validate on natural labels per spec §16. See docs/decisions.md, 2026-10-26.
+  suggestionPrecision: {
+    new: 0.88,
+    stray: 0.603,
+  },
 };
 
 /** Core stays pure (no fs) — callers read the TOML file and pass the parsed
@@ -56,6 +71,14 @@ export function mergeConfig(partial: PartialRouterConfig = {}): RouterConfig {
       new: partial.cues?.new ?? DEFAULT_CONFIG.cues.new,
       return: partial.cues?.return ?? DEFAULT_CONFIG.cues.return,
       stray: partial.cues?.stray ?? DEFAULT_CONFIG.cues.stray,
+    },
+    escalation: {
+      ...DEFAULT_CONFIG.escalation,
+      ...partial.escalation,
+    },
+    suggestionPrecision: {
+      ...DEFAULT_CONFIG.suggestionPrecision,
+      ...partial.suggestionPrecision,
     },
   };
 }

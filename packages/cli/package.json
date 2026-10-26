@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@context-fern/core": "workspace:*",
-    "@context-fern/embed": "workspace:*"
+    "@context-fern/daemon": "workspace:*",
+    "@context-fern/embed": "workspace:*",
+    "@context-fern/store": "workspace:*"
   }
 }

@@ -4,55 +4,71 @@
     "predicted_action": "new",
     "branch_id": "a",
     "predicted_branch_id": "a",
-    "latency_ms": 10
+    "latency_ms": 10,
+    "stage0_latency_ms": 8,
+    "stage2_latency_ms": null
   },
   {
     "action_truth": "continue",
     "predicted_action": "continue",
     "branch_id": "a",
     "predicted_branch_id": "a",
-    "latency_ms": 20
+    "latency_ms": 20,
+    "stage0_latency_ms": 15,
+    "stage2_latency_ms": null
   },
   {
     "action_truth": "new",
     "predicted_action": "continue",
     "branch_id": "b",
     "predicted_branch_id": "a",
-    "latency_ms": 30
+    "latency_ms": 30,
+    "stage0_latency_ms": 12,
+    "stage2_latency_ms": 18
   },
   {
     "action_truth": "return",
     "predicted_action": "return",
     "branch_id": "a",
     "predicted_branch_id": "a",
-    "latency_ms": 40
+    "latency_ms": 40,
+    "stage0_latency_ms": 40,
+    "stage2_latency_ms": null
   },
   {
     "action_truth": "return",
     "predicted_action": "return",
     "branch_id": "b",
     "predicted_branch_id": "a",
-    "latency_ms": 50
+    "latency_ms": 50,
+    "stage0_latency_ms": 50,
+    "stage2_latency_ms": null
   },
   {
     "action_truth": "stray",
     "predicted_action": "stray",
     "branch_id": null,
     "predicted_branch_id": null,
-    "latency_ms": 60
+    "latency_ms": 60,
+    "stage0_latency_ms": 20,
+    "stage2_latency_ms": 40
   },
   {
     "action_truth": "stray",
     "predicted_action": "continue",
     "branch_id": null,
     "predicted_branch_id": "a",
-    "latency_ms": 70
+    "latency_ms": 70,
+    "stage0_latency_ms": 70,
+    "stage2_latency_ms": null
   },
   {
     "action_truth": "combine",
     "predicted_action": "continue",
     "branch_id": "a",
     "predicted_branch_id": "a",
-    "latency_ms": 80
+    "latency_ms": 80,
+    "stage0_latency_ms": 80,
+    "stage2_latency_ms": null
   }
 ]

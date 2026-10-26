@@ -248,6 +248,83 @@ from what the router would have guessed) rather than a real replay — see
 online state can't be precomputed once per threshold candidate, and why
 `decide()` itself is never ported to Python.
 
+## Stage 2: local LLM escalation (`bench eval-stage2`)
+
+```
+uv run --project bench bench eval-stage2 <streams.jsonl> \
+  [--config <fern.toml>] [--sample-size 500] [--seed 7] \
+  [--models qwen3:8b] [--model <force-this-one>] \
+  [--ollama-url <url>] [--max-hours 3] [--skip-full] [--skip-sample]
+```
+
+Stage 2 is local-only — `packages/daemon`'s `OllamaLlmClient` talks to a
+locally running Ollama server, never a paid API (see docs/decisions.md).
+It asks two narrow yes/no questions (`same_goal`, `unrelated`) rather
+than picking an action directly; the action is derived in code
+(`mapAdjudication` in `packages/core/src/router/stage2.ts`), since small
+local models are unreliable at open-ended 5-way classification but fine
+at a narrow judgment. `--models` defaults to all three candidates in
+`DEFAULT_STAGE2_MODELS`, but `bench/results/day30-report.md` only ever
+ran `--models qwen3:8b` — `gemma3:12b` and `qwen3.5:9b` don't fit
+alongside Ollama on the 16 GB RAM machine this ran on (see
+docs/decisions.md); pass `--models qwen3:8b` explicitly on similar
+hardware.
+
+**Sampling is a probe, not a simulation, and never feeds back into
+state.** A flat random sample of turns would barely include any
+`new`/`return`/`stray` truths (they're a small fraction of real turns),
+so the sample is stratified by `(variant, action_truth)`. The sample
+stage (`bench/ts/stage2-sample.ts`) replays each stream's turns with
+**Stage 0 only** — cheap, and free via an on-disk embedding cache
+(`bench/ts/embedding-cache.ts`, keyed by prompt hash) — to build correct
+router state, and calls the LLM only on the pre-selected sample ids
+within that stream, strictly as a side-channel measurement: the next
+turn's state always advances from Stage 0's own decision, never from
+the LLM's answer, so Stage 2 never escalates a turn that wasn't
+selected and never changes what later turns see. (An earlier version of
+this forced escalation on *every* turn up to each sampled row — a real
+bug, fixed; see docs/decisions.md.) Every sampled row still carries
+Stage 0's own pre-escalation action/confidence
+(`stage0_predicted_action`, `stage0_confidence`), so one sample run
+doubles as the data needed to *simulate* any other escalation band
+(slice by whether `stage0_confidence` falls in that band) without
+spending another LLM call.
+
+The sample stage checkpoints per row (`bench/results/stage2-sample-<model>.jsonl`,
+gitignored) and skips ids already done on restart; it logs progress
+every 10 rows with latency and ETA, and aborts early if 5 consecutive
+calls fail (so a down Ollama server can't silently produce a file full
+of fallback rows that look like real judgments).
+
+For each candidate model, the sample run reports F1 new/return/stray,
+escalation rate, and real measured p50/p95 latency for Stage 0 and
+Stage 2 separately. No dollar cost anywhere — Ollama is local and free,
+so the report is time/tokens, not money.
+
+**The full-dataset gated run is not run by default, and wasn't run for
+qwen3:8b.** `--skip-sample` (requires `--model`) goes straight to it when
+sample results already exist, but the 2026-10-26 decision was to stop at
+the sample: qwen3:8b's best simulated band (F1(new) 0.643) missed the
+gate by enough margin that a many-hour full run wouldn't change the
+conclusion — see `bench/results/day30-report.md` and docs/decisions.md.
+When it is run, it's a **resumable** job: the dataset is split one file
+per stream under `bench/results/stage2-full-split/`, each stream's
+output written to its own file as soon as it's done, and interrupting
+(Ctrl-C, crash, reboot) then re-running the exact same command skips
+streams whose output file already exists.
+
+Both the sample and full-run subprocesses stream their output line by
+line and print periodic progress, instead of blocking silently until the
+whole pass exits — a multi-minute-to-multi-hour local Stage 2 run is
+otherwise indistinguishable from a hang.
+
+`bench/results/day30-report.md` is the actual, final read against the
+gate: on spliced data the bar is "within 0.05 F1 of the measured
+ceiling" (a 120-row sample Claude judged blind), not spec §16's literal
+natural-data numbers — see docs/decisions.md, 2026-10-26. The result was
+a miss, and the project's default behaviour changed in response (spec
+§5/§6/§16, v0.3).
+
 ## Known limitations
 
 - The `.env`-style secret regex only redacts unquoted single-token values

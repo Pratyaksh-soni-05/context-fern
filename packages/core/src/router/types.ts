@@ -42,10 +42,40 @@ export interface RouterWeights {
   fileOverlap: number;
 }
 
+/**
+ * Stage 2 escalation band: Stage 2 is only asked when Stage 0's
+ * confidence falls in [low, high] — spec §5. Draft defaults, like
+ * RouterThresholds — real numbers come from measured data, not hand
+ * tuning (see docs/decisions.md).
+ */
+export interface EscalationConfig {
+  low: number;
+  high: number;
+}
+
+/**
+ * Minimum Stage 0 (or Stage 2) confidence for a `new`/`stray` decision to
+ * be shown to the user as a suggestion in suggest mode — spec §5. Below
+ * this, the decision is still computed (for `fern status`/the journal/UI)
+ * but not suggested; the turn stays `continue` until the user routes it
+ * manually.
+ *
+ * INTERIM: measured on spliced/synthetic data only
+ * (`bench/results/day30-report.md`), not natural labels. Spec §16's real
+ * gate is natural-label precision; re-validate these once natural labels
+ * exist. See `docs/decisions.md`, 2026-10-26.
+ */
+export interface SuggestionPrecisionConfig {
+  new: number;
+  stray: number;
+}
+
 export interface RouterConfig {
   thresholds: RouterThresholds;
   weights: RouterWeights;
   cues: CueConfig;
+  escalation: EscalationConfig;
+  suggestionPrecision: SuggestionPrecisionConfig;
 }
 
 export interface FrondSignal {

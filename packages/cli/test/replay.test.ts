@@ -1,7 +1,11 @@
 import { expect, test } from "bun:test";
 import { DEFAULT_CONFIG, decideAlwaysContinue } from "@context-fern/core";
 import { FakeEmbedder } from "@context-fern/embed";
-import { type ReplayTurnInput, replay } from "../src/replay";
+import {
+  type ReplayTurnInput,
+  type ReplayTurnOutput,
+  replay,
+} from "../src/replay";
 
 const FIXTURE = new URL("./fixtures/tiny-stream.jsonl", import.meta.url);
 
@@ -13,10 +17,18 @@ async function loadLines(): Promise<ReplayTurnInput[]> {
     .map((l) => JSON.parse(l));
 }
 
+async function collect(
+  rows: AsyncGenerator<ReplayTurnOutput>,
+): Promise<ReplayTurnOutput[]> {
+  const out: ReplayTurnOutput[] = [];
+  for await (const row of rows) out.push(row);
+  return out;
+}
+
 test("golden: a clean new/continue/new/return stream replays correctly with the fake embedder", async () => {
   const lines = await loadLines();
   const embedder = new FakeEmbedder();
-  const output = await replay(lines, embedder, DEFAULT_CONFIG);
+  const output = await collect(replay(lines, embedder, DEFAULT_CONFIG));
 
   expect(output).toHaveLength(4);
   expect(output.map((o) => o.predicted_action)).toEqual([
@@ -53,11 +65,8 @@ test("golden: a clean new/continue/new/return stream replays correctly with the 
 test("a pluggable decideFn (e.g. the always-continue baseline) is honored", async () => {
   const lines = await loadLines();
   const embedder = new FakeEmbedder();
-  const output = await replay(
-    lines,
-    embedder,
-    DEFAULT_CONFIG,
-    decideAlwaysContinue,
+  const output = await collect(
+    replay(lines, embedder, DEFAULT_CONFIG, decideAlwaysContinue),
   );
 
   expect(output.every((o) => o.predicted_action === "continue")).toBe(true);

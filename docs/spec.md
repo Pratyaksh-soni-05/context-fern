@@ -1,6 +1,6 @@
-# Context Fern spec v0.2
+# Context Fern spec v0.3
 
-Status: design locked 2026-10-23. Working CLI name `fern` (held in `packages/core/src/brand.ts`; may change before launch). Everything here is in scope for the launch build unless listed under Out of scope.
+Status: design locked 2026-10-23; routing default revised 2026-10-26 (manual-first — see §5, §6, §16 and `bench/results/day30-report.md`). Working CLI name `fern` (held in `packages/core/src/brand.ts`; may change before launch). Everything here is in scope for the launch build unless listed under Out of scope.
 
 Design source of truth: `docs/design/DESIGN.md`, `docs/design/tokens.css`, and the reference boards in `docs/design/blueprint/`.
 
@@ -36,6 +36,8 @@ Later: Codex and OpenCode users; agent builders using SDK middleware.
 | Decision | one routing action recorded in the journal with its inverse | `Decision` |
 
 ## 5. Router
+Manual-first: the user's own commands (`/fern new`, `/fern switch`, `/fern stray`, the `?` prefix — §7) are the primary way turns get routed. The router's job is cue and suggestion, not silent auto-routing — ReplayBench found that free, local Stage 0+2 does not reach a trustworthy auto-routing accuracy (`bench/results/day30-report.md`, `docs/decisions.md` 2026-10-26), so nothing routes a turn the user didn't ask to route unless the router has measured, high-precision confidence that it's right.
+
 Input: the new human prompt, recent tool calls (files touched), the fern.
 Output: `{ action: continue | new | return | combine | stray, target?, with?, confidence: 0..1, signals: string[], stage: 0 | 2 }`.
 
@@ -45,19 +47,23 @@ Stage 0 (local, always on):
 - cosine similarity of the prompt embedding to each frond centroid and to the stem
 - stray signals: low similarity to the stem and every frond, no file context, short question form
 
-Stage 2 (optional, uncertain turns only): when Stage 0 confidence is between `low` and `high`, ask a small LLM (user's key or Ollama) to choose the action. Disabled when nothing is configured. Every call is journaled with model and tokens.
+Cue phrases and raw Stage 0 signals are always computed and shown in `fern status`/the journal/UI, but on their own they are not a detector: cue phrases alone measured 0.05 recall for `new` and 0.00 for `stray` on ReplayBench's spliced data. They are a hint to the user, not a routing signal by themselves.
+
+Suggestions: for `new` and `stray` — the two actions ReplayBench has a measured precision/recall curve for — Stage 0's decision is meant to be surfaced to the user as a suggestion only when its confidence clears `config.suggestionPrecision` for that action; the real gate is ≥ 0.85 precision on natural (real, hand-labelled) data (§16). `suggestionPrecision` ships with real, non-placeholder defaults, `{ new: 0.88, stray: 0.603 }` (precision 0.87/recall 0.41 for `new`, precision 0.88/recall 0.50 for `stray` — `bench/results/day30-report.md`), marked **interim**: measured on spliced/synthetic data only, not natural labels, and must be re-validated once natural data exists (`docs/decisions.md`, 2026-10-26). Below threshold, Stage 0 makes no suggestion for that action and the turn stays on the active frond (`continue`) until the user routes it manually. `return` and `combine` have no measured precision curve yet, so they keep the old rule below (always a proposal, never shown-or-hidden by a confidence bar) rather than a bar nobody has measured. (As of this spec revision, the config and its defaults exist; wiring this gate into a suggest-mode consumer is follow-up work — see `docs/decisions.md`, 2026-10-26.)
+
+Stage 2 (optional, off by default, uncertain turns only): when enabled and Stage 0 confidence is between `low` and `high`, ask an LLM (user's key or Ollama) to choose the action, itself held to the same suggestion-precision bar as Stage 0 for `new`/`stray`, not a separate auto-routing target. Disabled unless the user configures a model. A free local 8B model (qwen3:8b via Ollama) was measured and did not clear the day-30 gate, and did not beat a precision-thresholded Stage 0 alone (`bench/results/day30-report.md`) — Stage 2 remains available for users who point it at a stronger model, but ships off by default. Every call is journaled with model and tokens.
 
 Rules:
 - Thresholds live in `.fern/config.toml`; defaults are set by the maintainer from ReplayBench, never hand-tuned in code.
 - Bias toward `continue`: `new` and `stray` require higher confidence than `continue`.
-- In `suggest` mode, `new`, `return` and `combine` are proposed and applied only after `/fern new`, `/fern switch` or a `[y]` reply. `stray` is applied automatically in suggest mode because it removes nothing the task needs; it can be undone.
-- A stray is answered normally by the agent. It is excluded from every frond and, in isolate mode, from future payloads.
+- `continue` is the only action ever applied without the user asking for it. For `new` and `stray`, the precision bar above decides whether the decision is even shown as a suggestion; `return` and `combine` are always shown as a proposal, applied only after `/fern switch`/`[y]` as before. None of the five is auto-applied purely because the action is cheap to undo — low-precision `stray` suggestions were exactly what this rule was added to stop (`docs/decisions.md` 2026-10-26).
+- A stray — whether suggested-and-accepted or set with `/fern stray`/the `?` prefix (§7) — is answered normally by the agent. It is excluded from every frond and, in isolate mode, from future payloads.
 
 ## 6. Modes
 | Mode | Changes model input? | Behaviour |
 | --- | --- | --- |
 | observe | no | grow the fern and briefs, show UI |
-| suggest | no (adds focus notes only) | propose routing, restore briefs after compaction, mark strays |
+| suggest | no (adds focus notes only) | `new`/`stray` are shown only once they clear the precision bar in §5; below it, the turn stays on the active frond until the user routes it manually. `return`/`combine` are always shown as a proposal (§5's older rule — no measured precision bar for them yet). Nothing is applied without `/fern new`, `/fern switch` or a `[y]` reply; restores briefs after compaction |
 | isolate | yes | proxy assembles stem + active frond + tail; strays and resting fronds left out |
 
 ## 7. Hooks and commands (Claude Code plugin)
@@ -66,12 +72,17 @@ Rules:
 - `PreCompact`: in isolate mode, block client compaction when the upstream payload is within budget; otherwise allow and snapshot the brief first.
 - `PostToolUse`: report files touched (paths only).
 
-Slash commands: `/fern status`, `/fern new <name>`, `/fern switch <name>`, `/fern undo`, `/fern merge <name>`, `/fern mode <mode>`, `/fern ui`.
+Slash commands: `/fern status`, `/fern new <name>`, `/fern switch <name>`, `/fern stray`, `/fern undo`, `/fern merge <name>`, `/fern mode <mode>`, `/fern ui`.
+`/fern stray` marks the current prompt a stray by hand (same effect as accepting a stray suggestion, §5): answered normally, kept off every frond, undoable with `/fern undo`.
+
+`?` prefix: a message typed as `? <prompt>` is equivalent to `/fern stray` followed by that prompt, in one round trip. The match is narrow on purpose — only a literal `"? "` (question mark, then a space) at the very start of the raw prompt triggers it (`parseStrayPrefix`, `packages/core/src/router/math.ts`); a bare `?`, a prompt that merely starts with `?` and no following space (e.g. `"?.."`), or leading whitespace before the `?` are left as ordinary prompts, since those are real questions, not the stray shortcut. Cheap to support — `UserPromptSubmit` strips the matched prefix (plus any further leading whitespace) before routing and before the prompt reaches the agent, and records the decision exactly as a manual `/fern stray` would.
+
 MCP tools (max three): `frond_list`, `frond_search`, `frond_recall`.
 Receipts (exact formats, see DESIGN.md §Voice):
 - `fern ▸ new frond? docker-build · 0.86 · cue phrase, no file overlap · /fern new`
 - `fern ▸ on docker-build · auth-refactor rests with its brief`
 - `fern ▸ stray · answered, kept off every frond`
+- `fern ▸ stray (marked) · answered, kept off every frond · /fern undo`
 - `fern ▸ returned to auth-refactor · 0.88 · /fern undo`
 Statusline: `fern ▸ <frond> · <n> fronds · <s> strays · <sent>/<full> ctx`.
 
@@ -117,6 +128,8 @@ Signed binaries for macOS, Linux and Windows on x64 and arm64, plus checksums. I
 Desktop app, hosted service, accounts, cross-user memory, writing to roots, automatic merge, Codex/OpenCode proxy, Cursor transparent routing, fine-tuned Stage 1 classifier, git worktree management, dark theme for the UI (tokens allow it later).
 
 ## 16. Gates
-- Day 30: Stage 0 + 2 F1 on `new` ≥ 0.85 and on `stray` ≥ 0.8, with ≤ 10% escalation (draft).
+- Launch: install-to-first-frond (one install command to a working routed session with its first frond, whether created manually or by a suggestion the user accepted) under 2 minutes on a clean macOS, Ubuntu and Windows machine (restates §3's acceptance item 1 as a hard gate, not just a one-time acceptance check).
+- Day 30: suggestion precision ≥ 0.85 on natural (real, hand-labelled) data for both `new` and `stray`, at whatever recall the threshold yields — the manual-first default succeeds on trustworthy suggestions, not on auto-routing every turn. Until natural labels exist, the interim bar on spliced/synthetic data is "within 0.05 F1 of the measured ceiling" (`docs/decisions.md`, 2026-10-26); the 2026-10-26 measurement on spliced data missed even that interim bar for Stage-2-assisted auto-routing (best F1(new) 0.643 vs a 0.782 bar — `bench/results/day30-report.md`). Stage 2, when a user enables it with their own model, is held to this same suggestion-precision bar, not a separate F1 target.
+- Day 30: D30 retention of active installers ≥ 20% (draft; moved up from the previous draft's Day 90 slot — a D30 figure is itself a day-30 measurement).
 - Day 60: isolate mode task success ≥ linear and ≥ 25% fewer input tokens at neutral or better cost on long or distant-tangent sessions (draft).
-- Day 90: < 30% of decisions undone; D30 retention of active installers ≥ 20% (draft).
+- Day 90: < 30% of decisions undone (draft).

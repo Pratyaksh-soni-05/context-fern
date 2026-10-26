@@ -27,6 +27,47 @@ export interface Embedder {
   embed(texts: string[]): Promise<Float32Array[]>;
 }
 
+/**
+ * One text-completion call to a (local, in this PR) LLM. Implemented in
+ * packages/daemon (Ollama); declared here so router code can depend on
+ * the shape without core ever depending on daemon. A paid provider could
+ * implement this interface later — none exists yet.
+ */
+export interface LlmResponse {
+  text: string;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export interface LlmClient {
+  complete(params: { prompt: string; model: string }): Promise<LlmResponse>;
+}
+
+/**
+ * Journal record for one Stage 2 LLM call: model/tokens/latency, per
+ * CLAUDE.md's "every LLM call is journaled, no hidden calls" rule. This
+ * is deliberately narrower than `Decision` — it's scoped to "an LLM call
+ * happened," not the full router-decision journal (Decision.tokensBefore/
+ * After are isolate-mode context-payload tokens, a different concept).
+ * Journaling every router Decision stays out of scope here, same as the
+ * already-merged Stage 0 PR.
+ */
+export interface Stage2CallLog {
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  latencyMs: number;
+  escalatedAction: RouterAction;
+  escalatedConfidence: number;
+  succeeded: boolean;
+  createdAt: string;
+}
+
+/** Implemented in packages/store. Declared here for the same inward-dependency reason as Embedder/LlmClient. */
+export interface JournalSink {
+  record(entry: Stage2CallLog): void | Promise<void>;
+}
+
 /** One agent conversation in one project directory. Spec §4. */
 export interface Session {
   id: string;

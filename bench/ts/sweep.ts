@@ -38,7 +38,7 @@ import {
   type RouterWeights,
   type Signals,
 } from "@context-fern/core";
-import { computeMetrics, type MetricsRow } from "./metrics";
+import { computeMetrics, confusionCounts, type MetricsRow } from "./metrics";
 
 export interface StreamLine {
   stream_id: string;
@@ -189,14 +189,31 @@ export function buildThresholdGrid(): RouterThresholds[] {
 /**
  * Draft scalarization for picking a winner out of the grid — NOT a
  * shipped scoring rule (see CLAUDE.md: the maintainer decides benchmark
- * scoring). Balances recall across the three gated actions, penalized by
- * how often new/stray topics get silently carried forward as continue.
+ * scoring; this formula was dictated directly by the maintainer on
+ * 2026-10-25, see docs/decisions.md).
+ *
+ * macroF1 is the unweighted mean of F1 across all four actions (continue
+ * included, not just the three gated ones — a thresholds choice that's
+ * great at new/return/stray but wrecks continue shouldn't win). `cost`
+ * applies an explicit 2x penalty to false new/stray calls (a wrong split
+ * removes context the model needed) versus a 1x penalty for missing one
+ * (over-carrying is recoverable; a bad split is not), normalized by row
+ * count so it's on the same ~0..1 scale as macroF1.
  */
-export function objective(metrics: ReturnType<typeof computeMetrics>): number {
-  return (
-    (metrics.f1New + metrics.f1Return + metrics.f1Stray) / 3 -
-    metrics.overCarryRate * 0.5
-  );
+export function objective(
+  rows: readonly MetricsRow[],
+  metrics: ReturnType<typeof computeMetrics>,
+): number {
+  const mainRows = rows.filter((r) => r.action_truth !== "combine");
+  const macroF1 =
+    (metrics.f1Continue + metrics.f1New + metrics.f1Return + metrics.f1Stray) /
+    4;
+  const newCounts = confusionCounts(mainRows, "new");
+  const strayCounts = confusionCounts(mainRows, "stray");
+  const cost =
+    (2 * (newCounts.fp + strayCounts.fp) + (newCounts.fn + strayCounts.fn)) /
+    Math.max(1, metrics.n);
+  return macroF1 - cost;
 }
 
 export function gridSearch(
@@ -214,10 +231,19 @@ export function gridSearch(
   let bestMetrics = computeMetrics([]);
 
   for (const thresholds of grid) {
-    const config: RouterConfig = { thresholds, weights, cues };
+    // escalation/suggestionPrecision are irrelevant here — decide() (Stage
+    // 0 only) never reads them; carried through only because RouterConfig
+    // requires the fields.
+    const config: RouterConfig = {
+      thresholds,
+      weights,
+      cues,
+      escalation: DEFAULT_CONFIG.escalation,
+      suggestionPrecision: DEFAULT_CONFIG.suggestionPrecision,
+    };
     const predicted = rows.map((row) => predictRow(row, config));
     const metrics = computeMetrics(predicted);
-    const score = objective(metrics);
+    const score = objective(predicted, metrics);
     if (score > bestScore) {
       bestScore = score;
       best = thresholds;
@@ -301,13 +327,15 @@ async function main(): Promise<void> {
       thresholds: devResult.thresholds,
       weights: DEFAULT_CONFIG_FOR_SIGNALS().weights,
       cues: DEFAULT_CONFIG_FOR_SIGNALS().cues,
+      escalation: DEFAULT_CONFIG_FOR_SIGNALS().escalation,
+      suggestionPrecision: DEFAULT_CONFIG_FOR_SIGNALS().suggestionPrecision,
     };
     const testPredicted = fold.test.map((r) => predictRow(r, testConfig));
     const testMetrics = computeMetrics(testPredicted);
     return {
       held_out_session: fold.heldOutSession,
       thresholds: devResult.thresholds,
-      test_score: objective(testMetrics),
+      test_score: objective(testPredicted, testMetrics),
     };
   });
 
