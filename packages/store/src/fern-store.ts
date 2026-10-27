@@ -198,6 +198,8 @@ export interface FernStore {
   getTree(sessionId: string): Promise<{ session: Session; fronds: Frond[] }>;
   loadRouterState(sessionId: string): Promise<RouterState>;
   setActiveFrond(sessionId: string, frondId: string | null): Promise<void>;
+  setMode(sessionId: string, mode: Mode): Promise<void>;
+  getMostRecentLeaflet(sessionId: string): Promise<Leaflet | null>;
   markStray(leafletId: string, strayFrom: string | null): Promise<Decision>;
   undoLast(sessionId: string): Promise<Decision>;
   mergeFrond(frondId: string): Promise<Decision>;
@@ -499,6 +501,22 @@ export async function openFernStore(fernDir: string): Promise<FernStore> {
     return { session, fronds };
   }
 
+  // `leaflets.files_touched` is written on every recordLeaflet but was
+  // never read back here — every cold-start reload of RouterState was
+  // silently zeroing config.weights.fileOverlap's entire contribution.
+  // See docs/decisions.md, 2026-10-27.
+  function filesTouchedForFrond(frondId: string): string[] {
+    const rows = db
+      .query("SELECT files_touched FROM leaflets WHERE frond_id = ?")
+      .all(frondId) as { files_touched: string }[];
+    const paths = new Set<string>();
+    for (const row of rows) {
+      const touches = JSON.parse(row.files_touched) as FileTouch[];
+      for (const touch of touches) paths.add(touch.path);
+    }
+    return Array.from(paths);
+  }
+
   async function loadRouterState(sessionId: string): Promise<RouterState> {
     const sessionRow = getSessionRow(sessionId);
     const stemId = getStemFrondId(db, sessionId);
@@ -519,7 +537,7 @@ export async function openFernStore(fernDir: string): Promise<FernStore> {
             count: number;
           }
         ).count,
-        files: [],
+        files: filesTouchedForFrond(row.id),
         status: row.status as "active" | "resting",
       };
     }
@@ -532,8 +550,34 @@ export async function openFernStore(fernDir: string): Promise<FernStore> {
       stemCentroid: stemRow.centroid
         ? (JSON.parse(stemRow.centroid) as number[])
         : null,
-      stemFiles: [],
+      stemFiles: filesTouchedForFrond(stemId),
       fronds,
+    };
+  }
+
+  async function setMode(sessionId: string, mode: Mode): Promise<void> {
+    db.query("UPDATE sessions SET mode = ? WHERE id = ?").run(mode, sessionId);
+  }
+
+  async function getMostRecentLeaflet(
+    sessionId: string,
+  ): Promise<Leaflet | null> {
+    const row = db
+      .query(
+        "SELECT * FROM leaflets WHERE session_id = ? ORDER BY idx DESC LIMIT 1",
+      )
+      .get(sessionId) as LeafletRow | null;
+    if (!row) return null;
+    return {
+      id: row.id,
+      sessionId: row.session_id,
+      index: row.idx,
+      frondId: row.frond_id,
+      strayFrom: row.stray_from,
+      promptHash: row.prompt_hash,
+      tokenCount: row.token_count,
+      filesTouched: JSON.parse(row.files_touched) as FileTouch[],
+      createdAt: row.created_at,
     };
   }
 
@@ -576,9 +620,12 @@ export async function openFernStore(fernDir: string): Promise<FernStore> {
   }
 
   async function undoLast(sessionId: string): Promise<Decision> {
+    // "continue" is journaled on every plain prompt for accountability but
+    // is never itself an undo target — otherwise `fern undo` would almost
+    // always just silently undo the last no-op. See docs/decisions.md.
     const row = db
       .query(
-        "SELECT * FROM decisions WHERE session_id = ? AND undone = 0 ORDER BY seq DESC LIMIT 1",
+        "SELECT * FROM decisions WHERE session_id = ? AND undone = 0 AND action != 'continue' ORDER BY seq DESC LIMIT 1",
       )
       .get(sessionId) as DecisionRow | null;
     if (!row) throw new Error(`Nothing to undo for session ${sessionId}`);
@@ -706,6 +753,8 @@ export async function openFernStore(fernDir: string): Promise<FernStore> {
     getTree,
     loadRouterState,
     setActiveFrond,
+    setMode,
+    getMostRecentLeaflet,
     markStray,
     undoLast,
     mergeFrond,

@@ -1,5 +1,6 @@
-// Hand-rolled argv parsing — the CLI surface is one command with two
-// flags, not worth a dependency for.
+// Hand-rolled argv parsing — ~10 subcommands (daemon start|stop|status,
+// new/switch/merge's optional name, a handful of flags), still simple
+// enough not to need a dependency for it.
 
 export interface ParsedArgs {
   command: string;

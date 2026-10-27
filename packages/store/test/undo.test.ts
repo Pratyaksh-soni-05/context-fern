@@ -28,6 +28,42 @@ async function freshSession() {
   return { store, session };
 }
 
+test("undoLast skips no-op continues and reaches back to the newest real decision: prompt, /fern new x, prompt, prompt, undo removes x", async () => {
+  const { store, session } = await freshSession();
+
+  await applyTurn(store, session.id, "continue", { target: null }); // prompt 1 (nothing active yet)
+  const newX = await applyTurn(store, session.id, "new", { newFrondName: "x" });
+  const x = (await store.getTree(session.id)).fronds.find(
+    (f) => f.name === "x",
+  );
+  if (!x) throw new Error("not created");
+  const continue2 = await applyTurn(store, session.id, "continue", {
+    target: x.id,
+  }); // prompt 2
+  const continue3 = await applyTurn(store, session.id, "continue", {
+    target: x.id,
+  }); // prompt 3
+
+  await store.undoLast(session.id);
+
+  const { fronds } = await store.getTree(session.id);
+  expect(fronds.map((f) => f.name)).toEqual(["stem"]); // x is gone
+
+  const rows = store.db
+    .query("SELECT id, action, undone FROM decisions ORDER BY seq ASC")
+    .all() as { id: string; action: string; undone: number }[];
+  expect(rows.map((r) => r.action)).toEqual([
+    "continue",
+    "new",
+    "continue",
+    "continue",
+  ]);
+  // the two trailing continues are untouched — skipped, not undone
+  expect(rows.find((r) => r.id === continue2.id)?.undone).toBe(0);
+  expect(rows.find((r) => r.id === continue3.id)?.undone).toBe(0);
+  expect(rows.find((r) => r.id === newX.id)?.undone).toBe(1);
+});
+
 test("undo new: deletes the created frond, restores the prior active frond", async () => {
   const { store, session } = await freshSession();
   const stem = (await store.getTree(session.id)).fronds[0];
@@ -304,30 +340,33 @@ test("the journal mirror receives the undone decision after undoLast", async () 
   expect(lines[1].undone).toBe(true);
 });
 
-test("undo continue: a true no-op structurally, and the centroid drift from the continue is NOT reverted", async () => {
+test("a continue's centroid drift is never reverted, because continue is never an undo target at all", async () => {
   const { store, session } = await freshSession();
   await applyTurn(store, session.id, "new", { newFrondName: "topic-a" });
   const topicA = (await store.getTree(session.id)).fronds.find(
     (f) => f.name === "topic-a",
   );
+  if (!topicA) throw new Error("not created");
 
-  await applyTurn(store, session.id, "continue", {
-    target: topicA?.id ?? null,
-  });
+  await applyTurn(store, session.id, "continue", { target: topicA.id });
   const afterContinue = (await store.getTree(session.id)).fronds.find(
     (f) => f.name === "topic-a",
   );
 
-  await store.undoLast(session.id);
+  // a second real decision, unrelated to topic-a, so undoLast has
+  // something real to reach for instead of the continue above it
+  await applyTurn(store, session.id, "new", { newFrondName: "topic-b" });
+  await store.undoLast(session.id); // undoes "new topic-b", not the continue
 
   const afterUndo = (await store.getTree(session.id)).fronds.find(
     (f) => f.name === "topic-a",
   );
-  const state = await store.loadRouterState(session.id);
-  expect(state.activeFrondId).toBe(topicA?.id ?? "");
-  // the centroid folded in by continue is untouched by undo — only the
-  // tree (active pointer + status) is reverted, never routing drift.
   expect(afterUndo?.centroid).toEqual(afterContinue?.centroid);
+
+  const continueRow = store.db
+    .query("SELECT undone FROM decisions WHERE action = 'continue'")
+    .get() as { undone: number };
+  expect(continueRow.undone).toBe(0); // never touched
 });
 
 test("undoLast throws 'nothing to undo' once everything in the session has been undone", async () => {
@@ -365,7 +404,7 @@ async function runPropertyTestWithSeed(seed: number) {
   const { store, session } = await freshSession();
   const rng = mulberry32(seed);
   const topicIds: string[] = [];
-  const decisions: { id: string }[] = [];
+  const decisions: { id: string; action: string }[] = [];
 
   for (let i = 0; i < 20; i++) {
     const state = await store.loadRouterState(session.id);
@@ -400,12 +439,16 @@ async function runPropertyTestWithSeed(seed: number) {
     } else {
       decision = await applyTurn(store, session.id, "stray", {});
     }
-    decisions.push(decision);
+    decisions.push({ id: decision.id, action });
   }
 
-  for (let i = 0; i < decisions.length; i++) {
+  // "continue" is journaled but never an undo target (see docs/decisions.md)
+  // — only loop as many times as there are real, undoable decisions.
+  const undoableCount = decisions.filter((d) => d.action !== "continue").length;
+  for (let i = 0; i < undoableCount; i++) {
     await store.undoLast(session.id);
   }
+  await expect(store.undoLast(session.id)).rejects.toThrow(/nothing to undo/i);
 
   const finalState = await store.loadRouterState(session.id);
   expect(finalState.activeFrondId).toBeNull();

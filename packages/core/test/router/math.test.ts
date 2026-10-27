@@ -5,6 +5,7 @@ import {
   isShortQuestionForm,
   jaccard,
   parseStrayPrefix,
+  proposeFrondName,
   runningMean,
 } from "../../src/router/math";
 
@@ -116,4 +117,30 @@ test("parseStrayPrefix: a real question is untouched", () => {
     isStray: false,
     prompt: "what's a good name for a pet goldfish?",
   });
+});
+
+test("proposeFrondName: picks the first non-stopword content words, kebab-cased", () => {
+  expect(proposeFrondName("let's set up the docker build pipeline")).toBe(
+    "set-docker-build",
+  );
+  expect(proposeFrondName("can you fix the flaky login test")).toBe(
+    "fix-flaky-login",
+  );
+});
+
+test("proposeFrondName: caps at maxWords", () => {
+  expect(proposeFrondName("refactor the authentication module today", 2)).toBe(
+    "refactor-authentication",
+  );
+});
+
+test("proposeFrondName: falls back to a default when nothing but stopwords remain", () => {
+  expect(proposeFrondName("can you do it for me")).toBe("topic");
+  expect(proposeFrondName("")).toBe("topic");
+});
+
+test("proposeFrondName: strips punctuation and apostrophes", () => {
+  expect(proposeFrondName("fix the broken token's refresh!!")).toBe(
+    "fix-broken-tokens",
+  );
 });

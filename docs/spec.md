@@ -67,7 +67,7 @@ Rules:
 | isolate | yes | proxy assembles stem + active frond + tail; strays and resting fronds left out |
 
 ## 7. Hooks and commands (Claude Code plugin)
-- `UserPromptSubmit`: POST to daemon `/route`; return `additionalContext` with a one-line receipt and, in suggest mode, the focus note. Never block. 300 ms timeout; on timeout pass through and log.
+- `UserPromptSubmit`: POST to daemon `/prompt`; return `additionalContext` with a one-line receipt and, in suggest mode, the focus note. Never block. 300 ms timeout; on timeout pass through and log. (The exact split between what the model sees via `additionalContext` and what the user sees is PR 2's call, made after verifying Claude Code's hook mechanics against official docs — see docs/decisions.md.)
 - `SessionStart`: after `/clear` or compaction, inject the active frond's brief.
 - `PreCompact`: in isolate mode, block client compaction when the upstream payload is within budget; otherwise allow and snapshot the brief first.
 - `PostToolUse`: report files touched (paths only).

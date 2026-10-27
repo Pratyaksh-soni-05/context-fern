@@ -29,6 +29,8 @@
       "version": "0.0.0",
       "dependencies": {
         "@context-fern/core": "workspace:*",
+        "@context-fern/embed": "workspace:*",
+        "@context-fern/store": "workspace:*",
       },
     },
     "packages/embed": {

@@ -1,0 +1,31 @@
+# Context Fern router config — see docs/spec.md §5.
+# Defaults here are the measured values from ReplayBench, not hand-tuned.
+
+[thresholds]
+continue_min = 0.3
+new_max = 0.15
+return_min = 0.3
+stray_max_similarity = 0.12
+stray_max_prompt_words = 12
+
+[weights]
+embedding = 0.7
+file_overlap = 0.3
+
+[cues]
+new = ["switching to", "let's switch to", "new topic", "moving on to"]
+return = ["back to", "returning to", "let's return to", "going back to"]
+stray = ["side question", "unrelated, but", "quick question", "off topic", "random question"]
+
+[escalation]
+# Stage 2 (LLM escalation) stays off unless you configure a model —
+# this band is only consulted if you wire that up yourself.
+low = 0.25
+high = 0.5
+
+# Minimum confidence for a "new"/"stray" suggestion to be shown at all.
+# INTERIM — measured on spliced data, not natural labels yet. See
+# docs/decisions.md.
+[suggestion_precision]
+new = 0.88
+stray = 0.603

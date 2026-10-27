@@ -174,3 +174,112 @@ test("the journal mirror receives a line for every recorded decision", async () 
   expect(lines).toHaveLength(1);
   expect(JSON.parse(lines[0] as string).id).toBe("decision-1");
 });
+
+test("loadRouterState aggregates files_touched from leaflets per frond, and for the stem", async () => {
+  dir = await withTempFernDir();
+  store = await openFernStore(dir.path);
+  const session = await store.createSession({
+    agent: "claude-code",
+    projectPath: "/repo",
+    mode: "observe",
+  });
+  const stem = (await store.getTree(session.id)).fronds[0];
+  if (!stem) throw new Error("no stem");
+
+  const frond = await store.createFrond({
+    sessionId: session.id,
+    parentId: stem.id,
+    name: "auth-refactor",
+    colorIndex: 1,
+    centroid: [1, 0],
+  });
+  await store.recordLeaflet({
+    sessionId: session.id,
+    index: 0,
+    frondId: frond.id,
+    strayFrom: null,
+    promptHash: "sha256:a",
+    tokenCount: 1,
+    filesTouched: [{ path: "src/auth.ts", source: "tool_input" }],
+  });
+  await store.recordLeaflet({
+    sessionId: session.id,
+    index: 1,
+    frondId: frond.id,
+    strayFrom: null,
+    promptHash: "sha256:b",
+    tokenCount: 1,
+    filesTouched: [
+      { path: "src/auth.ts", source: "tool_input" }, // duplicate, deduped
+      { path: "src/session.ts", source: "command" },
+    ],
+  });
+  await store.recordLeaflet({
+    sessionId: session.id,
+    index: 2,
+    frondId: stem.id,
+    strayFrom: null,
+    promptHash: "sha256:c",
+    tokenCount: 1,
+    filesTouched: [{ path: "README.md", source: "tool_input" }],
+  });
+
+  const state = await store.loadRouterState(session.id);
+  expect(new Set(state.fronds[frond.id]?.files)).toEqual(
+    new Set(["src/auth.ts", "src/session.ts"]),
+  );
+  expect(state.stemFiles).toEqual(["README.md"]);
+});
+
+test("getMostRecentLeaflet returns the latest leaflet by index, or null for an empty session", async () => {
+  dir = await withTempFernDir();
+  store = await openFernStore(dir.path);
+  const session = await store.createSession({
+    agent: "claude-code",
+    projectPath: "/repo",
+    mode: "observe",
+  });
+
+  expect(await store.getMostRecentLeaflet(session.id)).toBeNull();
+
+  const stem = (await store.getTree(session.id)).fronds[0];
+  await store.recordLeaflet({
+    sessionId: session.id,
+    index: 0,
+    frondId: stem?.id ?? null,
+    strayFrom: null,
+    promptHash: "sha256:first",
+    tokenCount: 1,
+    filesTouched: [],
+  });
+  const second = await store.recordLeaflet({
+    sessionId: session.id,
+    index: 1,
+    frondId: stem?.id ?? null,
+    strayFrom: null,
+    promptHash: "sha256:second",
+    tokenCount: 1,
+    filesTouched: [],
+  });
+
+  const latest = await store.getMostRecentLeaflet(session.id);
+  expect(latest?.id).toBe(second.id);
+});
+
+test("setMode updates the session's mode", async () => {
+  dir = await withTempFernDir();
+  store = await openFernStore(dir.path);
+  const session = await store.createSession({
+    agent: "claude-code",
+    projectPath: "/repo",
+    mode: "observe",
+  });
+  expect(session.mode).toBe("observe");
+
+  await store.setMode(session.id, "suggest");
+
+  const row = store.db
+    .query("SELECT mode FROM sessions WHERE id = ?")
+    .get(session.id) as { mode: string };
+  expect(row.mode).toBe("suggest");
+});

@@ -9,6 +9,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@context-fern/core": "workspace:*"
+    "@context-fern/core": "workspace:*",
+    "@context-fern/embed": "workspace:*",
+    "@context-fern/store": "workspace:*"
   }
 }

@@ -135,3 +135,77 @@ export function parseStrayPrefix(text: string): {
     prompt: text.slice(STRAY_PREFIX.length).replace(/^\s+/, ""),
   };
 }
+
+const NAME_STOPWORDS = new Set([
+  "a",
+  "an",
+  "the",
+  "to",
+  "for",
+  "of",
+  "in",
+  "on",
+  "at",
+  "with",
+  "and",
+  "or",
+  "is",
+  "are",
+  "be",
+  "this",
+  "that",
+  "it",
+  "let",
+  "lets",
+  "please",
+  "can",
+  "could",
+  "would",
+  "should",
+  "you",
+  "i",
+  "we",
+  "my",
+  "our",
+  "me",
+  "us",
+  "do",
+  "does",
+  "did",
+  "just",
+  "now",
+  "also",
+  "need",
+  "want",
+  "like",
+  "about",
+  "up",
+  "down",
+  "out",
+  "off",
+  "into",
+  "onto",
+  "over",
+  "switching",
+  "switch",
+  "moving",
+  "back",
+]);
+
+const DEFAULT_PROPOSED_NAME = "topic";
+
+/**
+ * A short kebab-case slug of a prompt's key words — the proposed frond
+ * name shown in a `new` suggestion's receipt and used when `/fern new`
+ * accepts it with no name given. Deliberately simple: the first
+ * `maxWords` non-stopword tokens, in order, not a ranked keyword
+ * extraction — predictable beats clever for a name the user can always
+ * override with `/fern new <name>`.
+ */
+export function proposeFrondName(text: string, maxWords = 3): string {
+  const words = (text.toLowerCase().match(/[a-z0-9']+/g) ?? [])
+    .map((w) => w.replace(/'/g, ""))
+    .filter((w) => w.length > 1 && !NAME_STOPWORDS.has(w));
+  const slug = words.slice(0, maxWords).join("-");
+  return slug.length > 0 ? slug : DEFAULT_PROPOSED_NAME;
+}
