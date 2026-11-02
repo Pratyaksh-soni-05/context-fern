@@ -1,0 +1,12 @@
+{
+  "name": "context-fern",
+  "owner": { "name": "Context Fern contributors" },
+  "description": "Context Fern — a free, local, open-source context router for coding agents.",
+  "plugins": [
+    {
+      "name": "fern",
+      "source": "./packages/plugin-claude-code",
+      "description": "Routes your Claude Code session into topic fronds, keeps a markdown brief per topic, and logs every routing decision so you can see it, undo it, or merge it."
+    }
+  ]
+}

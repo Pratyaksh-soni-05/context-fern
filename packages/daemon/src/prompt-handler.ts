@@ -13,10 +13,12 @@ import {
   decide,
   type Embedder,
   type FileTouch,
+  isValidFrondName,
   parseStrayPrefix,
   proposeFrondName,
   type RouterAction,
 } from "@context-fern/core";
+import { readBrief } from "@context-fern/store";
 import {
   type PendingExchange,
   type ProjectState,
@@ -46,6 +48,8 @@ export interface Suggestion {
 export interface PromptResult {
   receipt: string;
   suggestion?: Suggestion;
+  /** Active frond's name + its brief's first Goal line — the minimal, model-facing note (hookSpecificOutput.additionalContext). Omitted in observe mode. */
+  focusNote?: string;
 }
 
 function nowIso(): string {
@@ -150,7 +154,21 @@ async function applyManualNew(
         `No pending 'new' suggestion to accept — pass a name: /${CLI_NAME} new <name>`,
       );
     }
-    frondName = pending.proposedName ?? "topic";
+    if (!pending.proposedName) {
+      throw new DaemonError(
+        `No good name could be proposed from that prompt — pass one: /${CLI_NAME} new <name>`,
+      );
+    }
+    frondName = pending.proposedName;
+  }
+  // A manually-typed name (as opposed to proposeFrondName's own output,
+  // which always matches this already) becomes part of a real file path
+  // (.fern/fronds/<name>.md) — validate before it ever reaches that
+  // write, rather than trying to escape a bad one. See docs/decisions.md.
+  if (!isValidFrondName(frondName)) {
+    throw new DaemonError(
+      `"${frondName}" isn't a valid frond name — use lowercase letters, digits, and hyphens only.`,
+    );
   }
 
   const exchange = state.pendingExchange;
@@ -369,7 +387,7 @@ async function applyImmediateStray(
 function suggestionReceipt(s: Suggestion, state: ProjectState): string {
   if (s.action === "new") {
     return newSuggestionReceipt(
-      s.proposedName ?? "topic",
+      s.proposedName ?? null,
       s.confidence,
       s.signals,
     );
@@ -410,12 +428,13 @@ async function handlePlainPrompt(
     rawDecision.action === "new" &&
     rawDecision.confidence >= state.config.suggestionPrecision.new
   ) {
+    const proposedName = proposeFrondName(promptText);
     suggestion = {
       action: "new",
       confidence: rawDecision.confidence,
       signals: rawDecision.signals,
       target: null,
-      proposedName: proposeFrondName(promptText),
+      ...(proposedName ? { proposedName } : {}),
     };
   } else if (
     rawDecision.action === "stray" &&
@@ -447,6 +466,30 @@ async function handlePlainPrompt(
   };
 }
 
+/**
+ * The minimal, model-facing focus note: the active frond's name plus
+ * the first non-blank line of its brief's Goal section. Returns
+ * undefined in observe mode (spec §6: no change to model input) or if
+ * the active frond's brief can't be read.
+ */
+async function buildFocusNote(
+  state: ProjectState,
+): Promise<string | undefined> {
+  if (state.mode === "observe") return undefined;
+
+  const frondId = state.routerState.activeFrondId ?? state.stemFrondId;
+  const fronds = await state.store.listFronds(state.sessionId);
+  const frond = fronds.find((f) => f.id === frondId);
+  if (!frond) return undefined;
+
+  const sections = await readBrief(frond.briefPath).catch(() => null);
+  const goalLine = sections?.Goal.split("\n")
+    .map((l) => l.trim())
+    .find((l) => l.length > 0);
+
+  return goalLine ? `${frond.name}: ${goalLine}` : frond.name;
+}
+
 export async function handlePrompt(
   state: ProjectState,
   embedder: Embedder,
@@ -462,24 +505,28 @@ export async function handlePrompt(
   // docs/decisions.md, 2026-10-27 (this ordering bug was found and
   // fixed in review, with a regression test).
   const manual = parseManualCommand(promptText);
+  let result: PromptResult;
   if (manual) {
-    if (manual.type === "new") return applyManualNew(state, manual.name);
-    if (manual.type === "switch") return applyManualSwitch(state, manual.name);
-    return applyManualStray(state);
+    if (manual.type === "new")
+      result = await applyManualNew(state, manual.name);
+    else if (manual.type === "switch")
+      result = await applyManualSwitch(state, manual.name);
+    else result = await applyManualStray(state);
+  } else {
+    // Not a manual command: any exchange still pending from an earlier
+    // turn that never reached /exchange-end (crashed hook, timeout) must
+    // not be silently lost — finalize it now, before treating this text
+    // as a fresh prompt.
+    await finalizeExchange(state);
+
+    const strayPrefixed = parseStrayPrefix(promptText);
+    result = strayPrefixed.isStray
+      ? await applyImmediateStray(state, strayPrefixed.prompt)
+      : await handlePlainPrompt(state, embedder, promptText);
   }
 
-  // Not a manual command: any exchange still pending from an earlier
-  // turn that never reached /exchange-end (crashed hook, timeout) must
-  // not be silently lost — finalize it now, before treating this text
-  // as a fresh prompt.
-  await finalizeExchange(state);
-
-  const strayPrefixed = parseStrayPrefix(promptText);
-  if (strayPrefixed.isStray) {
-    return applyImmediateStray(state, strayPrefixed.prompt);
-  }
-
-  return handlePlainPrompt(state, embedder, promptText);
+  const focusNote = await buildFocusNote(state);
+  return focusNote !== undefined ? { ...result, focusNote } : result;
 }
 
 export async function handleUndo(

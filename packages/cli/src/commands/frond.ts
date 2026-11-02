@@ -1,5 +1,5 @@
 import { CLI_NAME } from "@context-fern/core";
-import { postJson } from "../daemon-client";
+import { postJson } from "@context-fern/daemon/client";
 
 function projectPath(): string {
   return process.cwd();

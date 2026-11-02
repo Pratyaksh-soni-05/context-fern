@@ -13,6 +13,7 @@ import {
 import { runInit } from "./commands/init";
 import { runRoute } from "./commands/route";
 import { runStatus } from "./commands/status";
+import { runStatusline } from "./commands/statusline";
 import { runTree } from "./commands/tree";
 
 export { parseArgs } from "./argv";
@@ -59,6 +60,9 @@ async function main(): Promise<number> {
         return 0;
       case "doctor":
         await runDoctor();
+        return 0;
+      case "statusline":
+        await runStatusline(flags);
         return 0;
       default:
         console.error(`${CLI_NAME}: unknown command "${command}"`);

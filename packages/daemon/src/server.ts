@@ -8,18 +8,26 @@
 // automatically, guarded by `import.meta.main`).
 
 import { timingSafeEqual } from "node:crypto";
-import { CLI_NAME, type Embedder, type Mode } from "@context-fern/core";
+import type { Embedder, Mode } from "@context-fern/core";
 import {
   daemonInfoPath,
   deleteDaemonInfo,
   writeDaemonInfo,
 } from "./daemon-info";
 import { createWarmEmbedder } from "./embedder";
-import { handleMode, handleStatus, handleTree } from "./handlers";
+import {
+  handleFrondBrief,
+  handleFronds,
+  handleMode,
+  handleSearch,
+  handleStatus,
+  handleTree,
+} from "./handlers";
 import {
   closeAllProjects,
   getOrOpenProject,
   type ProjectState,
+  updateAgentSessionId,
   withProjectLock,
 } from "./project-registry";
 import {
@@ -30,12 +38,13 @@ import {
   handleUndo,
 } from "./prompt-handler";
 import { DaemonError } from "./prompt-util";
+import { TOKEN_HEADER } from "./protocol";
 
 const FIRST_PORT = 7420;
 const MAX_PORT_ATTEMPTS = 20;
 
-/** Shared with packages/cli/src/daemon-client.ts — built from CLI_NAME, not the literal word "fern". */
-export const TOKEN_HEADER = `x-${CLI_NAME}-token`;
+/** Re-exported for existing callers; defined in protocol.ts so the lightweight client (client.ts) never needs to import this file. */
+export { TOKEN_HEADER };
 
 export interface StartDaemonOptions {
   /** Overrides the warm embedder — tests inject a FakeEmbedder. */
@@ -194,6 +203,10 @@ async function route(
   if (req.method === "POST" && pathname === "/prompt") {
     const body = await readJsonBody(req);
     const state = await projectFromBody(body);
+    updateAgentSessionId(
+      state,
+      typeof body.agentSessionId === "string" ? body.agentSessionId : undefined,
+    );
     const prompt = typeof body.prompt === "string" ? body.prompt : "";
     const result = await withProjectLock(state, (s) =>
       handlePrompt(s, embedder, prompt),
@@ -253,7 +266,31 @@ async function route(
 
   if (req.method === "GET" && pathname === "/status") {
     const state = await projectFromQuery(url);
+    updateAgentSessionId(state, url.searchParams.get("agentSessionId"));
     const result = await withProjectLock(state, (s) => handleStatus(s));
+    return jsonResponse({ ok: true, ...result });
+  }
+
+  if (req.method === "GET" && pathname === "/fronds") {
+    const state = await projectFromQuery(url);
+    const result = await withProjectLock(state, (s) => handleFronds(s));
+    return jsonResponse({ ok: true, ...result });
+  }
+
+  const briefMatch = /^\/frond\/([^/]+)\/brief$/.exec(pathname);
+  if (req.method === "GET" && briefMatch) {
+    const state = await projectFromQuery(url);
+    const frondName = decodeURIComponent(briefMatch[1] ?? "");
+    const result = await withProjectLock(state, (s) =>
+      handleFrondBrief(s, frondName),
+    );
+    return jsonResponse({ ok: true, ...result });
+  }
+
+  if (req.method === "GET" && pathname === "/search") {
+    const state = await projectFromQuery(url);
+    const query = url.searchParams.get("q") ?? "";
+    const result = await withProjectLock(state, (s) => handleSearch(s, query));
     return jsonResponse({ ok: true, ...result });
   }
 

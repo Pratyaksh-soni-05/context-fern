@@ -192,8 +192,6 @@ const NAME_STOPWORDS = new Set([
   "back",
 ]);
 
-const DEFAULT_PROPOSED_NAME = "topic";
-
 /**
  * A short kebab-case slug of a prompt's key words — the proposed frond
  * name shown in a `new` suggestion's receipt and used when `/fern new`
@@ -201,11 +199,38 @@ const DEFAULT_PROPOSED_NAME = "topic";
  * `maxWords` non-stopword tokens, in order, not a ranked keyword
  * extraction — predictable beats clever for a name the user can always
  * override with `/fern new <name>`.
+ *
+ * Lines that are themselves a slash command (e.g. a stray embedded
+ * "/fern ..." line in a multi-line prompt) are excluded from the word
+ * pool — they're not the user's actual topic. Returns null, never a
+ * generic placeholder like "topic", when no real content word survives;
+ * callers must then ask the user for a name rather than invent one —
+ * see docs/decisions.md.
  */
-export function proposeFrondName(text: string, maxWords = 3): string {
-  const words = (text.toLowerCase().match(/[a-z0-9']+/g) ?? [])
+/**
+ * A frond name's shape, wherever one is accepted from outside this
+ * process: lowercase letters/digits/hyphens, 1-64 chars, no leading
+ * hyphen. `proposeFrondName`'s own output always matches this; a
+ * manually-typed name (`/fern new <name>`) does not get that guarantee
+ * for free, and a frond name becomes part of a real filesystem path
+ * (`.fern/fronds/<name>.md`) — reject anything else before it ever
+ * reaches a file write, rather than trying to escape it. See
+ * docs/decisions.md.
+ */
+export const FROND_NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+export function isValidFrondName(name: string): boolean {
+  return FROND_NAME_RE.test(name);
+}
+
+export function proposeFrondName(text: string, maxWords = 3): string | null {
+  const contentText = text
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("/"))
+    .join(" ");
+  const words = (contentText.toLowerCase().match(/[a-z0-9']+/g) ?? [])
     .map((w) => w.replace(/'/g, ""))
     .filter((w) => w.length > 1 && !NAME_STOPWORDS.has(w));
   const slug = words.slice(0, maxWords).join("-");
-  return slug.length > 0 ? slug : DEFAULT_PROPOSED_NAME;
+  return slug.length > 0 ? slug : null;
 }

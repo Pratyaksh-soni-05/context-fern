@@ -3,6 +3,7 @@ import {
   cosineSimilarity,
   extractFileMentions,
   isShortQuestionForm,
+  isValidFrondName,
   jaccard,
   parseStrayPrefix,
   proposeFrondName,
@@ -134,13 +135,44 @@ test("proposeFrondName: caps at maxWords", () => {
   );
 });
 
-test("proposeFrondName: falls back to a default when nothing but stopwords remain", () => {
-  expect(proposeFrondName("can you do it for me")).toBe("topic");
-  expect(proposeFrondName("")).toBe("topic");
+test("proposeFrondName: returns null (never a generic placeholder) when nothing but stopwords remain", () => {
+  expect(proposeFrondName("can you do it for me")).toBeNull();
+  expect(proposeFrondName("")).toBeNull();
+});
+
+test("proposeFrondName: skips lines that are themselves a slash command", () => {
+  expect(proposeFrondName("/fern status\nfix the login bug")).toBe(
+    "fix-login-bug",
+  );
+  expect(proposeFrondName("/fern new something")).toBeNull();
 });
 
 test("proposeFrondName: strips punctuation and apostrophes", () => {
   expect(proposeFrondName("fix the broken token's refresh!!")).toBe(
     "fix-broken-tokens",
   );
+});
+
+test("proposeFrondName's own output always satisfies isValidFrondName", () => {
+  const name = proposeFrondName("fix the login bug in the auth module");
+  expect(name).not.toBeNull();
+  expect(isValidFrondName(name as string)).toBe(true);
+});
+
+test("isValidFrondName accepts a plain kebab-case slug", () => {
+  expect(isValidFrondName("docker-build")).toBe(true);
+  expect(isValidFrondName("a")).toBe(true);
+  expect(isValidFrondName("a1-b2")).toBe(true);
+});
+
+test("isValidFrondName rejects path traversal and shell-meaningful names", () => {
+  expect(isValidFrondName("../../etc/passwd")).toBe(false);
+  expect(isValidFrondName("..")).toBe(false);
+  expect(isValidFrondName("foo/bar")).toBe(false);
+  expect(isValidFrondName("foo\\bar")).toBe(false);
+  expect(isValidFrondName("x; rm -rf .")).toBe(false);
+  expect(isValidFrondName("$(touch pwned)")).toBe(false);
+  expect(isValidFrondName("")).toBe(false);
+  expect(isValidFrondName("-leading-hyphen")).toBe(false);
+  expect(isValidFrondName("UPPERCASE")).toBe(false);
 });

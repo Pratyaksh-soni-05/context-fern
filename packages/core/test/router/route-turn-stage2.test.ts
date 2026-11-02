@@ -67,8 +67,10 @@ test("routeTurnStage2: confidence outside the band never calls the LLM, decision
   const llm = makeFakeLlmClient([canned]);
   const journal = makeFakeJournalSink();
 
-  // Empty state -> no frond match anywhere -> "new" fires with
-  // confidence 1.0, clearly above the default band's high (0.5).
+  // Empty state -> zero topic fronds -> "no-frond-match" isn't evidence
+  // of a new topic (see docs/decisions.md), so this falls through to
+  // fallback-continue-bias at confidence 0 — clearly below the default
+  // band's low (0.25).
   const result = await routeTurnStage2(
     "a brand new unrelated prompt",
     emptyState(),
@@ -81,7 +83,7 @@ test("routeTurnStage2: confidence outside the band never calls the LLM, decision
   );
 
   expect(result.decision.stage).toBe(0);
-  expect(result.decision.action).toBe("new");
+  expect(result.decision.action).toBe("continue");
   expect(llm.calls).toHaveLength(0);
   expect(journal.entries).toHaveLength(0);
   expect(result.stage0LatencyMs).toBeGreaterThan(0);

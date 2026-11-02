@@ -1,2 +1,7 @@
 [install]
 linker = "hoisted"
+
+[test]
+# Redirects HOME/USERPROFILE/APPDATA/etc. to a fake dir before any test
+# runs — see test/preload.ts for why.
+preload = ["./test/preload.ts"]

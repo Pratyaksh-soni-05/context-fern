@@ -1,0 +1,59 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun",
+            "args": [
+              "run",
+              "${CLAUDE_PLUGIN_ROOT}/scripts/user-prompt-submit.ts"
+            ],
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun",
+            "args": ["run", "${CLAUDE_PLUGIN_ROOT}/scripts/post-tool-use.ts"],
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun",
+            "args": ["run", "${CLAUDE_PLUGIN_ROOT}/scripts/stop.ts"],
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun",
+            "args": ["run", "${CLAUDE_PLUGIN_ROOT}/scripts/session-start.ts"],
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

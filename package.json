@@ -12,7 +12,7 @@
   "scripts": {
     "lint": "biome check . && uv run --project bench ruff check",
     "typecheck": "tsc -b && tsc -p tsconfig.tests.json && tsc -p tsconfig.bench.json",
-    "test": "bun test packages bench/ts && uv run --project bench pytest"
+    "test": "bun test packages bench/ts test && uv run --project bench pytest"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.2",

@@ -1,0 +1,8 @@
+{
+  "session_id": "scrubbed-session-id-0000",
+  "transcript_path": "/scrubbed/transcript.jsonl",
+  "cwd": "/scrubbed/project",
+  "scratchpad_dir": "/scrubbed/scratchpad",
+  "hook_event_name": "SessionStart",
+  "source": "startup"
+}

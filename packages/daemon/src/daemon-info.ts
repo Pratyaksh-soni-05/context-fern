@@ -6,9 +6,15 @@
 // store touches disk" (architecture.md already prescribed this exact
 // path); see docs/decisions.md.
 //
-// `FERN_HOME` (ENV_PREFIX's convention) overrides the home dir used here
-// — tests set it to a temp dir so they never touch the real machine's
-// ~/.fern/daemon.json.
+// Every function below takes an optional `homeDir` override as its
+// first argument — direct (in-process) callers, i.e. tests, should pass
+// a temp directory explicitly rather than relying on `FERN_HOME`, so a
+// test can never silently fall through to the real home dir just by
+// forgetting an env-var reset. `FERN_HOME` (ENV_PREFIX's convention)
+// remains the only channel for the daemon's own cross-process callers
+// (the spawned daemon subprocess, hook scripts) — a function parameter
+// can't cross a process boundary, so `fernHomeDir()` is still the
+// default when `homeDir` is omitted. See docs/decisions.md.
 
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -26,25 +32,36 @@ function fernHomeDir(): string {
   return process.env[`${ENV_PREFIX}HOME`] || homedir();
 }
 
-export function daemonInfoPath(): string {
-  return join(fernHomeDir(), CONFIG_DIR, "daemon.json");
+export function daemonInfoPath(homeDir: string = fernHomeDir()): string {
+  return join(homeDir, CONFIG_DIR, "daemon.json");
 }
 
-export async function readDaemonInfo(): Promise<DaemonInfo | null> {
+export async function readDaemonInfo(
+  homeDir: string = fernHomeDir(),
+): Promise<DaemonInfo | null> {
   try {
-    const text = await readFile(daemonInfoPath(), "utf-8");
+    const text = await readFile(daemonInfoPath(homeDir), "utf-8");
     return JSON.parse(text) as DaemonInfo;
   } catch {
     return null;
   }
 }
 
-export async function writeDaemonInfo(info: DaemonInfo): Promise<void> {
-  const dir = join(fernHomeDir(), CONFIG_DIR);
+export async function writeDaemonInfo(
+  info: DaemonInfo,
+  homeDir: string = fernHomeDir(),
+): Promise<void> {
+  const dir = join(homeDir, CONFIG_DIR);
   await mkdir(dir, { recursive: true });
-  await writeFile(daemonInfoPath(), JSON.stringify(info, null, 2), "utf-8");
+  await writeFile(
+    daemonInfoPath(homeDir),
+    JSON.stringify(info, null, 2),
+    "utf-8",
+  );
 }
 
-export async function deleteDaemonInfo(): Promise<void> {
-  await rm(daemonInfoPath(), { force: true });
+export async function deleteDaemonInfo(
+  homeDir: string = fernHomeDir(),
+): Promise<void> {
+  await rm(daemonInfoPath(homeDir), { force: true });
 }

@@ -13,7 +13,13 @@ export {
   FakeLlmClient,
   type FakeLlmResponder,
 } from "./fake-llm-client";
-export type { StatusResponse, TreeFrond, TreeResponse } from "./handlers";
+export type {
+  FrondBriefResponse,
+  SearchResult,
+  StatusResponse,
+  TreeFrond,
+  TreeResponse,
+} from "./handlers";
 export {
   OllamaLlmClient,
   type OllamaLlmClientOptions,
@@ -23,7 +29,7 @@ export type {
   PendingSuggestion,
   ProjectState,
 } from "./project-registry";
-export { closeAllProjects } from "./project-registry";
+export { closeAllProjects, getOrOpenProject } from "./project-registry";
 export type { PromptResult, Suggestion } from "./prompt-handler";
 export { DaemonError } from "./prompt-util";
 export type { DaemonHandle, StartDaemonOptions } from "./server";

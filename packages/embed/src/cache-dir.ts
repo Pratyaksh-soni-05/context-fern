@@ -7,21 +7,24 @@ import { CLI_NAME } from "@context-fern/core";
  * repo or the project's .fern/ directory. embed configures the model
  * library's own cache dir to point here; embed's application code never
  * writes project data itself (see CLAUDE.md's architecture rules).
+ *
+ * `homeDir` defaults to the real home dir but is overridable — tests
+ * pass a fake one explicitly rather than relying on `os.homedir()`
+ * falling through to the real one; see docs/decisions.md.
  */
-export function modelCacheDir(): string {
-  const home = homedir();
+export function modelCacheDir(homeDir: string = homedir()): string {
   switch (platform()) {
     case "win32":
       return join(
-        process.env.LOCALAPPDATA ?? join(home, "AppData", "Local"),
+        process.env.LOCALAPPDATA ?? join(homeDir, "AppData", "Local"),
         CLI_NAME,
         "models",
       );
     case "darwin":
-      return join(home, "Library", "Caches", CLI_NAME, "models");
+      return join(homeDir, "Library", "Caches", CLI_NAME, "models");
     default:
       return join(
-        process.env.XDG_CACHE_HOME ?? join(home, ".cache"),
+        process.env.XDG_CACHE_HOME ?? join(homeDir, ".cache"),
         CLI_NAME,
         "models",
       );

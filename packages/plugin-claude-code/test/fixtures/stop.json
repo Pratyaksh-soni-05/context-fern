@@ -1,0 +1,14 @@
+{
+  "session_id": "scrubbed-session-id-0000",
+  "transcript_path": "/scrubbed/transcript.jsonl",
+  "cwd": "/scrubbed/project",
+  "scratchpad_dir": "/scrubbed/scratchpad",
+  "prompt_id": "scrubbed-prompt-id-0000",
+  "permission_mode": "default",
+  "effort": { "level": "medium" },
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "example assistant reply for testing",
+  "background_tasks": [],
+  "session_crons": []
+}

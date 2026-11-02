@@ -1,0 +1,10 @@
+{
+  "session_id": "scrubbed-session-id-0000",
+  "transcript_path": "/scrubbed/transcript.jsonl",
+  "cwd": "/scrubbed/project",
+  "scratchpad_dir": "/scrubbed/scratchpad",
+  "prompt_id": "scrubbed-prompt-id-0000",
+  "permission_mode": "default",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "example user prompt for testing"
+}

@@ -10,12 +10,15 @@ import { CLI_NAME } from "@context-fern/core";
 const PREFIX = `${CLI_NAME} ▸`;
 const CMD = `/${CLI_NAME}`;
 
+/** `proposedName` is null when no real content word survived proposeFrondName's extraction — the receipt then asks for a name explicitly rather than showing a fabricated placeholder. */
 export function newSuggestionReceipt(
-  proposedName: string,
+  proposedName: string | null,
   confidence: number,
   signals: string[],
 ): string {
-  return `${PREFIX} new frond? ${proposedName} · ${confidence.toFixed(2)} · ${signals.join(", ")} · ${CMD} new`;
+  const namePart = proposedName ? ` ${proposedName}` : "";
+  const cmd = proposedName ? `${CMD} new` : `${CMD} new <name>`;
+  return `${PREFIX} new frond?${namePart} · ${confidence.toFixed(2)} · ${signals.join(", ")} · ${cmd}`;
 }
 
 /** Mirrors newSuggestionReceipt's shape for a return/combine suggestion — spec gives no literal example for this one, so it follows the same voice. */
@@ -72,7 +75,29 @@ export function statuslineReceipt(
   sentTokens: number,
   fullTokens: number,
 ): string {
-  return `${PREFIX} ${activeFrondName} · ${frondCount} fronds · ${strayCount} strays · ${formatK(sentTokens)}/${formatK(fullTokens)} ctx`;
+  const base = `${PREFIX} ${activeFrondName} · ${frondCount} fronds · ${strayCount} strays`;
+  // Isolate-mode token accounting isn't real yet — omit the clause
+  // entirely rather than ship a fabricated "0/0 ctx" (DESIGN.md Voice:
+  // never ship invented numbers).
+  if (sentTokens <= 0 && fullTokens <= 0) return base;
+  return `${base} · ${formatK(sentTokens)}/${formatK(fullTokens)} ctx`;
+}
+
+/**
+ * `fern status`/`/fern status`'s own receipt — deliberately richer than
+ * statuslineReceipt (which stays exactly spec §7's compact terminal
+ * format): adds the leaflet count and mode so dogfooding can actually
+ * tell whether exchanges are being recorded, without guessing from the
+ * compact statusline alone. See docs/decisions.md.
+ */
+export function statusReceipt(
+  activeFrondName: string,
+  frondCount: number,
+  strayCount: number,
+  leafletCount: number,
+  mode: string,
+): string {
+  return `${PREFIX} ${activeFrondName} · ${frondCount} fronds · ${strayCount} strays · ${leafletCount} leaflets · ${mode}`;
 }
 
 function formatK(n: number): string {

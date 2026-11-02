@@ -129,7 +129,20 @@ export function decide(
     };
   }
 
-  if (activeScore <= thresholds.newMax && otherScore <= thresholds.newMax) {
+  // "No frond matches" is only evidence of a NEW topic when there's at
+  // least one existing topic frond it could have matched. On a bare
+  // stem with zero topic fronds, activeScore and otherScore are both
+  // structurally 0 (nothing to compare against) — that's the complete
+  // absence of signal, not confidence that this is a new topic, and the
+  // first topic is the stem itself. Without this guard, every first
+  // prompt of a session produced a "new" suggestion at a hardcoded-
+  // looking confidence of 1.0 regardless of content. Falls through to
+  // fallback-continue-bias below instead.
+  if (
+    Object.keys(state.fronds).length > 0 &&
+    activeScore <= thresholds.newMax &&
+    otherScore <= thresholds.newMax
+  ) {
     return {
       action: "new",
       target: null,

@@ -1,4 +1,4 @@
-import { getJson } from "../daemon-client";
+import { getJson } from "@context-fern/daemon/client";
 import { renderTree, type TreeFrondInput } from "../tree-render";
 
 export async function runTree(): Promise<void> {

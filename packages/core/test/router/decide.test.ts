@@ -64,6 +64,25 @@ test("new fires when nothing (active or otherwise) clears newMax", () => {
   expect(decision.target).toBeNull();
 });
 
+test("new never fires from no-frond-match alone when there are zero topic fronds, regardless of confidence math", () => {
+  const state: RouterState = {
+    activeFrondId: null,
+    stemCentroid: null,
+    stemFiles: [],
+    fronds: {}, // the exact degenerate case that used to always score confidence 1.0
+  };
+  const signals = baseSignals({
+    stemCosine: 0,
+    frondSignals: [],
+    mentionedFiles: [],
+    isShortQuestion: false,
+  });
+
+  const decision = decide(signals, state, DEFAULT_CONFIG);
+  expect(decision.action).not.toBe("new");
+  expect(decision.signals).not.toContain("no-frond-match");
+});
+
 test("return fires when a non-active frond clearly outscores the active one", () => {
   const state: RouterState = {
     activeFrondId: "frond-1",
@@ -107,7 +126,7 @@ test("stray fires on low similarity everywhere, no file context, short question 
   expect(decision.target).toBeNull();
 });
 
-test("stray never fires on the very first prompt of a session (nothing to be off-topic from)", () => {
+test("stray never fires on the very first prompt of a session (nothing to be off-topic from) — it continues on the stem instead", () => {
   const state: RouterState = {
     activeFrondId: null,
     stemCentroid: null,
@@ -122,7 +141,10 @@ test("stray never fires on the very first prompt of a session (nothing to be off
   });
 
   const decision = decide(signals, state, DEFAULT_CONFIG);
-  expect(decision.action).toBe("new");
+  // Not "new" either: with zero topic fronds, "no-frond-match" isn't
+  // evidence of a new topic — the first topic is the stem itself. See
+  // docs/decisions.md.
+  expect(decision.action).toBe("continue");
 });
 
 test("explicit stray cue overrides even on the first prompt of a session", () => {

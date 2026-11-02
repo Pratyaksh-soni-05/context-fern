@@ -6,6 +6,7 @@ import {
   returnedReceipt,
   returnSuggestionReceipt,
   statuslineReceipt,
+  statusReceipt,
   strayMarkedReceipt,
   strayReceipt,
   undoneReceipt,
@@ -21,6 +22,12 @@ test("newSuggestionReceipt matches spec §7's literal example", () => {
     ]),
   ).toBe(
     "fern ▸ new frond? docker-build · 0.86 · cue phrase, no file overlap · /fern new",
+  );
+});
+
+test("newSuggestionReceipt asks for a name explicitly, never a placeholder, when none was proposed", () => {
+  expect(newSuggestionReceipt(null, 0.9, ["cue phrase"])).toBe(
+    "fern ▸ new frond? · 0.90 · cue phrase · /fern new <name>",
   );
 });
 
@@ -50,9 +57,21 @@ test("returnedReceipt matches spec §7's literal example", () => {
   );
 });
 
-test("statuslineReceipt matches spec §7's format", () => {
+test("statuslineReceipt matches spec §7's format when ctx numbers are real", () => {
   expect(statuslineReceipt("auth-refactor", 4, 3, 18000, 96000)).toBe(
     "fern ▸ auth-refactor · 4 fronds · 3 strays · 18k/96k ctx",
+  );
+});
+
+test("statusReceipt (fern status's own, richer receipt) includes the leaflet count and mode", () => {
+  expect(statusReceipt("stem", 0, 0, 3, "suggest")).toBe(
+    "fern ▸ stem · 0 fronds · 0 strays · 3 leaflets · suggest",
+  );
+});
+
+test("statuslineReceipt omits the ctx clause entirely when nothing has been measured, rather than printing a fabricated 0/0", () => {
+  expect(statuslineReceipt("auth-refactor", 4, 3, 0, 0)).toBe(
+    "fern ▸ auth-refactor · 4 fronds · 3 strays",
   );
 });
 

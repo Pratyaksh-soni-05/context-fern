@@ -8,7 +8,7 @@ function emptyState(): RouterState {
   return { activeFrondId: null, stemCentroid: null, stemFiles: [], fronds: {} };
 }
 
-test("stage0 composes computeSignals and decide end to end: first prompt of a session is new", async () => {
+test("stage0 composes computeSignals and decide end to end: first prompt of a session continues on the stem, not 'new'", async () => {
   const embedder = makeFakeEmbedder();
   const decision = await stage0(
     "look into the auth bug in the login flow",
@@ -16,7 +16,9 @@ test("stage0 composes computeSignals and decide end to end: first prompt of a se
     embedder,
     DEFAULT_CONFIG,
   );
-  expect(decision.action).toBe("new");
+  // With zero topic fronds, "no-frond-match" isn't evidence of a new
+  // topic — the first topic is the stem itself. See docs/decisions.md.
+  expect(decision.action).toBe("continue");
   expect(decision.stage).toBe(0);
 });
 

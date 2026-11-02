@@ -1,4 +1,4 @@
-import { getJson } from "../daemon-client";
+import { getJson } from "@context-fern/daemon/client";
 
 export async function runStatus(flags: Record<string, string>): Promise<void> {
   const projectPath = process.cwd();
@@ -10,5 +10,5 @@ export async function runStatus(flags: Record<string, string>): Promise<void> {
     console.log(JSON.stringify(res));
     return;
   }
-  console.log(res.receipt);
+  console.log(res.statusReceipt);
 }

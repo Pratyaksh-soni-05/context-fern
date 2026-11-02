@@ -1,6 +1,6 @@
 import { CLI_NAME } from "@context-fern/core";
 import { deleteDaemonInfo, readDaemonInfo } from "@context-fern/daemon";
-import { ensureDaemonRunning, isAlive } from "../daemon-client";
+import { ensureDaemonRunning, isAlive } from "@context-fern/daemon/client";
 
 export async function runDaemon(subcommand: string | undefined): Promise<void> {
   if (subcommand === "start") {

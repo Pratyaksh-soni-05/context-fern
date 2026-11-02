@@ -1,0 +1,26 @@
+{
+  "session_id": "scrubbed-session-id-0000",
+  "transcript_path": "/scrubbed/transcript.jsonl",
+  "cwd": "/scrubbed/project",
+  "scratchpad_dir": "/scrubbed/scratchpad",
+  "prompt_id": "scrubbed-prompt-id-0000",
+  "permission_mode": "default",
+  "effort": { "level": "medium" },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/scrubbed/project/src/example.ts"
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/scrubbed/project/src/example.ts",
+      "content": "// synthetic placeholder content for testing\n",
+      "numLines": 1,
+      "startLine": 1,
+      "totalLines": 1
+    }
+  },
+  "tool_use_id": "scrubbed-tool-use-id-0000",
+  "duration_ms": 42
+}

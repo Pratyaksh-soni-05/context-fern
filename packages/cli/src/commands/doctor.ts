@@ -12,8 +12,8 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { CLI_NAME, CONFIG_DIR } from "@context-fern/core";
 import { readDaemonInfo } from "@context-fern/daemon";
+import { isAlive } from "@context-fern/daemon/client";
 import { modelCacheDir } from "@context-fern/embed";
-import { isAlive } from "../daemon-client";
 
 async function dirHasFiles(path: string): Promise<boolean> {
   try {

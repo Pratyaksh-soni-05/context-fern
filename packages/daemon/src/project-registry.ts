@@ -12,6 +12,7 @@ import {
   CLI_NAME,
   CONFIG_DIR,
   type FileTouch,
+  type Mode,
   mergeConfig,
   type RouterAction,
   type RouterConfig,
@@ -50,6 +51,10 @@ export interface ProjectState {
   routerState: RouterState;
   pendingExchange: PendingExchange | null;
   pendingSuggestion: PendingSuggestion | null;
+  /** Mirrors the session row's mode — kept here too so /prompt's hot path never needs an extra query; handleMode (handlers.ts) updates both. */
+  mode: Mode;
+  /** The Claude Code hook session_id last seen for this project, if any. Bookkeeping only — the fern session itself already outlives /clear and compaction; this just stops the field from going stale. */
+  lastAgentSessionId: string | null;
   /** Serializes every request for this project — see withProjectLock. */
   lock: Promise<unknown>;
 }
@@ -83,8 +88,20 @@ async function openProject(projectPath: string): Promise<ProjectState> {
     routerState,
     pendingExchange: null,
     pendingSuggestion: null,
+    mode: session.mode,
+    lastAgentSessionId: null,
     lock: Promise.resolve(),
   };
+}
+
+/** Records the hook's session_id for bookkeeping. Silently ignores a missing/empty value — most requests (CLI, tests) carry none. */
+export function updateAgentSessionId(
+  state: ProjectState,
+  agentSessionId: string | null | undefined,
+): void {
+  if (typeof agentSessionId === "string" && agentSessionId.length > 0) {
+    state.lastAgentSessionId = agentSessionId;
+  }
 }
 
 /** Re-reads the frond id->name map after anything that creates or deletes a frond (undo of a "new"). */

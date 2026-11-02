@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FakeEmbedder } from "@context-fern/embed";
+import { writeBriefSections } from "@context-fern/store";
 import { closeAllProjects, getOrOpenProject } from "../src/project-registry";
 import { type DaemonHandle, startDaemon, TOKEN_HEADER } from "../src/server";
 import { type TempDir, withTempProjectDir } from "./test-helpers";
@@ -276,6 +277,28 @@ test("/fern new <name> works standalone, with no pending suggestion", async () =
   expect(res.json.receipt).toContain("fern ▸ on docker-build");
 });
 
+test("/fern new <name> rejects a path-traversal name and never creates anything on disk for it", async () => {
+  const res = await post(
+    "/prompt",
+    projectBody({ prompt: "/fern new ../../../../etc/passwd" }),
+  );
+  expect(res.status).toBe(400);
+  expect(res.json.error).toContain("valid frond name");
+
+  const { existsSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  expect(existsSync(join(projectDir?.path ?? "", ".fern", "etc"))).toBe(false);
+});
+
+test("/fern new <name> rejects a shell-metacharacter name", async () => {
+  const res = await post(
+    "/prompt",
+    projectBody({ prompt: "/fern new x; rm -rf ." }),
+  );
+  expect(res.status).toBe(400);
+  expect(res.json.error).toContain("valid frond name");
+});
+
 test("/undo after a manual /fern new removes the frond", async () => {
   await post("/prompt", projectBody({ prompt: "/fern new docker-build" }));
   const undo = await post("/undo", projectBody());
@@ -306,6 +329,20 @@ test("/status returns the statusline receipt", async () => {
   expect(res.json.receipt).toStartWith("fern ▸ ");
 });
 
+test("/status's statusReceipt includes the leaflet count and mode, so dogfooding can tell whether exchanges are recorded", async () => {
+  await post("/prompt", projectBody({ prompt: "fix the login bug" }));
+  await post("/exchange-end", projectBody());
+
+  const res = await get(
+    `/status?projectPath=${encodeURIComponent(projectDir?.path ?? "")}`,
+  );
+  expect(res.status).toBe(200);
+  expect(res.json.leafletCount).toBe(1);
+  expect(res.json.statusReceipt).toBe(
+    "fern ▸ stem · 0 fronds · 0 strays · 1 leaflets · suggest",
+  );
+});
+
 test("GET /tree without a projectPath is a 400, not a 500", async () => {
   const res = await get("/tree");
   expect(res.status).toBe(400);
@@ -314,4 +351,136 @@ test("GET /tree without a projectPath is a 400, not a 500", async () => {
 test("an unknown route is a 404", async () => {
   const res = await get("/nonsense");
   expect(res.status).toBe(404);
+});
+
+test("/prompt's focusNote names the active frond and its brief's first Goal line", async () => {
+  await post("/prompt", projectBody({ prompt: "/fern new docker-build" }));
+
+  const state = await getOrOpenProject(projectDir?.path ?? "");
+  const fronds = await state.store.listFronds(state.sessionId);
+  const frond = fronds.find((f) => f.name === "docker-build");
+  if (!frond) throw new Error("frond not created");
+  await writeBriefSections(frond.briefPath, { Goal: "Get CI green again." });
+
+  const res = await post("/prompt", projectBody({ prompt: "add a retry" }));
+  expect(res.json.focusNote).toBe("docker-build: Get CI green again.");
+});
+
+test("/prompt's focusNote falls back to just the frond's name when its Goal is empty", async () => {
+  const res = await post("/prompt", projectBody({ prompt: "hello there" }));
+  expect(res.json.focusNote).toBe("stem");
+});
+
+test("observe mode suppresses /prompt's focusNote and /status's brief entirely", async () => {
+  await post("/mode", projectBody({ mode: "observe" }));
+
+  const prompt = await post("/prompt", projectBody({ prompt: "hello there" }));
+  expect(prompt.json.focusNote).toBeUndefined();
+
+  const status = await get(
+    `/status?projectPath=${encodeURIComponent(projectDir?.path ?? "")}`,
+  );
+  expect(status.json.brief).toBeUndefined();
+});
+
+test("/status includes the active frond's brief content outside observe mode", async () => {
+  await post("/prompt", projectBody({ prompt: "/fern new docker-build" }));
+  const state = await getOrOpenProject(projectDir?.path ?? "");
+  const fronds = await state.store.listFronds(state.sessionId);
+  const frond = fronds.find((f) => f.name === "docker-build");
+  if (!frond) throw new Error("frond not created");
+  await writeBriefSections(frond.briefPath, { Goal: "Get CI green again." });
+
+  const res = await get(
+    `/status?projectPath=${encodeURIComponent(projectDir?.path ?? "")}`,
+  );
+  expect(res.json.brief).toContain("## Goal");
+  expect(res.json.brief).toContain("Get CI green again.");
+});
+
+test("GET /fronds returns the same frond data /tree renders as ASCII", async () => {
+  await post("/prompt", projectBody({ prompt: "/fern new docker-build" }));
+  const res = await get(
+    `/fronds?projectPath=${encodeURIComponent(projectDir?.path ?? "")}`,
+  );
+  expect(res.status).toBe(200);
+  const fronds = res.json.fronds as { name: string }[];
+  expect(fronds.map((f) => f.name)).toContain("docker-build");
+});
+
+test("GET /frond/:name/brief returns the named frond's brief sections", async () => {
+  await post("/prompt", projectBody({ prompt: "/fern new docker-build" }));
+  const state = await getOrOpenProject(projectDir?.path ?? "");
+  const fronds = await state.store.listFronds(state.sessionId);
+  const frond = fronds.find((f) => f.name === "docker-build");
+  if (!frond) throw new Error("frond not created");
+  await writeBriefSections(frond.briefPath, {
+    Goal: "Get CI green again.",
+    Open: "Flaky runner on windows-latest.",
+  });
+
+  const res = await get(
+    `/frond/docker-build/brief?projectPath=${encodeURIComponent(projectDir?.path ?? "")}`,
+  );
+  expect(res.status).toBe(200);
+  expect(res.json.goal).toBe("Get CI green again.");
+  expect(res.json.open).toBe("Flaky runner on windows-latest.");
+});
+
+test("GET /frond/:name/brief is a 400, not a 500, for an unknown frond name", async () => {
+  const res = await get(
+    `/frond/no-such-frond/brief?projectPath=${encodeURIComponent(projectDir?.path ?? "")}`,
+  );
+  expect(res.status).toBe(400);
+});
+
+test("GET /search finds a case-insensitive substring match in a frond's brief", async () => {
+  await post("/prompt", projectBody({ prompt: "/fern new docker-build" }));
+  const state = await getOrOpenProject(projectDir?.path ?? "");
+  const fronds = await state.store.listFronds(state.sessionId);
+  const frond = fronds.find((f) => f.name === "docker-build");
+  if (!frond) throw new Error("frond not created");
+  await writeBriefSections(frond.briefPath, {
+    Open: "Flaky runner on windows-latest.",
+  });
+
+  const res = await get(
+    `/search?projectPath=${encodeURIComponent(projectDir?.path ?? "")}&q=WINDOWS-latest`,
+  );
+  expect(res.status).toBe(200);
+  const results = res.json.results as {
+    name: string;
+    section: string;
+    snippet: string;
+  }[];
+  expect(results).toEqual([
+    { name: "docker-build", section: "Open", snippet: expect.any(String) },
+  ]);
+});
+
+test("GET /frond/:name/brief is a 400 in observe mode — the model must not pull brief content through the MCP tool when observe mode says no change to model input", async () => {
+  await post("/prompt", projectBody({ prompt: "/fern new docker-build" }));
+  await post("/mode", projectBody({ mode: "observe" }));
+
+  const res = await get(
+    `/frond/docker-build/brief?projectPath=${encodeURIComponent(projectDir?.path ?? "")}`,
+  );
+  expect(res.status).toBe(400);
+});
+
+test("GET /search is a 400 in observe mode, for the same reason", async () => {
+  await post("/mode", projectBody({ mode: "observe" }));
+
+  const res = await get(
+    `/search?projectPath=${encodeURIComponent(projectDir?.path ?? "")}&q=anything`,
+  );
+  expect(res.status).toBe(400);
+});
+
+test("GET /search with an empty query returns no results, not every brief", async () => {
+  const res = await get(
+    `/search?projectPath=${encodeURIComponent(projectDir?.path ?? "")}&q=`,
+  );
+  expect(res.status).toBe(200);
+  expect(res.json.results).toEqual([]);
 });
