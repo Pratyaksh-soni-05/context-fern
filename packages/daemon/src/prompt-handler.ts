@@ -5,6 +5,7 @@
 // See the plan's "suggestions vs. applied decisions" note for the full
 // reasoning and docs/decisions.md for the dated entry.
 
+import { relative } from "node:path";
 import {
   buildDecision,
   buildDecisionInverse,
@@ -18,13 +19,23 @@ import {
   proposeFrondName,
   type RouterAction,
 } from "@context-fern/core";
-import { readBrief } from "@context-fern/store";
+import {
+  type MergeableBriefSection,
+  pushRecentEntry,
+  readBrief,
+  writeBriefSections,
+} from "@context-fern/store";
 import {
   type PendingExchange,
   type ProjectState,
   refreshFrondNames,
 } from "./project-registry";
-import { approxTokenCount, DaemonError, hashPrompt } from "./prompt-util";
+import {
+  approxTokenCount,
+  DaemonError,
+  firstLine,
+  hashPrompt,
+} from "./prompt-util";
 import {
   mergedReceipt,
   newSuggestionReceipt,
@@ -64,6 +75,47 @@ async function nextLeafletIndex(state: ProjectState): Promise<number> {
 async function nextColorIndex(state: ProjectState): Promise<number> {
   const fronds = await state.store.listFronds(state.sessionId);
   return fronds.filter((f) => f.parentId !== null).length;
+}
+
+/**
+ * Deterministic, no-model-call brief fill (dogfooding showed every brief
+ * was always an empty template, making even a working restore useless —
+ * see docs/decisions.md). Goal is the frond's opening prompt's first
+ * line, capped at 140 chars, set once and never overwritten once real
+ * content exists — for a frond created by a direct `/fern new <name>`
+ * with nothing pending, Goal stays empty here and is filled by the next
+ * prompt that lands on it instead. Files is the frond's accumulated
+ * touched paths, refreshed every time since it only grows. Both go
+ * through `writeBriefSections`' existing per-section merge, so any user
+ * edit to either section is always kept over this. Recent (the last 5
+ * prompts, newest first) is machine-owned — it's updated via its own
+ * `pushRecentEntry`, never through the merge path, every time there's
+ * real prompt text, independent of whether Goal was already set. Never
+ * applied to the stem, which has no topic of its own.
+ */
+async function fillBriefDeterministically(
+  state: ProjectState,
+  frondId: string,
+  briefPath: string,
+  promptText: string,
+): Promise<void> {
+  if (frondId === state.stemFrondId) return;
+
+  const updates: Partial<Record<MergeableBriefSection, string>> = {};
+  const files = state.routerState.fronds[frondId]?.files ?? [];
+  if (files.length > 0) updates.Files = files.join("\n");
+
+  const goalCandidate = firstLine(promptText, 140);
+  if (goalCandidate) {
+    const current = await readBrief(briefPath);
+    if (!current.Goal) updates.Goal = goalCandidate;
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await writeBriefSections(briefPath, updates);
+  }
+
+  await pushRecentEntry(briefPath, goalCandidate);
 }
 
 /**
@@ -110,6 +162,18 @@ export async function finalizeExchange(state: ProjectState): Promise<void> {
 
   state.routerState = await state.store.loadRouterState(state.sessionId);
   state.pendingExchange = null;
+
+  const targetFrond = (await state.store.listFronds(state.sessionId)).find(
+    (f) => f.id === targetFrondId,
+  );
+  if (targetFrond) {
+    await fillBriefDeterministically(
+      state,
+      targetFrondId,
+      targetFrond.briefPath,
+      exchange.promptText,
+    );
+  }
 }
 
 interface ManualCommand {
@@ -216,6 +280,13 @@ async function applyManualNew(
   state.routerState = await state.store.loadRouterState(state.sessionId);
   state.pendingExchange = null;
   state.pendingSuggestion = null;
+
+  await fillBriefDeterministically(
+    state,
+    frond.id,
+    frond.briefPath,
+    exchange?.promptText ?? "",
+  );
 
   const restingName = priorActiveFrondId
     ? (state.frondNames.get(priorActiveFrondId) ?? null)
@@ -417,6 +488,7 @@ async function handlePlainPrompt(
 
   state.pendingExchange = {
     promptHash: hashPrompt(promptText),
+    promptText,
     tokenCount: approxTokenCount(promptText),
     promptEmbedding: Array.from(signals.promptEmbedding),
     filesTouched: [],
@@ -428,7 +500,13 @@ async function handlePlainPrompt(
     rawDecision.action === "new" &&
     rawDecision.confidence >= state.config.suggestionPrecision.new
   ) {
-    const proposedName = proposeFrondName(promptText);
+    // Name proposal never runs on a short meta-question, even when an
+    // explicit cue phrase fires "new" on one — a question's own wording
+    // about the fern is never the content of the new topic (see
+    // decide.ts's no-frond-match guard and docs/decisions.md).
+    const proposedName = signals.isShortQuestion
+      ? null
+      : proposeFrondName(promptText);
     suggestion = {
       action: "new",
       confidence: rawDecision.confidence,
@@ -467,8 +545,13 @@ async function handlePlainPrompt(
 }
 
 /**
- * The minimal, model-facing focus note: the active frond's name plus
- * the first non-blank line of its brief's Goal section. Returns
+ * The minimal, model-facing focus note: the active frond's name, its
+ * brief's Goal first line (if any), and — always, even when the brief
+ * is otherwise empty — the brief's own path, project-relative. Dogfooding
+ * asked to update a brief by name ("update the fern brief") needs this
+ * path in context on every turn, not just when something's been written
+ * to Goal yet; this is also what makes that plain-English phrasing work
+ * with no slash command at all (see docs/decisions.md). Returns
  * undefined in observe mode (spec §6: no change to model input) or if
  * the active frond's brief can't be read.
  */
@@ -487,7 +570,12 @@ async function buildFocusNote(
     .map((l) => l.trim())
     .find((l) => l.length > 0);
 
-  return goalLine ? `${frond.name}: ${goalLine}` : frond.name;
+  const relBriefPath = relative(state.projectPath, frond.briefPath).replace(
+    /\\/g,
+    "/",
+  );
+  const goalPart = goalLine ? ` · ${goalLine}` : "";
+  return `Active frond: ${frond.name}${goalPart} · brief: ${relBriefPath}`;
 }
 
 export async function handlePrompt(

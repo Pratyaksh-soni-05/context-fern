@@ -32,7 +32,7 @@ Later: Codex and OpenCode users; agent builders using SDK middleware.
 | Stray | an off-topic exchange: answered, then kept off every frond and out of future context | `Stray` |
 | Root | a memory from an earlier session that feeds a frond (read-only in v1; imported from CLAUDE.md, MEMORY.md or memory tools) | `Root` |
 | Graft | a merge back to the stem, or a combined turn that used two fronds | `Graft` |
-| Brief | markdown at `.fern/fronds/<name>.md` with Goal, Decided, Open, Files, Notes. User-editable | `Brief` |
+| Brief | markdown at `.fern/fronds/<name>.md` with Goal, Decided, Open, Files, Notes, Recent. Goal/Decided/Open/Files/Notes are user-editable; Recent (last 5 prompts, newest first) is machine-maintained — rewritten on every update, never merged with user edits | `Brief` |
 | Decision | one routing action recorded in the journal with its inverse | `Decision` |
 
 ## 5. Router

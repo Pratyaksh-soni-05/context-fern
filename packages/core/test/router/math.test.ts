@@ -147,6 +147,24 @@ test("proposeFrondName: skips lines that are themselves a slash command", () => 
   expect(proposeFrondName("/fern new something")).toBeNull();
 });
 
+test("proposeFrondName: skips lines that are a bare fern command, no leading slash", () => {
+  expect(proposeFrondName("fern new greetings")).toBeNull();
+  expect(proposeFrondName("fern new greetings\nfix the login bug")).toBe(
+    "fix-login-bug",
+  );
+  // "fernando" etc. must not false-match on the CLI name as a prefix.
+  expect(proposeFrondName("fernando fixed the login bug")).toBe(
+    "fernando-fixed-login",
+  );
+});
+
+test("proposeFrondName: drops interrogatives, never proposing a name from a question's own wording", () => {
+  expect(proposeFrondName("what were we working on")).toBeNull();
+  expect(proposeFrondName("where was the docker build config")).toBe(
+    "docker-build-config",
+  );
+});
+
 test("proposeFrondName: strips punctuation and apostrophes", () => {
   expect(proposeFrondName("fix the broken token's refresh!!")).toBe(
     "fix-broken-tokens",

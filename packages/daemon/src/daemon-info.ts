@@ -26,6 +26,8 @@ export interface DaemonInfo {
   pid: number;
   token: string;
   startedAt: string;
+  /** build-id.ts's fingerprint for the code that spawned this daemon — lets the client detect and replace a daemon left running from an older checkout. */
+  buildId: string;
 }
 
 function fernHomeDir(): string {

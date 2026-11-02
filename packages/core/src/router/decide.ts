@@ -130,16 +130,24 @@ export function decide(
   }
 
   // "No frond matches" is only evidence of a NEW topic when there's at
-  // least one existing topic frond it could have matched. On a bare
-  // stem with zero topic fronds, activeScore and otherScore are both
-  // structurally 0 (nothing to compare against) — that's the complete
-  // absence of signal, not confidence that this is a new topic, and the
-  // first topic is the stem itself. Without this guard, every first
-  // prompt of a session produced a "new" suggestion at a hardcoded-
-  // looking confidence of 1.0 regardless of content. Falls through to
-  // fallback-continue-bias below instead.
+  // least one existing topic frond it could have matched, AND something
+  // positive backs it up — an explicit cue phrase (handled above,
+  // unconditionally) or real file divergence: the prompt names files the
+  // active frond doesn't touch, with low similarity everywhere. The bare
+  // absence of a match is not a positive signal by itself (on a stem with
+  // zero fronds, activeScore/otherScore are structurally 0 — nothing to
+  // compare against) and must never fire "new" on its own, at any frond
+  // count — dogfooding showed a generic question like "what were we
+  // working on?" confidently (and wrongly) proposing a new frond for
+  // exactly this reason. Short meta-questions (isShortQuestion) are
+  // excluded outright: a question about the fern itself is never itself
+  // the start of a new topic. See docs/decisions.md.
+  const fileDivergence =
+    signals.mentionedFiles.length > 0 && (active?.fileOverlap ?? 0) === 0;
   if (
     Object.keys(state.fronds).length > 0 &&
+    !signals.isShortQuestion &&
+    fileDivergence &&
     activeScore <= thresholds.newMax &&
     otherScore <= thresholds.newMax
   ) {
@@ -147,7 +155,7 @@ export function decide(
       action: "new",
       target: null,
       confidence: clamp01(1 - Math.max(activeScore, otherScore)),
-      signals: ["no-frond-match"],
+      signals: ["no-frond-match", "file-divergence"],
       stage: 0,
     };
   }

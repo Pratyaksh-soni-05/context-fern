@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FakeEmbedder } from "@context-fern/embed";
-import { writeBriefSections } from "@context-fern/store";
+import { readBrief, writeBriefSections } from "@context-fern/store";
 import { closeAllProjects, getOrOpenProject } from "../src/project-registry";
 import { type DaemonHandle, startDaemon, TOKEN_HEADER } from "../src/server";
 import { type TempDir, withTempProjectDir } from "./test-helpers";
@@ -277,6 +277,126 @@ test("/fern new <name> works standalone, with no pending suggestion", async () =
   expect(res.json.receipt).toContain("fern ▸ on docker-build");
 });
 
+test("accepting a suggestion deterministically fills the new brief's Goal from the real triggering prompt, no model call", async () => {
+  await post(
+    "/prompt",
+    projectBody({ prompt: "switching to set up the docker build pipeline" }),
+  );
+  await post("/prompt", projectBody({ prompt: "/fern new" }));
+
+  const state = await getOrOpenProject(projectDir?.path ?? "");
+  const fronds = await state.store.listFronds(state.sessionId);
+  const frond = fronds.find((f) => f.name === "set-docker-build");
+  if (!frond) throw new Error("frond not created");
+  const brief = await readBrief(frond.briefPath);
+  expect(brief.Goal).toBe("switching to set up the docker build pipeline");
+});
+
+test("a frond created by a direct /fern new <name>, with nothing pending, starts with an empty Goal — filled by the next prompt instead", async () => {
+  await post("/prompt", projectBody({ prompt: "/fern new docker-build" }));
+  const state = await getOrOpenProject(projectDir?.path ?? "");
+  const fronds = await state.store.listFronds(state.sessionId);
+  const frond = fronds.find((f) => f.name === "docker-build");
+  if (!frond) throw new Error("frond not created");
+  expect((await readBrief(frond.briefPath)).Goal).toBe("");
+
+  await post(
+    "/prompt",
+    projectBody({ prompt: "let's wire up the dockerfile first" }),
+  );
+  await post("/exchange-end", projectBody());
+  expect((await readBrief(frond.briefPath)).Goal).toBe(
+    "let's wire up the dockerfile first",
+  );
+});
+
+test("Goal is set once and never overwritten by a later prompt on the same frond, even though Files keeps growing", async () => {
+  await post("/prompt", projectBody({ prompt: "/fern new docker-build" }));
+  await post(
+    "/prompt",
+    projectBody({ prompt: "let's wire up the dockerfile first" }),
+  );
+  await post("/prompt", projectBody({ prompt: "now the compose file too" }));
+
+  const state = await getOrOpenProject(projectDir?.path ?? "");
+  const fronds = await state.store.listFronds(state.sessionId);
+  const frond = fronds.find((f) => f.name === "docker-build");
+  if (!frond) throw new Error("frond not created");
+  expect((await readBrief(frond.briefPath)).Goal).toBe(
+    "let's wire up the dockerfile first",
+  );
+});
+
+test("Files is filled deterministically from the frond's accumulated touched paths", async () => {
+  await post("/prompt", projectBody({ prompt: "/fern new docker-build" }));
+  await post("/prompt", projectBody({ prompt: "editing the dockerfile" }));
+  await post(
+    "/tools",
+    projectBody({
+      filesTouched: [{ path: "Dockerfile", source: "tool_input" }],
+    }),
+  );
+  await post("/exchange-end", projectBody());
+
+  const state = await getOrOpenProject(projectDir?.path ?? "");
+  const fronds = await state.store.listFronds(state.sessionId);
+  const frond = fronds.find((f) => f.name === "docker-build");
+  if (!frond) throw new Error("frond not created");
+  expect((await readBrief(frond.briefPath)).Files).toContain("Dockerfile");
+});
+
+test("Recent accumulates the last 5 prompts' first lines, newest first, independent of Goal", async () => {
+  await post("/prompt", projectBody({ prompt: "/fern new docker-build" }));
+  const state = await getOrOpenProject(projectDir?.path ?? "");
+  const fronds = await state.store.listFronds(state.sessionId);
+  const frond = fronds.find((f) => f.name === "docker-build");
+  if (!frond) throw new Error("frond not created");
+
+  await post(
+    "/prompt",
+    projectBody({ prompt: "let's wire up the dockerfile first" }),
+  );
+  await post("/prompt", projectBody({ prompt: "now the compose file too" }));
+  await post("/exchange-end", projectBody());
+
+  const brief = await readBrief(frond.briefPath);
+  expect(brief.Goal).toBe("let's wire up the dockerfile first");
+  expect(brief.Recent).toBe(
+    ["- now the compose file too", "- let's wire up the dockerfile first"].join(
+      "\n",
+    ),
+  );
+});
+
+test("a user's own edit to Goal is kept — the deterministic fill never clobbers it", async () => {
+  await post("/prompt", projectBody({ prompt: "/fern new docker-build" }));
+  const state = await getOrOpenProject(projectDir?.path ?? "");
+  const fronds = await state.store.listFronds(state.sessionId);
+  const frond = fronds.find((f) => f.name === "docker-build");
+  if (!frond) throw new Error("frond not created");
+  await writeBriefSections(frond.briefPath, {
+    Goal: "my own hand-written goal",
+  });
+
+  await post(
+    "/prompt",
+    projectBody({ prompt: "let's wire up the dockerfile first" }),
+  );
+  expect((await readBrief(frond.briefPath)).Goal).toBe(
+    "my own hand-written goal",
+  );
+});
+
+test("the deterministic fill is never applied to the stem", async () => {
+  await post("/prompt", projectBody({ prompt: "just a plain prompt" }));
+  const state = await getOrOpenProject(projectDir?.path ?? "");
+  const stem = (await state.store.listFronds(state.sessionId)).find(
+    (f) => f.parentId === null,
+  );
+  if (!stem) throw new Error("stem not found");
+  expect((await readBrief(stem.briefPath)).Goal).toBe("");
+});
+
 test("/fern new <name> rejects a path-traversal name and never creates anything on disk for it", async () => {
   const res = await post(
     "/prompt",
@@ -363,12 +483,16 @@ test("/prompt's focusNote names the active frond and its brief's first Goal line
   await writeBriefSections(frond.briefPath, { Goal: "Get CI green again." });
 
   const res = await post("/prompt", projectBody({ prompt: "add a retry" }));
-  expect(res.json.focusNote).toBe("docker-build: Get CI green again.");
+  expect(res.json.focusNote).toBe(
+    "Active frond: docker-build · Get CI green again. · brief: .fern/fronds/docker-build.md",
+  );
 });
 
-test("/prompt's focusNote falls back to just the frond's name when its Goal is empty", async () => {
+test("/prompt's focusNote always includes the brief's path, even with an empty Goal", async () => {
   const res = await post("/prompt", projectBody({ prompt: "hello there" }));
-  expect(res.json.focusNote).toBe("stem");
+  expect(res.json.focusNote).toBe(
+    "Active frond: stem · brief: .fern/fronds/stem.md",
+  );
 });
 
 test("observe mode suppresses /prompt's focusNote and /status's brief entirely", async () => {

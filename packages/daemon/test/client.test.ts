@@ -12,8 +12,10 @@ import {
   getJson,
   isAlive,
   isDaemonRunning,
+  isDaemonStale,
   postJson,
 } from "../src/client";
+import { readDaemonInfo, writeDaemonInfo } from "../src/daemon-info";
 import { closeAllProjects } from "../src/project-registry";
 import { type DaemonHandle, startDaemon } from "../src/server";
 
@@ -57,6 +59,26 @@ test("isAlive is false once the daemon has stopped", async () => {
   await daemon?.stop();
   daemon = undefined;
   expect(await isAlive(info)).toBe(false);
+});
+
+test("isDaemonStale is false for a current-build daemon", async () => {
+  expect(await isDaemonStale()).toBe(false);
+});
+
+test("isDaemonRunning detects a stale buildId, stops it, and clears daemon.json", async () => {
+  const real = await readDaemonInfo();
+  if (!real) throw new Error("daemon.json not written");
+  // A deliberately dead pid: isAlive() below still hits the real, live
+  // daemon (nothing about the underlying Bun.serve listener changes
+  // here — info.pid is pure bookkeeping), so the mismatch path really
+  // does attempt process.kill — on a pid that's guaranteed not to be
+  // this test runner's own, which `pid: process.pid` (how a real
+  // daemon always writes it) would otherwise be.
+  await writeDaemonInfo({ ...real, buildId: "stale-build-id", pid: 999999 });
+
+  expect(await isDaemonStale()).toBe(true);
+  expect(await isDaemonRunning()).toBeNull();
+  expect(await readDaemonInfo()).toBeNull();
 });
 
 test("isDaemonRunning returns the info for a live daemon and never spawns", async () => {

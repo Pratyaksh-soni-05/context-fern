@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { CLI_NAME, CONFIG_DIR } from "@context-fern/core";
 import { renderDefaultConfigToml } from "../config-template";
 import { appendToGitignore, gitignoreHasEntry } from "../gitignore";
+import { renderProjectFernCommand } from "../project-fern-command";
 import { promptYesNo } from "../prompt-yes-no";
 import { runStatusline } from "./statusline";
 
@@ -67,6 +68,46 @@ export async function runInit(flags: Record<string, string>): Promise<void> {
       (await promptYesNo(`Install the ${CLI_NAME} statusline?`));
     if (confirmed) await runStatusline({ install: "true" });
     else console.log(`${CLI_NAME} ▸ skipped statusline`);
+  }
+
+  // A bare "/fern" is rejected by Claude Code's interactive TUI as
+  // "Unknown command" before any hook runs, unless a command literally
+  // named "fern" is registered — the plugin's own command is namespaced
+  // ("fern:fern") once installed, which doesn't satisfy that check. A
+  // project-level `.claude/commands/<name>.md` does. This is project-
+  // local (never ~/.claude), so — like the .gitignore offer above, and
+  // unlike the statusline offer, which reaches outside the project —
+  // it falls back to --yes/--no when its own flag is unset. See
+  // docs/decisions.md.
+  const projectCommandPath = join(
+    projectPath,
+    ".claude",
+    "commands",
+    `${CLI_NAME}.md`,
+  );
+  if (await fileExists(projectCommandPath)) {
+    console.log(
+      `${CLI_NAME} ▸ .claude/commands/${CLI_NAME}.md already exists, left untouched`,
+    );
+  } else {
+    const projectCommandFlag =
+      flags["project-command"] ??
+      (flags.no === "true" ? "no" : flags.yes === "true" ? "yes" : undefined);
+    const confirmed =
+      projectCommandFlag === "yes" ||
+      (projectCommandFlag !== "no" &&
+        (await promptYesNo(
+          `Register a project-level /${CLI_NAME} command (needed for "/${CLI_NAME}" to work in Claude Code's interactive TUI)?`,
+        )));
+    if (confirmed) {
+      await mkdir(join(projectPath, ".claude", "commands"), {
+        recursive: true,
+      });
+      await writeFile(projectCommandPath, renderProjectFernCommand(), "utf-8");
+      console.log(`${CLI_NAME} ▸ added .claude/commands/${CLI_NAME}.md`);
+    } else {
+      console.log(`${CLI_NAME} ▸ skipped .claude/commands/${CLI_NAME}.md`);
+    }
   }
 
   // The daemon defaults every new session to "suggest" mode

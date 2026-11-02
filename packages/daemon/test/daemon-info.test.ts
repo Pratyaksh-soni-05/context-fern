@@ -44,6 +44,7 @@ test("writeDaemonInfo creates the directory and readDaemonInfo round-trips it", 
       pid: 12345,
       token: "secret-token",
       startedAt: "2026-10-27T00:00:00Z",
+      buildId: "0.0.0+abc123",
     },
     home,
   );
@@ -54,13 +55,20 @@ test("writeDaemonInfo creates the directory and readDaemonInfo round-trips it", 
     pid: 12345,
     token: "secret-token",
     startedAt: "2026-10-27T00:00:00Z",
+    buildId: "0.0.0+abc123",
   });
 });
 
 test("deleteDaemonInfo removes the file; readDaemonInfo then returns null again", async () => {
   const home = await freshFakeHome();
   await writeDaemonInfo(
-    { port: 7420, pid: 1, token: "x", startedAt: "2026-10-27T00:00:00Z" },
+    {
+      port: 7420,
+      pid: 1,
+      token: "x",
+      startedAt: "2026-10-27T00:00:00Z",
+      buildId: "0.0.0+abc123",
+    },
     home,
   );
   await deleteDaemonInfo(home);
@@ -72,7 +80,13 @@ test("two different home dirs never see each other's daemon.json", async () => {
   const homeB = await mkdtemp(join(tmpdir(), "fern-home-b-"));
   try {
     await writeDaemonInfo(
-      { port: 1, pid: 1, token: "a", startedAt: "2026-10-27T00:00:00Z" },
+      {
+        port: 1,
+        pid: 1,
+        token: "a",
+        startedAt: "2026-10-27T00:00:00Z",
+        buildId: "0.0.0+abc123",
+      },
       homeA,
     );
     expect(await readDaemonInfo(homeB)).toBeNull();

@@ -9,6 +9,7 @@ function sections(overrides: Partial<BriefSections> = {}): BriefSections {
     Open: "",
     Files: "",
     Notes: "",
+    Recent: "",
     ...overrides,
   };
 }

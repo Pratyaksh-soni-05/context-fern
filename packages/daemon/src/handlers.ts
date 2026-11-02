@@ -2,6 +2,7 @@
 // returns structured data; the CLI does the ASCII rendering (TTY/color
 // detection is a terminal concern, not the daemon's).
 
+import { relative } from "node:path";
 import type { Mode } from "@context-fern/core";
 import {
   BRIEF_SECTIONS,
@@ -80,6 +81,10 @@ export interface StatusResponse {
   mode: Mode;
   /** The active frond's brief, capped ~8KB (Notes truncated first). Omitted in observe mode — see docs/decisions.md. */
   brief?: string;
+  /** The active frond's brief path, project-relative — unlike `brief`, never mode-gated: a restore/focus note must be able to name where the brief lives even when its sections are still empty. See docs/decisions.md. */
+  activeBriefPath: string | null;
+  /** The active frond's accumulated touched-file count — not mode-gated, same reasoning as activeBriefPath. */
+  activeFileCount: number;
 }
 
 export async function handleStatus(
@@ -115,14 +120,20 @@ export async function handleStatus(
     session.mode,
   );
 
+  const activeFrondId = activeId ?? state.stemFrondId;
+  const activeFrond = fronds.find((f) => f.id === activeFrondId);
+  const activeBriefPath = activeFrond
+    ? relative(state.projectPath, activeFrond.briefPath).replace(/\\/g, "/")
+    : null;
+  const activeFileCount = (
+    state.routerState.fronds[activeFrondId]?.files ??
+    state.routerState.stemFiles
+  ).length;
+
   let brief: string | undefined;
-  if (session.mode !== "observe") {
-    const activeFrondId = activeId ?? state.stemFrondId;
-    const activeFrond = fronds.find((f) => f.id === activeFrondId);
-    if (activeFrond) {
-      const sections = await readBrief(activeFrond.briefPath).catch(() => null);
-      if (sections) brief = truncateBriefForContext(sections);
-    }
+  if (session.mode !== "observe" && activeFrond) {
+    const sections = await readBrief(activeFrond.briefPath).catch(() => null);
+    if (sections) brief = truncateBriefForContext(sections);
   }
 
   return {
@@ -133,6 +144,8 @@ export async function handleStatus(
     strayCount,
     leafletCount,
     mode: session.mode,
+    activeBriefPath,
+    activeFileCount,
     ...(brief !== undefined ? { brief } : {}),
   };
 }

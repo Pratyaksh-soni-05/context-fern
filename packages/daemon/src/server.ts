@@ -9,6 +9,7 @@
 
 import { timingSafeEqual } from "node:crypto";
 import type { Embedder, Mode } from "@context-fern/core";
+import { buildId } from "./build-id";
 import {
   daemonInfoPath,
   deleteDaemonInfo,
@@ -133,6 +134,7 @@ export async function startDaemon(
     pid: process.pid,
     token,
     startedAt: new Date().toISOString(),
+    buildId: buildId(),
   });
 
   return {

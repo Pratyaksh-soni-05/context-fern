@@ -163,6 +163,17 @@ test("an unrecognized /fern subcommand still blocks, with a usage message", asyn
   expect(result.reason as string).toContain("usage");
 });
 
+test("'/fern brief' blocks with a redirect to the plain-English phrasing, not a usage error", async () => {
+  const result = await handleUserPromptSubmit({
+    ...loadFixture("user-prompt-submit.fern-command.json"),
+    cwd: projectDir,
+    prompt: "/fern brief",
+  });
+  expect(result.decision).toBe("block");
+  expect(result.reason as string).toContain("update the fern brief");
+  expect(result.reason as string).not.toContain("usage");
+});
+
 test("'/fern init' works even in an uninitialized project and creates .fern/config.toml", async () => {
   const bareDir = await mkdtemp(join(tmpdir(), "fern-bare-"));
   await mkdir(join(bareDir, ".git"));
@@ -270,6 +281,38 @@ test("SessionStart on resume injects the active frond's brief when one exists", 
     | undefined;
   expect(hookSpecific?.hookEventName).toBe("SessionStart");
   expect(hookSpecific?.additionalContext).toContain("Get CI green again.");
+  expect(hookSpecific?.additionalContext).toContain(
+    "brief: .fern/fronds/docker-build.md",
+  );
+  // The visible receipt — additionalContext alone is model-only and
+  // never shown in the transcript UI, which is why restore read as
+  // silently doing nothing even when it worked (see docs/decisions.md).
+  expect(result.systemMessage).toContain("restored docker-build");
+  expect(result.systemMessage).toContain("brief");
+});
+
+test("SessionStart on resume still names the frond and brief path even when the brief's sections are all empty", async () => {
+  await handleUserPromptSubmit({
+    ...loadFixture("user-prompt-submit.fern-command.json"),
+    cwd: projectDir,
+    prompt: "/fern new docker-build",
+  });
+
+  const result = await handleSessionStart({
+    ...loadFixture("session-start.startup.json"),
+    cwd: projectDir,
+    source: "resume",
+  });
+  const hookSpecific = result.hookSpecificOutput as
+    | { hookEventName: string; additionalContext: string }
+    | undefined;
+  expect(hookSpecific?.additionalContext).toContain(
+    "Active frond: docker-build",
+  );
+  expect(hookSpecific?.additionalContext).toContain(
+    "brief: .fern/fronds/docker-build.md",
+  );
+  expect(result.systemMessage).toContain("restored docker-build");
 });
 
 test("SessionStart no-ops entirely in an uninitialized project", async () => {

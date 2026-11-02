@@ -31,6 +31,7 @@ import { CLI_NAME } from "@context-fern/core";
 import {
   findFernDir,
   isDaemonRunning,
+  isDaemonStale,
   rawGetJson,
   rawPostJson,
   spawnDaemonDetached,
@@ -123,6 +124,12 @@ export async function handleUserPromptSubmit(
     // unresponsive-but-alive daemon must not be able to stall this check
     // toward hooks.json's own 5s outer timeout, which is exactly the
     // failure mode this whole branch exists to avoid.
+    //
+    // isDaemonStale() is checked first (pure peek, no side effect) so
+    // the message can distinguish "never started" from "was running
+    // old code" — isDaemonRunning() itself is the one that actually
+    // stops a stale daemon and clears daemon.json; see its doc comment.
+    const wasStale = await isDaemonStale();
     const daemonInfo = await isDaemonRunning(
       AbortSignal.timeout(PASSIVE_TIMEOUT_MS),
     );
@@ -130,7 +137,9 @@ export async function handleUserPromptSubmit(
       spawnDaemonDetached();
       return {
         decision: "block",
-        reason: `${CLI_NAME} ▸ daemon starting · try again in a moment`,
+        reason: wasStale
+          ? `${CLI_NAME} ▸ daemon updated · try again`
+          : `${CLI_NAME} ▸ daemon starting · try again in a moment`,
       };
     }
 
@@ -293,14 +302,46 @@ export async function handleSessionStart(
       `/status?projectPath=${encodeURIComponent(projectPath)}&agentSessionId=${encodeURIComponent(input.session_id)}`,
       AbortSignal.timeout(PASSIVE_TIMEOUT_MS),
     );
-    const brief = typeof result.brief === "string" ? result.brief : "";
-    if (!brief) return {};
-    return {
+    const frondName =
+      typeof result.activeFrondName === "string"
+        ? result.activeFrondName
+        : null;
+    const briefPath =
+      typeof result.activeBriefPath === "string"
+        ? result.activeBriefPath
+        : null;
+    const fileCount =
+      typeof result.activeFileCount === "number" ? result.activeFileCount : 0;
+    const briefContent = typeof result.brief === "string" ? result.brief : "";
+
+    // Always name the frond and its brief's path, even when the brief's
+    // sections are still empty — dogfooding found restore silently
+    // injecting nothing useful (empty briefs) with no way to tell
+    // whether it had even run. If there's truly nothing to name (no
+    // fernDir-relative brief at all), there's nothing to restore.
+    if (!frondName && !briefPath) return {};
+
+    const header = `Active frond: ${frondName ?? "stem"}${briefPath ? ` · brief: ${briefPath}` : ""}`;
+    const additionalContext = briefContent
+      ? `${header}\n\n${briefContent}`
+      : header;
+
+    const output: Record<string, unknown> = {
       hookSpecificOutput: {
         hookEventName: "SessionStart",
-        additionalContext: brief,
+        additionalContext,
       },
     };
+    // The visible receipt — hookSpecificOutput.additionalContext is
+    // model-only, never shown in the transcript UI, which is why
+    // restore read as silently doing nothing even when it worked. Only
+    // for a real named frond: "restored stem" isn't a meaningful
+    // user-facing receipt.
+    if (frondName) {
+      const filesPart = fileCount > 0 ? ` · ${fileCount} files` : "";
+      output.systemMessage = `${CLI_NAME} ▸ restored ${frondName} · brief${filesPart}`;
+    }
+    return output;
   } catch {
     return {};
   }

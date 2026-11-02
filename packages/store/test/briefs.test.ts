@@ -5,6 +5,7 @@ import {
   archiveOrDeleteBrief,
   createBrief,
   isBriefUnmodified,
+  pushRecentEntry,
   readBrief,
   writeBriefSections,
 } from "../src/briefs";
@@ -21,7 +22,7 @@ afterEach(async () => {
   dir = undefined;
 });
 
-test("createBrief writes all five empty sections, readBrief round-trips them", async () => {
+test("createBrief writes all six empty sections, readBrief round-trips them", async () => {
   dir = await withTempFernDir();
   const path = join(dir.path, "auth-refactor.md");
   await createBrief(path);
@@ -33,6 +34,7 @@ test("createBrief writes all five empty sections, readBrief round-trips them", a
     Open: "",
     Files: "",
     Notes: "",
+    Recent: "",
   });
   expect(await isBriefUnmodified(path)).toBe(true);
 });
@@ -145,6 +147,62 @@ test("works under a directory path containing a space (the real project path has
   expect((await readBrief(path)).Goal).toBe(
     "works even with a space in the path",
   );
+});
+
+test("pushRecentEntry prepends newest-first and caps at 5", async () => {
+  dir = await withTempFernDir();
+  const path = join(dir.path, "docker-build.md");
+  await createBrief(path);
+
+  for (const entry of ["one", "two", "three", "four", "five", "six"]) {
+    await pushRecentEntry(path, entry);
+  }
+
+  const brief = await readBrief(path);
+  expect(brief.Recent).toBe(
+    ["- six", "- five", "- four", "- three", "- two"].join("\n"),
+  );
+});
+
+test("pushRecentEntry is a no-op for an empty entry", async () => {
+  dir = await withTempFernDir();
+  const path = join(dir.path, "docker-build.md");
+  await createBrief(path);
+
+  await pushRecentEntry(path, "");
+  expect((await readBrief(path)).Recent).toBe("");
+});
+
+test("pushRecentEntry is never merge-protected — unlike every other section, a user's hand-edit to Recent gets no special preservation and is just carried forward as part of the rolling window", async () => {
+  dir = await withTempFernDir();
+  const path = join(dir.path, "docker-build.md");
+  await createBrief(path);
+
+  await writeBriefSections(path, { Goal: "something" }); // establishes a real meta file
+  const fs = await import("node:fs/promises");
+  const current = await fs.readFile(path, "utf-8");
+  await fs.writeFile(
+    path,
+    current.replace("## Recent\n\n", "## Recent\n\n- the user's own line\n"),
+    "utf-8",
+  );
+
+  await pushRecentEntry(path, "a real prompt");
+  expect((await readBrief(path)).Recent).toBe(
+    "- a real prompt\n- the user's own line",
+  );
+});
+
+test("pushRecentEntry never affects isBriefUnmodified/archiveOrDeleteBrief — it's not tracked in meta", async () => {
+  dir = await withTempFernDir();
+  const path = join(dir.path, "docker-build.md");
+  await createBrief(path);
+
+  await pushRecentEntry(path, "a real prompt");
+  expect(await isBriefUnmodified(path)).toBe(true);
+
+  await archiveOrDeleteBrief(path, "docker-build", "decision-1");
+  await expect(readFile(path, "utf-8")).rejects.toThrow();
 });
 
 test("archiveOrDeleteBrief: an untouched brief is deleted along with its meta file", async () => {

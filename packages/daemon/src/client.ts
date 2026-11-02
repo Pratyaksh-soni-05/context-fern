@@ -6,7 +6,9 @@
 // server.ts/project-registry.ts/embedder.ts must never be imported here.
 //
 // Three different "is the daemon up" needs, kept separate on purpose:
-//   - isDaemonRunning(): read-only check, no side effect.
+//   - isDaemonRunning(): read-only check for a current daemon — its one
+//     side effect is stopping and forgetting a daemon it finds running
+//     stale code (see its own doc comment).
 //   - spawnDaemonDetached(): fire-and-forget spawn, never polls/waits —
 //     for SessionStart, which must return immediately.
 //   - ensureDaemonRunning(): spawns AND polls until ready — for the CLI,
@@ -18,7 +20,12 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { CLI_NAME } from "@context-fern/core";
-import { type DaemonInfo, readDaemonInfo } from "./daemon-info";
+import { buildId } from "./build-id";
+import {
+  type DaemonInfo,
+  deleteDaemonInfo,
+  readDaemonInfo,
+} from "./daemon-info";
 import { TOKEN_HEADER } from "./protocol";
 
 const ENTRYPOINT = join(import.meta.dir, "serve-entrypoint.ts");
@@ -52,13 +59,49 @@ export async function isAlive(
   }
 }
 
-/** Read daemon.json and check liveness. No side effect — never spawns. */
+/**
+ * Pure peek, no side effect at all: true if a recorded daemon exists
+ * and its `buildId` doesn't match this process's own code. Exists so a
+ * caller that wants to show a different message for "stale, about to
+ * be replaced" vs. "never started" (the explicit `/fern ...` command
+ * path) can check *before* calling `isDaemonRunning()`, which is the
+ * one that actually acts on a stale daemon.
+ */
+export async function isDaemonStale(): Promise<boolean> {
+  const info = await readDaemonInfo();
+  return info !== null && info.buildId !== buildId();
+}
+
+/**
+ * Read daemon.json and check liveness. No side effect — never spawns —
+ * with one exception: a daemon whose `buildId` doesn't match this
+ * process's own code is stale (left running from an older checkout —
+ * the real cause of a stray-daemon incident during dogfooding, see
+ * docs/decisions.md) and gets stopped and its daemon.json removed
+ * rather than treated as "running." This never spawns a replacement
+ * itself — every caller already has its own "if null, maybe spawn"
+ * logic for the plain down-daemon case, and spawning here too would
+ * double-spawn once `ensureDaemonRunning` (which calls this first)
+ * also spawns on the null it gets back.
+ */
 export async function isDaemonRunning(
   signal?: AbortSignal,
 ): Promise<DaemonInfo | null> {
   const info = await readDaemonInfo();
   if (!info) return null;
-  return (await isAlive(info, signal)) ? info : null;
+  const alive = await isAlive(info, signal);
+  if (info.buildId !== buildId()) {
+    if (alive) {
+      try {
+        process.kill(info.pid);
+      } catch {
+        // already gone
+      }
+    }
+    await deleteDaemonInfo();
+    return null;
+  }
+  return alive ? info : null;
 }
 
 /** Fire-and-forget: spawns the daemon detached and returns immediately. Never polls, never waits — the only daemon-start call a hook may make. */

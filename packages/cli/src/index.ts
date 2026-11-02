@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 import { CLI_NAME } from "@context-fern/core";
 import { parseArgs } from "./argv";
 import { runDaemon } from "./commands/daemon";

@@ -100,6 +100,19 @@ export function statusReceipt(
   return `${PREFIX} ${activeFrondName} · ${frondCount} fronds · ${strayCount} strays · ${leafletCount} leaflets · ${mode}`;
 }
 
+/**
+ * `SessionStart`'s restore (resume/clear/compaction/fork) — a VISIBLE
+ * receipt, unlike `hookSpecificOutput.additionalContext` (model-only,
+ * never shown in the transcript UI). Dogfooding found that restore was
+ * silently invisible even when it worked, so the user had no way to
+ * tell whether anything had actually been restored — see
+ * docs/decisions.md.
+ */
+export function restoredReceipt(frondName: string, fileCount: number): string {
+  const filesPart = fileCount > 0 ? ` · ${fileCount} files` : "";
+  return `${PREFIX} restored ${frondName} · brief${filesPart}`;
+}
+
 function formatK(n: number): string {
   return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
 }

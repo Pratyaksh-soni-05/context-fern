@@ -1,5 +1,7 @@
 // Pure numeric helpers for the router. No I/O, no randomness.
 
+import { CLI_NAME } from "../brand";
+
 export function cosineSimilarity(
   a: ArrayLike<number> | null | undefined,
   b: ArrayLike<number> | null | undefined,
@@ -190,7 +192,31 @@ const NAME_STOPWORDS = new Set([
   "switch",
   "moving",
   "back",
+  // Interrogatives — a question's own wording about what the fern is
+  // doing is never the content of a new topic. Added after dogfooding
+  // produced "what-were-working" as a proposed name for "what were we
+  // working on?"; see docs/decisions.md.
+  "what",
+  "were",
+  "was",
+  "when",
+  "where",
+  "who",
+  "whom",
+  "which",
+  "working",
 ]);
+
+// A line that is itself a fern command — "/fern ..." or bare "fern ..."
+// (e.g. a prompt that's just "fern new greetings") — names nothing about
+// the user's actual topic; it's the mechanism, not the content. Built
+// from CLI_NAME so a rename doesn't silently stop matching (CLAUDE.md:
+// never hard-code the CLI name).
+const ESCAPED_CLI_NAME = CLI_NAME.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const FERN_COMMAND_LINE_RE = new RegExp(
+  `^/?${ESCAPED_CLI_NAME}(?::${ESCAPED_CLI_NAME})?(?:\\s|$)`,
+  "i",
+);
 
 /**
  * A short kebab-case slug of a prompt's key words — the proposed frond
@@ -200,9 +226,11 @@ const NAME_STOPWORDS = new Set([
  * extraction — predictable beats clever for a name the user can always
  * override with `/fern new <name>`.
  *
- * Lines that are themselves a slash command (e.g. a stray embedded
- * "/fern ..." line in a multi-line prompt) are excluded from the word
- * pool — they're not the user's actual topic. Returns null, never a
+ * Lines that are themselves a fern command — "/fern ..." or a bare
+ * "fern ..." line, with or without a leading slash — are excluded from
+ * the word pool; a plain "fern new greetings" prompt is just as much
+ * the mechanism (not the topic) as "/fern new greetings" is. Returns
+ * null, never a
  * generic placeholder like "topic", when no real content word survives;
  * callers must then ask the user for a name rather than invent one —
  * see docs/decisions.md.
@@ -226,7 +254,7 @@ export function isValidFrondName(name: string): boolean {
 export function proposeFrondName(text: string, maxWords = 3): string | null {
   const contentText = text
     .split("\n")
-    .filter((line) => !line.trim().startsWith("/"))
+    .filter((line) => !FERN_COMMAND_LINE_RE.test(line.trim()))
     .join(" ");
   const words = (contentText.toLowerCase().match(/[a-z0-9']+/g) ?? [])
     .map((w) => w.replace(/'/g, ""))

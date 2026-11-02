@@ -85,6 +85,19 @@ export async function dispatchFernCommand(
     return `${CLI_NAME} ▸ ui: not built yet`;
   }
 
+  // Not a real dispatch target — the active frond's brief path is
+  // always in the model's context (prompt-handler.ts's focusNote), so
+  // the plain-English phrasing already works with no slash command at
+  // all. A dedicated "/fern brief" that bypasses the UserPromptSubmit
+  // block (letting the model edit the brief in a real turn) needs
+  // Claude Code's UserPromptExpansion hook to suppress the fallback
+  // command's own template, and whether the raw prompt still reaches
+  // the model after that hook blocks isn't documented — deferred until
+  // that's confirmed interactively. See docs/decisions.md.
+  if (subcommand === "brief") {
+    return `${CLI_NAME} ▸ to update the brief, ask: "update the ${CLI_NAME} brief"`;
+  }
+
   if (
     subcommand === "new" ||
     subcommand === "switch" ||

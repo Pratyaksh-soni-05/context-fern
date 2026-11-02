@@ -26,6 +26,8 @@ import {
 
 export interface PendingExchange {
   promptHash: string;
+  /** In-memory only — never persisted to fern.db (only promptHash is). The one place this reaches disk at all is a brief .md file's Goal section, which is explicitly local/gitignored/user-editable. See docs/decisions.md. */
+  promptText: string;
   tokenCount: number;
   promptEmbedding: number[];
   filesTouched: FileTouch[];

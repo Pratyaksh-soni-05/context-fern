@@ -1,9 +1,12 @@
 // `.fern/fronds/<name>.md` — spec §4's Brief: Goal, Decided, Open, Files,
-// Notes, user-editable. A companion `.fern/fronds/.<name>.meta.json`
-// tracks the content hash the SYSTEM itself last wrote per section, so a
-// later system write can tell "the user never touched this" from "the
-// user edited this" and never clobber the latter — merge by section,
-// keep the user's text if both changed.
+// Notes, Recent. A companion `.fern/fronds/.<name>.meta.json` tracks the
+// content hash the SYSTEM itself last wrote per section, so a later
+// system write can tell "the user never touched this" from "the user
+// edited this" and never clobber the latter — merge by section, keep
+// the user's text if both changed. Recent is the one exception: it's
+// machine-owned (the last 5 prompts, newest first), always rewritten in
+// full via `pushRecentEntry`, and never goes through that merge at all —
+// see its own doc comment below.
 
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
@@ -15,11 +18,19 @@ export const BRIEF_SECTIONS = [
   "Open",
   "Files",
   "Notes",
+  "Recent",
 ] as const;
 export type BriefSection = (typeof BRIEF_SECTIONS)[number];
 
+/** Every section writeBriefSections' user-edit-preserving merge applies to — i.e. every section except the machine-owned Recent. */
+export type MergeableBriefSection = Exclude<BriefSection, "Recent">;
+
 export type BriefSections = Record<BriefSection, string>;
-type SectionHashes = Partial<Record<BriefSection, string>>;
+type SectionHashes = Partial<Record<MergeableBriefSection, string>>;
+
+const RECENT_NOTE =
+  "<!-- fern maintains this section automatically; edits here are not kept -->";
+const RECENT_MAX = 5;
 
 function hash(text: string): string {
   return createHash("sha256").update(text).digest("hex");
@@ -32,16 +43,22 @@ function metaPathFor(briefPath: string): string {
 }
 
 function emptySections(): BriefSections {
-  return { Goal: "", Decided: "", Open: "", Files: "", Notes: "" };
+  return { Goal: "", Decided: "", Open: "", Files: "", Notes: "", Recent: "" };
 }
 
 function render(sections: BriefSections): string {
-  return BRIEF_SECTIONS.map((s) => `## ${s}\n\n${sections[s]}\n`).join("\n");
+  return BRIEF_SECTIONS.map((s) => {
+    const body =
+      s === "Recent"
+        ? [RECENT_NOTE, sections[s]].filter(Boolean).join("\n")
+        : sections[s];
+    return `## ${s}\n\n${body}\n`;
+  }).join("\n");
 }
 
 function parse(markdown: string): BriefSections {
   const sections = emptySections();
-  const headingRe = /^## (Goal|Decided|Open|Files|Notes)\s*$/;
+  const headingRe = /^## (Goal|Decided|Open|Files|Notes|Recent)\s*$/;
   let current: BriefSection | null = null;
   const buffers: Record<BriefSection, string[]> = {
     Goal: [],
@@ -49,6 +66,7 @@ function parse(markdown: string): BriefSections {
     Open: [],
     Files: [],
     Notes: [],
+    Recent: [],
   };
   for (const line of markdown.split("\n")) {
     const m = headingRe.exec(line);
@@ -56,12 +74,25 @@ function parse(markdown: string): BriefSections {
       current = m[1] as BriefSection;
       continue;
     }
+    // RECENT_NOTE is a rendering artifact (added by render(), below),
+    // never part of Recent's actual content — strip it back out here so
+    // readBrief() returns just the real entries.
+    if (current === "Recent" && line === RECENT_NOTE) continue;
     if (current) buffers[current].push(line);
   }
   for (const s of BRIEF_SECTIONS) {
     sections[s] = buffers[s].join("\n").trim();
   }
   return sections;
+}
+
+/** Recent's on-disk entries, one per `- ` bullet, with the machine note stripped — the inverse of what pushRecentEntry writes. */
+function parseRecentEntries(raw: string): string[] {
+  return raw
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && l !== RECENT_NOTE)
+    .map((l) => (l.startsWith("- ") ? l.slice(2) : l));
 }
 
 async function readMeta(metaPath: string): Promise<SectionHashes> {
@@ -72,13 +103,16 @@ async function readMeta(metaPath: string): Promise<SectionHashes> {
   }
 }
 
-/** Creates a brief with empty sections and its meta file. */
+/** Creates a brief with empty sections and its meta file. Recent is never tracked in meta — it's machine-owned and never merge-protected (see pushRecentEntry). */
 export async function createBrief(briefPath: string): Promise<void> {
   await mkdir(dirname(briefPath), { recursive: true });
   const sections = emptySections();
   await writeFile(briefPath, render(sections), "utf-8");
   const meta: SectionHashes = {};
-  for (const s of BRIEF_SECTIONS) meta[s] = hash(sections[s]);
+  for (const s of BRIEF_SECTIONS) {
+    if (s === "Recent") continue;
+    meta[s] = hash(sections[s]);
+  }
   await writeFile(metaPathFor(briefPath), JSON.stringify(meta), "utf-8");
 }
 
@@ -87,8 +121,8 @@ export async function readBrief(briefPath: string): Promise<BriefSections> {
 }
 
 export interface WriteBriefResult {
-  written: BriefSection[];
-  keptUserText: BriefSection[];
+  written: MergeableBriefSection[];
+  keptUserText: MergeableBriefSection[];
 }
 
 /**
@@ -97,22 +131,23 @@ export interface WriteBriefResult {
  * overwritten freely; a section the user has since edited is left alone
  * (the caller's new text for it is discarded) unless the caller's new
  * text is identical to what the system last wrote, in which case there's
- * nothing to do either way.
+ * nothing to do either way. Recent is excluded from this entirely — it's
+ * machine-owned; use `pushRecentEntry` for it instead.
  */
 export async function writeBriefSections(
   briefPath: string,
-  updates: Partial<BriefSections>,
+  updates: Partial<Record<MergeableBriefSection, string>>,
 ): Promise<WriteBriefResult> {
   const current = await readBrief(briefPath);
   const metaPath = metaPathFor(briefPath);
   const meta = await readMeta(metaPath);
 
   const next: BriefSections = { ...current };
-  const written: BriefSection[] = [];
-  const keptUserText: BriefSection[] = [];
+  const written: MergeableBriefSection[] = [];
+  const keptUserText: MergeableBriefSection[] = [];
 
   for (const [section, newText] of Object.entries(updates) as [
-    BriefSection,
+    MergeableBriefSection,
     string,
   ][]) {
     const lastSystemHash = meta[section];
@@ -135,13 +170,39 @@ export async function writeBriefSections(
   return { written, keptUserText };
 }
 
-/** True if every section's current content still matches what the system last wrote (i.e. the user never touched it). */
+/**
+ * Prepends one entry to Recent's rolling window (newest first, capped
+ * at `RECENT_MAX`). No meta/hash check, no merge — unlike every other
+ * section, a user's hand-edit to Recent gets no special preservation:
+ * there's no second source of truth to restore it from (prompt text
+ * lives only in the brief file, never fern.db), so whatever is on disk
+ * when this runs — system-written or hand-typed — is simply treated as
+ * the current rolling window and carried forward until it rolls off.
+ * No-op if `entry` is empty (e.g. a frond created by a direct
+ * `/fern new <name>` with no triggering prompt text yet).
+ */
+export async function pushRecentEntry(
+  briefPath: string,
+  entry: string,
+): Promise<void> {
+  if (!entry) return;
+  const current = await readBrief(briefPath);
+  const existing = parseRecentEntries(current.Recent);
+  const nextEntries = [entry, ...existing].slice(0, RECENT_MAX);
+  const next: BriefSections = {
+    ...current,
+    Recent: nextEntries.map((l) => `- ${l}`).join("\n"),
+  };
+  await writeFile(briefPath, render(next), "utf-8");
+}
+
+/** True if every mergeable section's current content still matches what the system last wrote (i.e. the user never touched it). Recent is excluded — it's machine-owned and rewritten on its own schedule, so its activity alone must never count as "the user touched this brief." */
 export async function isBriefUnmodified(briefPath: string): Promise<boolean> {
   const current = await readBrief(briefPath);
   const meta = await readMeta(metaPathFor(briefPath));
-  return BRIEF_SECTIONS.every(
-    (s) => meta[s] !== undefined && meta[s] === hash(current[s]),
-  );
+  return BRIEF_SECTIONS.filter(
+    (s): s is MergeableBriefSection => s !== "Recent",
+  ).every((s) => meta[s] !== undefined && meta[s] === hash(current[s]));
 }
 
 /**

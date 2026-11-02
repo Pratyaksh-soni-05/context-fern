@@ -45,7 +45,7 @@ test("continue fires when the active frond's score clears continueMin", () => {
   expect(decision.target).toBe("frond-1");
 });
 
-test("new fires when nothing (active or otherwise) clears newMax", () => {
+test("low scores alone, with no positive signal, fall through to continue rather than new", () => {
   const state: RouterState = {
     activeFrondId: "frond-1",
     stemCentroid: null,
@@ -60,8 +60,48 @@ test("new fires when nothing (active or otherwise) clears newMax", () => {
   });
 
   const decision = decide(signals, state, DEFAULT_CONFIG);
+  expect(decision.action).toBe("continue");
+  expect(decision.signals).toContain("fallback-continue-bias");
+});
+
+test("new fires from no-frond-match when backed by real file divergence from the active frond", () => {
+  const state: RouterState = {
+    activeFrondId: "frond-1",
+    stemCentroid: null,
+    stemFiles: [],
+    fronds: { "frond-1": frond("frond-1", "active") },
+  };
+  const signals = baseSignals({
+    frondSignals: [
+      { frondId: "frond-1", cosine: 0.05, fileOverlap: 0, combined: 0.035 },
+    ],
+    mentionedFiles: ["src/unrelated.ts"],
+    isShortQuestion: false,
+  });
+
+  const decision = decide(signals, state, DEFAULT_CONFIG);
   expect(decision.action).toBe("new");
   expect(decision.target).toBeNull();
+  expect(decision.signals).toContain("file-divergence");
+});
+
+test("a short meta-question never fires new from no-frond-match, even with file divergence", () => {
+  const state: RouterState = {
+    activeFrondId: "frond-1",
+    stemCentroid: null,
+    stemFiles: [],
+    fronds: { "frond-1": frond("frond-1", "active") },
+  };
+  const signals = baseSignals({
+    frondSignals: [
+      { frondId: "frond-1", cosine: 0.05, fileOverlap: 0, combined: 0.035 },
+    ],
+    mentionedFiles: ["src/unrelated.ts"],
+    isShortQuestion: true,
+  });
+
+  const decision = decide(signals, state, DEFAULT_CONFIG);
+  expect(decision.action).not.toBe("new");
 });
 
 test("new never fires from no-frond-match alone when there are zero topic fronds, regardless of confidence math", () => {
