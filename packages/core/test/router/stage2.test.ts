@@ -29,6 +29,7 @@ function baseSignals(overrides: Partial<Signals> = {}): Signals {
     frondSignals: [],
     hasCue: { new: false, return: false, stray: false },
     isShortQuestion: false,
+    isConversationMeta: false,
     ...overrides,
   };
 }

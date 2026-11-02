@@ -81,6 +81,24 @@ test("isDaemonRunning detects a stale buildId, stops it, and clears daemon.json"
   expect(await readDaemonInfo()).toBeNull();
 });
 
+test("isDaemonRunning never throws for a fully-stopped daemon with a stale buildId and a dead pid — the exact combination behind a real dogfood incident", async () => {
+  const real = await readDaemonInfo();
+  if (!real) throw new Error("daemon.json not written");
+  await daemon?.stop();
+  daemon = undefined;
+  // The daemon is genuinely down now (no listener on real.port at
+  // all), on top of the stale buildId + dead pid from the test above —
+  // the combination that fell through to commands/fern.md's fallback
+  // during dogfooding instead of replying "daemon starting". Both
+  // isDaemonStale (pure peek) and isDaemonRunning (which also tries
+  // process.kill on the dead pid) must resolve cleanly either way.
+  await writeDaemonInfo({ ...real, buildId: "stale-build-id", pid: 999999 });
+
+  expect(await isDaemonStale()).toBe(true);
+  expect(await isDaemonRunning()).toBeNull();
+  expect(await readDaemonInfo()).toBeNull();
+});
+
 test("isDaemonRunning returns the info for a live daemon and never spawns", async () => {
   const info = await isDaemonRunning();
   expect(info?.port).toBe(daemon?.port ?? -1);

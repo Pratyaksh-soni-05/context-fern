@@ -39,6 +39,24 @@ test("createBrief writes all six empty sections, readBrief round-trips them", as
   expect(await isBriefUnmodified(path)).toBe(true);
 });
 
+test("createBrief is a no-op if a brief already exists at that path — never wipes real content back to blank", async () => {
+  dir = await withTempFernDir();
+  const path = join(dir.path, "greetings.md");
+  await createBrief(path);
+  await writeBriefSections(path, { Goal: "real goal, already set" });
+  await pushRecentEntry(path, "a real prompt");
+
+  // Simulates exactly what a second, duplicate /fern new <existing-name>
+  // used to do before its own guard existed (see docs/decisions.md):
+  // createFrond calling createBrief again, unconditionally, for a name
+  // that already has a populated brief at the same path.
+  await createBrief(path);
+
+  const brief = await readBrief(path);
+  expect(brief.Goal).toBe("real goal, already set");
+  expect(brief.Recent).toBe("- a real prompt");
+});
+
 test("writeBriefSections overwrites a section the user never touched", async () => {
   dir = await withTempFernDir();
   const path = join(dir.path, "auth-refactor.md");
@@ -161,6 +179,22 @@ test("pushRecentEntry prepends newest-first and caps at 5", async () => {
   const brief = await readBrief(path);
   expect(brief.Recent).toBe(
     ["- six", "- five", "- four", "- three", "- two"].join("\n"),
+  );
+});
+
+test("pushRecentEntry collapses a consecutive duplicate instead of filling the window with repeats", async () => {
+  dir = await withTempFernDir();
+  const path = join(dir.path, "docker-build.md");
+  await createBrief(path);
+
+  await pushRecentEntry(path, "fix the login bug");
+  await pushRecentEntry(path, "fix the login bug");
+  await pushRecentEntry(path, "fix the login bug");
+  await pushRecentEntry(path, "add a retry");
+
+  const brief = await readBrief(path);
+  expect(brief.Recent).toBe(
+    ["- add a retry", "- fix the login bug"].join("\n"),
   );
 });
 

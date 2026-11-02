@@ -92,6 +92,8 @@ export interface Signals {
   frondSignals: FrondSignal[];
   hasCue: { new: boolean; return: boolean; stray: boolean };
   isShortQuestion: boolean;
+  /** A short question about the conversation itself ("what were we working on?"), not about any real topic — see docs/decisions.md. */
+  isConversationMeta: boolean;
 }
 
 /**

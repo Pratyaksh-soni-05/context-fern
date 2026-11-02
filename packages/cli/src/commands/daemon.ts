@@ -19,8 +19,9 @@ export async function runDaemon(subcommand: string | undefined): Promise<void> {
     }
     // Only kill if this daemon.json actually still answers — a stale
     // file left behind by a crash could otherwise name a PID the OS has
-    // since recycled for an unrelated process.
-    if (await isAlive(info)) {
+    // since recycled for an unrelated process. Bounded — see doctor.ts's
+    // comment on why an unbounded isAlive() call is a real hang risk.
+    if (await isAlive(info, AbortSignal.timeout(2000))) {
       try {
         process.kill(info.pid);
       } catch {
@@ -38,7 +39,7 @@ export async function runDaemon(subcommand: string | undefined): Promise<void> {
       console.log(`${CLI_NAME} ▸ daemon not running`);
       return;
     }
-    const alive = await isAlive(info);
+    const alive = await isAlive(info, AbortSignal.timeout(2000));
     console.log(
       `${CLI_NAME} ▸ daemon ${alive ? "running" : "not responding"} on 127.0.0.1:${info.port} (pid ${info.pid}, started ${info.startedAt})`,
     );

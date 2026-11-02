@@ -7,6 +7,7 @@ import type { Embedder } from "../types";
 import {
   cosineSimilarity,
   extractFileMentions,
+  isConversationMetaQuestion,
   isShortQuestionForm,
   jaccard,
 } from "./math";
@@ -51,6 +52,10 @@ export async function computeSignals(
       stray: hasAnyCue(prompt, config.cues.stray),
     },
     isShortQuestion: isShortQuestionForm(
+      prompt,
+      config.thresholds.strayMaxPromptWords,
+    ),
+    isConversationMeta: isConversationMetaQuestion(
       prompt,
       config.thresholds.strayMaxPromptWords,
     ),

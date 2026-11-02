@@ -188,6 +188,7 @@ export interface RecordLeafletInput {
 export interface FernStore {
   db: Database;
   createSession(input: CreateSessionInput): Promise<Session>;
+  findSessionByProjectPath(projectPath: string): Promise<Session | null>;
   createFrond(input: CreateFrondInput): Promise<Frond>;
   recordLeaflet(input: RecordLeafletInput): Promise<Leaflet>;
   recordDecision(
@@ -290,6 +291,29 @@ export async function openFernStore(fernDir: string): Promise<FernStore> {
     );
 
     return session;
+  }
+
+  /**
+   * The most recently started session already recorded for this exact
+   * project path, if any — null if none exists yet. Lets a caller
+   * resume an existing session (active frond, fronds, briefs — all
+   * already on disk) across a daemon restart instead of unconditionally
+   * starting a fresh one, which otherwise silently abandons everything
+   * the previous daemon process had open. See docs/decisions.md.
+   */
+  async function findSessionByProjectPath(
+    projectPath: string,
+  ): Promise<Session | null> {
+    // started_at has only millisecond resolution — two sessions created
+    // in the same millisecond (plausible in a fast test, or two rapid
+    // daemon restarts) would otherwise tie; rowid breaks the tie by
+    // true insertion order.
+    const row = db
+      .query(
+        "SELECT * FROM sessions WHERE project_path = ? ORDER BY started_at DESC, rowid DESC LIMIT 1",
+      )
+      .get(projectPath) as SessionRow | null;
+    return row ? sessionRowToSession(row) : null;
   }
 
   async function createFrond(input: CreateFrondInput): Promise<Frond> {
@@ -746,6 +770,7 @@ export async function openFernStore(fernDir: string): Promise<FernStore> {
   return {
     db,
     createSession,
+    findSessionByProjectPath,
     createFrond,
     recordLeaflet,
     recordDecision,

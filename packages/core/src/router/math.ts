@@ -119,6 +119,46 @@ export function isShortQuestionForm(text: string, maxWords: number): boolean {
   return QUESTION_WORDS.includes(first ?? "");
 }
 
+// Phrases checked as substrings (word order/contraction matters, e.g.
+// "were we" vs "we were") — checked before the single-word fallback
+// below so multi-word references are caught even if a word in them
+// (e.g. "far" in "so far") isn't meaningful alone.
+const CONVERSATION_META_PHRASES = [
+  "so far",
+  "this session",
+  "working on",
+  "were we",
+  "did we",
+  "have we",
+  "has it been",
+];
+// Single words checked after stripping punctuation — deliberately just
+// the first-person-plural/session words themselves, not a broader
+// "any question with 'we' in it" rule (which would also catch a real
+// topic like "let's refactor our auth module").
+const CONVERSATION_META_WORDS = new Set(["we", "our", "us", "session"]);
+
+/**
+ * True for a short question that's *about the conversation itself*
+ * ("what were we working on?", "where were we?") rather than about any
+ * real topic — these must never produce a `new`/`stray` suggestion,
+ * however the scores happen to land, since there's no topic content to
+ * evaluate in the first place. Requires question-form (reuses
+ * `isShortQuestionForm`) specifically so this doesn't also catch a
+ * short, non-question statement that happens to contain "we"/"our".
+ * See docs/decisions.md.
+ */
+export function isConversationMetaQuestion(
+  text: string,
+  maxWords: number,
+): boolean {
+  if (!isShortQuestionForm(text, maxWords)) return false;
+  const trimmed = text.trim().toLowerCase();
+  if (CONVERSATION_META_PHRASES.some((p) => trimmed.includes(p))) return true;
+  const words = trimmed.split(/\s+/).map((w) => w.replace(/[^a-z']/g, ""));
+  return words.some((w) => CONVERSATION_META_WORDS.has(w));
+}
+
 // spec §7's "?" prefix: a lone "?" immediately followed by a space, at
 // character 0 of the raw (untrimmed) prompt. Deliberately narrow — "?.."
 // and a bare "?" with nothing after it are real questions, not the stray
@@ -205,7 +245,26 @@ const NAME_STOPWORDS = new Set([
   "whom",
   "which",
   "working",
+  // Generic verbs — "make notes.txt" shouldn't name a frond "make"
+  // any more than "fix the login bug" should drop the actual subject;
+  // these carry no topic information on their own. Added after
+  // dogfooding produced "make-notes-txt" (the verb plus a filename
+  // split on its own dot — see the extension-stripping step below).
+  "make",
+  "add",
+  "fix",
+  "update",
 ]);
+
+// A short list of common file extensions — stripped (with the
+// preceding dot) before tokenizing, so "notes.txt" contributes the
+// word "notes", not two unrelated-looking words "notes" and "txt".
+// Deliberately short and extension-only (not a general dotted-word
+// rule): stripping every "." would also mangle "e.g." or "3.5" in ways
+// that don't matter here, since those were never going to produce a
+// good name anyway.
+const FILE_EXTENSION_RE =
+  /\.(txt|md|json|ya?ml|toml|ts|tsx|js|jsx|py|rs|go|java|c|cpp|h|hpp|css|html|sql|sh|log|csv|lock)\b/gi;
 
 // A line that is itself a fern command — "/fern ..." or bare "fern ..."
 // (e.g. a prompt that's just "fern new greetings") — names nothing about
@@ -255,7 +314,8 @@ export function proposeFrondName(text: string, maxWords = 3): string | null {
   const contentText = text
     .split("\n")
     .filter((line) => !FERN_COMMAND_LINE_RE.test(line.trim()))
-    .join(" ");
+    .join(" ")
+    .replace(FILE_EXTENSION_RE, "");
   const words = (contentText.toLowerCase().match(/[a-z0-9']+/g) ?? [])
     .map((w) => w.replace(/'/g, ""))
     .filter((w) => w.length > 1 && !NAME_STOPWORDS.has(w));

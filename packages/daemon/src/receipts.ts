@@ -60,6 +60,11 @@ export function returnedReceipt(frondName: string, confidence: number): string {
   return `${PREFIX} returned to ${frondName} · ${confidence.toFixed(2)} · ${CMD} undo`;
 }
 
+/** `/fern new <name>` where `<name>` already exists — switched to it instead of creating a duplicate. */
+export function alreadyExistsReceipt(frondName: string): string {
+  return `${PREFIX} ${frondName} already exists · switched`;
+}
+
 export function undoneReceipt(action: string): string {
   return `${PREFIX} undone · ${action} reversed`;
 }

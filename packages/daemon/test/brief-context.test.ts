@@ -55,3 +55,32 @@ test("even with Notes emptied, output over the cap is hard-truncated and still f
   );
   expect(new TextEncoder().encode(text).length).toBeLessThanOrEqual(1024);
 });
+
+test("Recent is trimmed before Notes — a user's own notes outlast machine-generated activity", () => {
+  const text = truncateBriefForContext(
+    sections({
+      Goal: "Ship the router.",
+      Notes: "the user's own investigation notes",
+      Recent: "r".repeat(20_000),
+    }),
+    1024,
+  );
+  expect(text).toContain("## Goal");
+  expect(text).toContain("## Notes");
+  expect(text).toContain("the user's own investigation notes");
+  expect(new TextEncoder().encode(text).length).toBeLessThanOrEqual(1024);
+});
+
+test("Recent alone being emptied is enough when Notes is already small", () => {
+  const text = truncateBriefForContext(
+    sections({
+      Goal: "Ship the router.",
+      Notes: "short note",
+      Recent: "r".repeat(20_000),
+    }),
+    1024,
+  );
+  expect(text).toContain("## Notes");
+  expect(text).toContain("short note");
+  expect(text).not.toContain("short note…(truncated)");
+});

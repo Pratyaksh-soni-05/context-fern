@@ -1,5 +1,7 @@
 # ContextTree build plan
 
+**2026-11-03 note, read this first**: this file is historical. It predates the Context Fern rename (written as ContextTree/`ctree`, branch/trunk — the current, locked vocabulary is fern/frond/stem, `packages/core/src/brand.ts`) and predates spec v0.3. The day-30 gate below (Phase 1) is **resolved, not an open decision**: ReplayBench found that free, local Stage 0+2 routing does not reach a trustworthy auto-routing accuracy, so the plan's own fallback took effect — manual-first routing, shipped in spec v0.3 (`docs/decisions.md`, 2026-10-26). A future session reading this file should not reopen that question; `docs/spec.md` is the current source of truth for scope, and `docs/decisions.md` is the record of what was actually decided and why. Checkboxes below reflect real repo state as of this note, not the original 13-week schedule, which did not hold as written.
+
 Historical plan, written under the working name ContextTree. Current scope: docs/spec.md (v0.2).
 
 Oct 23, 2026 · @maintainer
@@ -191,11 +193,11 @@ Phases 0 and 1 overlap in week 1; gates are amber diamonds and the launch week i
 
 ### Phase 0 · Foundations (week 1, 26 Oct – 1 Nov)
 
-- [ ] Check "ContextTree", `ctree` (npm, Homebrew, PyPI, GitHub) and a domain for collisions; pick the final name.
-- [ ] Create the repo under an org, Apache-2.0, DCO, CODE\_OF\_CONDUCT, SECURITY.md.
-- [ ] Write `CLAUDE.md`, `docs/spec.md`, `docs/architecture.md` from the starter kit.
-- [ ] Monorepo scaffold, Biome, strict TypeScript, `bun test`, CI.
-- [ ] Transcript scrubber (secrets, emails, paths, keys) and collect 50+ of our own Claude Code sessions.
+- [x] Check "ContextTree", `ctree` (npm, Homebrew, PyPI, GitHub) and a domain for collisions; pick the final name. — done as "Context Fern" / `fern`, locked in `packages/core/src/brand.ts`.
+- [x] Create the repo under an org, Apache-2.0, DCO, CODE\_OF\_CONDUCT, SECURITY.md. — `LICENSE`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `CONTRIBUTING.md` all exist at the repo root.
+- [x] Write `CLAUDE.md`, `docs/spec.md`, `docs/architecture.md` from the starter kit.
+- [x] Monorepo scaffold, Biome, strict TypeScript, `bun test`, CI. — `.github/workflows/ci.yml`.
+- [ ] Transcript scrubber (secrets, emails, paths, keys) and collect 50+ of our own Claude Code sessions. — the scrubber shipped (`bench/src/bench/scrub.py`, tested); collecting 50+ real sessions isn't confirmed done.
 
 ```text
 Read CLAUDE.md and docs/spec.md. Enter plan mode. Scaffold the monorepo exactly as
@@ -209,10 +211,10 @@ lint, types and tests. Do not add dependencies beyond those named in the spec.
 
 ### Phase 1 · ReplayBench v0 and router prototype (weeks 1–3, to 15 Nov)
 
-- [ ] Splicer that interleaves independent sessions into streams with known branch IDs (hard cuts, cue phrases, returns at varying distance, a combine set).
-- [ ] Router Stage 0: explicit cues, file-path overlap from tool calls, embedding similarity to branch centroids.
-- [ ] Router Stage 2: LLM adjudicator for uncertain turns only, on the user's key.
-- [ ] Metrics: per-turn action accuracy, F1 for new and return, over-carry rate, escalation rate, p50 and p95 latency.
+- [x] Splicer that interleaves independent sessions into streams with known branch IDs (hard cuts, cue phrases, returns at varying distance, a combine set).
+- [x] Router Stage 0: explicit cues, file-path overlap from tool calls, embedding similarity to branch centroids. — `packages/core/src/router`.
+- [x] Router Stage 2: LLM adjudicator for uncertain turns only, on the user's key. — ships local-only (Ollama), disabled by default; see `docs/decisions.md`.
+- [x] Metrics: per-turn action accuracy, F1 for new and return, over-carry rate, escalation rate, p50 and p95 latency. — `bench/results/day30-report.md`.
 
 ```text
 Implement bench/splice.py per docs/spec.md §ReplayBench. Write tests first with three
@@ -222,16 +224,16 @@ between the two thresholds in config. Thresholds are placeholders; do not tune t
 Expose a CLI `ctree route --replay <file>` that prints one JSON line per turn.
 ```
 
-**Gate (day 30):** Stage 0 + Stage 2 reach at least 0.85 F1 on new branches with no more than 10% escalation. If not, drop automatic routing and continue with manual `/ct` commands plus compaction-safe briefs only.
+**Gate (day 30) — resolved, see the note at the top of this file:** Stage 0 + Stage 2 reach at least 0.85 F1 on new branches with no more than 10% escalation. If not, drop automatic routing and continue with manual `/ct` commands plus compaction-safe briefs only. **The gate did not pass**; the fallback is what shipped — manual-first routing, spec v0.3, `docs/decisions.md` 2026-10-26. Do not reopen this.
 
 ### Phase 2 · Daemon, plugin and the visual layer (weeks 4–7, 16 Nov – 6 Dec)
 
-- [ ] `store`: SQLite schema (sessions, branches, turns, decisions), markdown mirror, append-only journal.
-- [ ] `daemon`: localhost service the hooks call; observe and suggest modes.
-- [ ] `plugin-claude-code`: UserPromptSubmit, SessionStart, PreCompact hooks; `/ct new|switch|undo|merge|status`; statusline; MCP tools `branch_list`, `branch_search`, `branch_recall`.
-- [ ] `cli`: `ctree status`, `ctree tree`, `ctree undo`.
-- [ ] Week 5 is design week: tokens, the three-pane layout, the context lens, the session card, reviewed as static mock-ups before UI code.
-- [ ] Weeks 6–7: `ctree ui` built from the approved mock-ups; `ctree export --png`.
+- [x] `store`: SQLite schema (sessions, branches, turns, decisions), markdown mirror, append-only journal. — `packages/store`.
+- [x] `daemon`: localhost service the hooks call; observe and suggest modes. — `packages/daemon` (isolate mode's proxy is not built; see Phase 3 below).
+- [x] `plugin-claude-code`: hooks, `/fern` commands, statusline, MCP tools — shipped under the current `fern`/frond naming, not the `/ct`/`branch_*` names drafted here. `packages/plugin-claude-code`.
+- [x] `cli`: `fern status`, `fern tree`, `fern undo` (and more). — `packages/cli`.
+- [x] Week 5 is design week: tokens, the three-pane layout, the context lens, the session card, reviewed as static mock-ups before UI code. — `docs/design/DESIGN.md`, `docs/design/tokens.css`, `docs/design/blueprint/`.
+- [ ] Weeks 6–7: `ctree ui` built from the approved mock-ups; `ctree export --png`. — `packages/ui` is still a scaffold, no real UI built yet.
 - [ ] Private beta opens at the end of week 7 with 30–50 Claude Code users.
 
 ```text
@@ -339,7 +341,7 @@ The biggest risk is Anthropic building automatic topic routing into Claude Code;
 
 **Decisions to make before week 1**
 
-- [ ] Final name and domain, after a collision check (can wait until Phase 4).
+- [x] Final name and domain, after a collision check (can wait until Phase 4). — name decided: Context Fern / `fern`.
 - [ ] Final numbers for the three gates (the plan's numbers are drafts).
 - [ ] Whether beta users' transcripts may be donated to ReplayBench, and the consent wording.
 - [ ] Whether to notarise macOS and sign Windows binaries at launch (small cost, fewer install warnings).

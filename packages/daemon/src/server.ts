@@ -205,13 +205,16 @@ async function route(
   if (req.method === "POST" && pathname === "/prompt") {
     const body = await readJsonBody(req);
     const state = await projectFromBody(body);
-    updateAgentSessionId(
-      state,
-      typeof body.agentSessionId === "string" ? body.agentSessionId : undefined,
-    );
     const prompt = typeof body.prompt === "string" ? body.prompt : "";
+    // handlePrompt itself compares this against the project's current
+    // lastAgentSessionId (and updates it) — the comparison has to
+    // happen there, before it's overwritten, to detect "first prompt
+    // after a resume/clear/compaction/fork" and attach a restored
+    // receipt. See docs/decisions.md.
+    const agentSessionId =
+      typeof body.agentSessionId === "string" ? body.agentSessionId : undefined;
     const result = await withProjectLock(state, (s) =>
-      handlePrompt(s, embedder, prompt),
+      handlePrompt(s, embedder, prompt, agentSessionId),
     );
     return jsonResponse({ ok: true, ...result });
   }
@@ -269,7 +272,10 @@ async function route(
   if (req.method === "GET" && pathname === "/status") {
     const state = await projectFromQuery(url);
     updateAgentSessionId(state, url.searchParams.get("agentSessionId"));
-    const result = await withProjectLock(state, (s) => handleStatus(s));
+    const markRestored = url.searchParams.get("restored") === "true";
+    const result = await withProjectLock(state, (s) =>
+      handleStatus(s, markRestored),
+    );
     return jsonResponse({ ok: true, ...result });
   }
 

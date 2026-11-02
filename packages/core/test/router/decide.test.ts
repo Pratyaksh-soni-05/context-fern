@@ -11,8 +11,9 @@ import type {
 function frond(
   id: string,
   status: "active" | "resting" = "resting",
+  count = 3,
 ): FrondState {
-  return { id, centroid: [1, 0], count: 3, files: [], status };
+  return { id, centroid: [1, 0], count, files: [], status };
 }
 
 function baseSignals(overrides: Partial<Signals> = {}): Signals {
@@ -23,6 +24,7 @@ function baseSignals(overrides: Partial<Signals> = {}): Signals {
     frondSignals: [],
     hasCue: { new: false, return: false, stray: false },
     isShortQuestion: false,
+    isConversationMeta: false,
     ...overrides,
   };
 }
@@ -102,6 +104,122 @@ test("a short meta-question never fires new from no-frond-match, even with file 
 
   const decision = decide(signals, state, DEFAULT_CONFIG);
   expect(decision.action).not.toBe("new");
+});
+
+test("new never fires from no-frond-match against a still-forming active frond (fewer than 3 leaflets), even with file divergence", () => {
+  const state: RouterState = {
+    activeFrondId: "frond-1",
+    stemCentroid: null,
+    stemFiles: [],
+    fronds: { "frond-1": frond("frond-1", "active", 1) },
+  };
+  const signals = baseSignals({
+    frondSignals: [
+      { frondId: "frond-1", cosine: 0.05, fileOverlap: 0, combined: 0.035 },
+    ],
+    mentionedFiles: ["src/unrelated.ts"],
+    isShortQuestion: false,
+  });
+
+  const decision = decide(signals, state, DEFAULT_CONFIG);
+  expect(decision.action).not.toBe("new");
+});
+
+test("stray never fires heuristically against a still-forming active frond", () => {
+  const state: RouterState = {
+    activeFrondId: "frond-1",
+    stemCentroid: null,
+    stemFiles: [],
+    fronds: { "frond-1": frond("frond-1", "active", 0) },
+  };
+  const signals = baseSignals({
+    stemCosine: 0.02,
+    frondSignals: [
+      { frondId: "frond-1", cosine: 0.03, fileOverlap: 0, combined: 0.021 },
+    ],
+    mentionedFiles: [],
+    isShortQuestion: true,
+  });
+
+  const decision = decide(signals, state, DEFAULT_CONFIG);
+  expect(decision.action).not.toBe("stray");
+});
+
+test("a mature active frond (3+ leaflets) is unaffected by the forming guard — the existing new/stray paths still fire", () => {
+  const matureState: RouterState = {
+    activeFrondId: "frond-1",
+    stemCentroid: null,
+    stemFiles: [],
+    fronds: { "frond-1": frond("frond-1", "active", 3) },
+  };
+  const newSignals = baseSignals({
+    frondSignals: [
+      { frondId: "frond-1", cosine: 0.05, fileOverlap: 0, combined: 0.035 },
+    ],
+    mentionedFiles: ["src/unrelated.ts"],
+  });
+  expect(decide(newSignals, matureState, DEFAULT_CONFIG).action).toBe("new");
+});
+
+test("new from no-frond-match still fires while sitting on the stem (no active frond at all) with other fronds existing — the forming guard must not apply when there's no active frond to judge", () => {
+  const state: RouterState = {
+    activeFrondId: null,
+    stemCentroid: null,
+    stemFiles: [],
+    fronds: { "frond-1": frond("frond-1", "resting", 5) },
+  };
+  const signals = baseSignals({
+    frondSignals: [
+      { frondId: "frond-1", cosine: 0.05, fileOverlap: 0, combined: 0.035 },
+    ],
+    mentionedFiles: ["src/unrelated.ts"],
+  });
+
+  const decision = decide(signals, state, DEFAULT_CONFIG);
+  expect(decision.action).toBe("new");
+});
+
+test("a conversation-meta question never produces a suggestion, even when scores would otherwise support one", () => {
+  const state: RouterState = {
+    activeFrondId: "frond-1",
+    stemCentroid: null,
+    stemFiles: [],
+    fronds: { "frond-1": frond("frond-1", "active") },
+  };
+  const signals = baseSignals({
+    stemCosine: 0.02,
+    frondSignals: [
+      { frondId: "frond-1", cosine: 0.03, fileOverlap: 0, combined: 0.021 },
+    ],
+    mentionedFiles: [],
+    isShortQuestion: true,
+    isConversationMeta: true,
+  });
+
+  const decision = decide(signals, state, DEFAULT_CONFIG);
+  expect(decision.action).toBe("continue");
+  expect(decision.signals).toContain("conversation-meta-question");
+});
+
+test("no suggestion's confidence is ever exactly 1.00 — the degenerate all-zero-scores case that used to produce it is capped", () => {
+  const state: RouterState = {
+    activeFrondId: "frond-1",
+    stemCentroid: null,
+    stemFiles: [],
+    fronds: { "frond-1": frond("frond-1", "active") },
+  };
+  const signals = baseSignals({
+    frondSignals: [
+      { frondId: "frond-1", cosine: 0, fileOverlap: 0, combined: 0 },
+    ],
+    mentionedFiles: ["src/unrelated.ts"],
+    hasCue: { new: true, return: false, stray: false },
+  });
+
+  const decision = decide(signals, state, DEFAULT_CONFIG);
+  expect(decision.action).toBe("new");
+  expect(decision.confidence).toBeLessThan(1);
+  expect(decision.confidence).toBeLessThanOrEqual(0.95);
 });
 
 test("new never fires from no-frond-match alone when there are zero topic fronds, regardless of confidence math", () => {

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   cosineSimilarity,
   extractFileMentions,
+  isConversationMetaQuestion,
   isShortQuestionForm,
   isValidFrondName,
   jaccard,
@@ -78,6 +79,28 @@ test("isShortQuestionForm: long prompts or statements are false", () => {
   ).toBe(false);
 });
 
+test("isConversationMetaQuestion: true for realistic phrasings that refer to the conversation itself, not a real topic", () => {
+  expect(isConversationMetaQuestion("what were we working on?", 12)).toBe(true);
+  expect(isConversationMetaQuestion("where were we?", 12)).toBe(true);
+  expect(isConversationMetaQuestion("what did we do so far?", 12)).toBe(true);
+  expect(isConversationMetaQuestion("how's this session going?", 12)).toBe(
+    true,
+  );
+  expect(isConversationMetaQuestion("what have we been doing?", 12)).toBe(true);
+});
+
+test("isConversationMetaQuestion: false for a real topic, even a short one, and false for a long prompt", () => {
+  expect(isConversationMetaQuestion("let's refactor our auth module", 12)).toBe(
+    false,
+  );
+  expect(isConversationMetaQuestion("what's the weather like today?", 12)).toBe(
+    false,
+  );
+  const long =
+    "what were we working on in this session so far, roughly speaking, over the last few days";
+  expect(isConversationMetaQuestion(long, 12)).toBe(false);
+});
+
 test("parseStrayPrefix: '? ' at the very start strips the prefix and any extra whitespace", () => {
   expect(parseStrayPrefix("? side question about X")).toEqual({
     isStray: true,
@@ -125,7 +148,7 @@ test("proposeFrondName: picks the first non-stopword content words, kebab-cased"
     "set-docker-build",
   );
   expect(proposeFrondName("can you fix the flaky login test")).toBe(
-    "fix-flaky-login",
+    "flaky-login-test",
   );
 });
 
@@ -141,16 +164,14 @@ test("proposeFrondName: returns null (never a generic placeholder) when nothing 
 });
 
 test("proposeFrondName: skips lines that are themselves a slash command", () => {
-  expect(proposeFrondName("/fern status\nfix the login bug")).toBe(
-    "fix-login-bug",
-  );
+  expect(proposeFrondName("/fern status\nfix the login bug")).toBe("login-bug");
   expect(proposeFrondName("/fern new something")).toBeNull();
 });
 
 test("proposeFrondName: skips lines that are a bare fern command, no leading slash", () => {
   expect(proposeFrondName("fern new greetings")).toBeNull();
   expect(proposeFrondName("fern new greetings\nfix the login bug")).toBe(
-    "fix-login-bug",
+    "login-bug",
   );
   // "fernando" etc. must not false-match on the CLI name as a prefix.
   expect(proposeFrondName("fernando fixed the login bug")).toBe(
@@ -167,8 +188,14 @@ test("proposeFrondName: drops interrogatives, never proposing a name from a ques
 
 test("proposeFrondName: strips punctuation and apostrophes", () => {
   expect(proposeFrondName("fix the broken token's refresh!!")).toBe(
-    "fix-broken-tokens",
+    "broken-tokens-refresh",
   );
+});
+
+test("proposeFrondName: drops generic verbs and file extensions", () => {
+  expect(proposeFrondName("make notes.txt")).toBe("notes");
+  expect(proposeFrondName("add the config.yaml file")).toBe("config-file");
+  expect(proposeFrondName("update readme.md please")).toBe("readme");
 });
 
 test("proposeFrondName's own output always satisfies isValidFrondName", () => {

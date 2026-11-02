@@ -29,6 +29,7 @@ import {
   type PendingExchange,
   type ProjectState,
   refreshFrondNames,
+  updateAgentSessionId,
 } from "./project-registry";
 import {
   approxTokenCount,
@@ -37,6 +38,7 @@ import {
   hashPrompt,
 } from "./prompt-util";
 import {
+  alreadyExistsReceipt,
   mergedReceipt,
   newSuggestionReceipt,
   onFrondReceipt,
@@ -90,8 +92,14 @@ async function nextColorIndex(state: ProjectState): Promise<number> {
  * edit to either section is always kept over this. Recent (the last 5
  * prompts, newest first) is machine-owned — it's updated via its own
  * `pushRecentEntry`, never through the merge path, every time there's
- * real prompt text, independent of whether Goal was already set. Never
- * applied to the stem, which has no topic of its own.
+ * real prompt text, independent of whether Goal was already set.
+ *
+ * Applies to the stem exactly as it does to any topic frond — most
+ * users never run `/fern new` at all, so the stem *is* their only
+ * brief, and dogfooding found it permanently empty because an earlier
+ * version of this function skipped it outright. The stem's touched
+ * files live in `RouterState.stemFiles`, not `fronds[id]` (which only
+ * holds topic fronds), so that's read separately.
  */
 async function fillBriefDeterministically(
   state: ProjectState,
@@ -99,10 +107,11 @@ async function fillBriefDeterministically(
   briefPath: string,
   promptText: string,
 ): Promise<void> {
-  if (frondId === state.stemFrondId) return;
-
   const updates: Partial<Record<MergeableBriefSection, string>> = {};
-  const files = state.routerState.fronds[frondId]?.files ?? [];
+  const files =
+    frondId === state.stemFrondId
+      ? state.routerState.stemFiles
+      : (state.routerState.fronds[frondId]?.files ?? []);
   if (files.length > 0) updates.Files = files.join("\n");
 
   const goalCandidate = firstLine(promptText, 140);
@@ -233,6 +242,20 @@ async function applyManualNew(
     throw new DaemonError(
       `"${frondName}" isn't a valid frond name — use lowercase letters, digits, and hyphens only.`,
     );
+  }
+
+  // Creating a frond whose name already exists must not create a
+  // second one — dogfooding found "/fern new greetings" typed twice
+  // produced two fronds named "greetings". Switch to the existing one
+  // instead, same mechanics as /fern switch, just with a receipt that
+  // says what actually happened.
+  const existingFronds = await state.store.listFronds(state.sessionId);
+  const existing = existingFronds.find(
+    (f) => f.name === frondName && f.parentId !== null && f.status !== "merged",
+  );
+  if (existing) {
+    const switched = await applyManualSwitch(state, frondName);
+    return { ...switched, receipt: alreadyExistsReceipt(frondName) };
   }
 
   const exchange = state.pendingExchange;
@@ -578,11 +601,50 @@ async function buildFocusNote(
   return `Active frond: ${frond.name}${goalPart} · brief: ${relBriefPath}`;
 }
 
+/**
+ * SessionStart's own `systemMessage` for a restore is model-only risk
+ * territory: whether Claude Code's interactive TUI actually surfaces a
+ * SessionStart hook's `systemMessage` to the user couldn't be confirmed
+ * from this sandbox (no real interactive session to test against —
+ * `claude -p` can't trigger a `/clear` mid-session at all). So this is
+ * a deliberate belt-and-suspenders duplicate, not a replacement: the
+ * very first `/prompt` call under a new agent session id (the
+ * `UserPromptSubmit` right after a resume/clear/compaction/fork) also
+ * gets this receipt prepended to its own, already-guaranteed-visible
+ * reply. See docs/decisions.md.
+ */
+function restoredReceiptText(frondName: string, fileCount: number): string {
+  const filesPart = fileCount > 0 ? ` · ${fileCount} files` : "";
+  return `${CLI_NAME} ▸ restored ${frondName} · brief${filesPart}`;
+}
+
 export async function handlePrompt(
   state: ProjectState,
   embedder: Embedder,
   promptText: string,
+  agentSessionId?: string,
 ): Promise<PromptResult> {
+  // Captured before updateAgentSessionId overwrites it — null only on
+  // this project's very first /prompt call ever (nothing to "restore"
+  // then); any other change is a real resume/clear/compaction/fork
+  // boundary, even though the underlying fern session itself never
+  // resets (see project-registry.ts's module doc).
+  const previousAgentSessionId = state.lastAgentSessionId;
+  updateAgentSessionId(state, agentSessionId);
+  // ORed with pendingRestoreReceipt (set by SessionStart's own restore
+  // call, cleared below) — that flag is the authoritative signal, tied
+  // directly to a real SessionStart firing, independent of whether
+  // Claude Code happens to mint a new agentSessionId across a
+  // resume/clear/compaction/fork (not confirmed either way; see
+  // docs/decisions.md). The agentSessionId comparison stays as a second,
+  // redundant trigger in case SessionStart's own call never reached the
+  // daemon at all (a down daemon, a dropped request).
+  const isFirstPromptAfterRestore =
+    (previousAgentSessionId !== null &&
+      state.lastAgentSessionId !== previousAgentSessionId) ||
+    state.pendingRestoreReceipt;
+  state.pendingRestoreReceipt = false;
+
   // Manual commands get first access to whatever exchange is still
   // pending — accepting a suggestion (bare /fern new|switch) or a bare
   // /fern stray must be able to reclassify the prompt that produced it
@@ -614,7 +676,26 @@ export async function handlePrompt(
   }
 
   const focusNote = await buildFocusNote(state);
-  return focusNote !== undefined ? { ...result, focusNote } : result;
+  if (focusNote !== undefined) result = { ...result, focusNote };
+
+  if (isFirstPromptAfterRestore) {
+    // Works exactly the same on the stem as on any topic frond — most
+    // users never run /fern new at all, so the stem is their only
+    // brief, and it deserves the same visible restore as a real frond.
+    const targetId = state.routerState.activeFrondId ?? state.stemFrondId;
+    const frondName = state.frondNames.get(targetId) ?? "stem";
+    const fileCount =
+      targetId === state.stemFrondId
+        ? state.routerState.stemFiles.length
+        : (state.routerState.fronds[targetId]?.files.length ?? 0);
+    const restored = restoredReceiptText(frondName, fileCount);
+    result = {
+      ...result,
+      receipt: result.receipt ? `${restored}\n${result.receipt}` : restored,
+    };
+  }
+
+  return result;
 }
 
 export async function handleUndo(

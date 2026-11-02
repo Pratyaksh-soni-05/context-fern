@@ -25,6 +25,7 @@ function row(overrides: Partial<OracleRow>): OracleRow {
       frondSignals: [],
       hasCue: { new: false, return: false, stray: false },
       isShortQuestion: false,
+      isConversationMeta: false,
     },
     activeFrondId: "session-a",
     hasAnyFrond: true,
@@ -111,6 +112,7 @@ test("minimalState reconstructs enough shape for decide() to see the active fron
       ],
       hasCue: { new: false, return: false, stray: false },
       isShortQuestion: false,
+      isConversationMeta: false,
     },
   });
   const decision = predictRow(r, DEFAULT_CONFIG);
@@ -132,6 +134,7 @@ test("predictRow's predicted_branch_id is the oracle frond id directly (no mappi
       ],
       hasCue: { new: false, return: false, stray: false },
       isShortQuestion: false,
+      isConversationMeta: false,
     },
   });
   const prediction = predictRow(r, DEFAULT_CONFIG);
@@ -194,6 +197,7 @@ test("gridSearch returns a threshold set and its metrics, not just a bare number
         ],
         hasCue: { new: false, return: false, stray: false },
         isShortQuestion: false,
+        isConversationMeta: false,
       },
     }),
   ];

@@ -51,7 +51,14 @@ export async function runDoctor(): Promise<void> {
   const lines: string[] = [];
 
   const info = await readDaemonInfo();
-  const daemonOk = info ? await isAlive(info) : false;
+  // Bounded — an unbounded fetch() here can hang well past any
+  // reasonable CLI wait if daemon.json names a port nothing valid is
+  // listening on (dogfooding found `fern doctor` printing nothing at
+  // all on Windows, almost certainly this exact call with no timeout
+  // at all). See docs/decisions.md.
+  const daemonOk = info
+    ? await isAlive(info, AbortSignal.timeout(2000))
+    : false;
   lines.push(
     `daemon: ${daemonOk ? "ok" : `not running — run "${CLI_NAME} daemon start"`}`,
   );

@@ -143,10 +143,136 @@ test("session-start.ts exits 0 with an empty result on startup", async () => {
   expect(JSON.parse(res.stdout)).toEqual({});
 }, 15_000);
 
+test("statusline.ts prints the exact spec format ('fern ▸ <frond> · <n> fronds · <s> strays'), reading cwd from stdin JSON like Claude Code's real statusLine protocol", async () => {
+  await runScript("user-prompt-submit.ts", {
+    ...loadFixture("user-prompt-submit.fern-command.json"),
+    cwd: projectDir,
+    prompt: "/fern new greetings",
+  });
+
+  const entrypoint = join(import.meta.dir, "../scripts/statusline.ts");
+  const proc = Bun.spawn({
+    cmd: ["bun", "run", entrypoint],
+    env: { ...process.env, FERN_HOME: fakeHome },
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  // The real protocol: JSON session data on stdin, including cwd —
+  // confirmed against the current docs, see docs/decisions.md.
+  proc.stdin.write(JSON.stringify({ session_id: "s1", cwd: projectDir }));
+  await proc.stdin.end();
+  const [stdout, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    proc.exited,
+  ]);
+
+  expect(exitCode).toBe(0);
+  expect(stdout.trim()).toBe(`${CLI_NAME} ▸ greetings · 1 fronds · 0 strays`);
+}, 15_000);
+
 // fern-command.ts's only remaining job: report that the hook didn't run,
 // plus daemon status — it takes no argv besides the fixed "--fallback"
 // literal commands/fern.md invokes it with (see docs/decisions.md on why
 // the old argument-passing design was removed rather than hardened).
+test("true end-to-end: real spawned UserPromptSubmit -> PostToolUse -> Stop subprocesses fill the brief on disk, read directly from the filesystem", async () => {
+  // Every piece here is a real OS process talking to a real (if
+  // FakeEmbedder-backed) daemon over real HTTP — not an in-process
+  // function call — specifically because an earlier round's brief-fill
+  // tests all passed this way while the real, interactive flow still
+  // left the brief empty (see docs/decisions.md): a real duplicate
+  // /fern new wiped it back to blank, a bug no in-process test ever
+  // exercised the code path for.
+  const created = await runScript("user-prompt-submit.ts", {
+    ...loadFixture("user-prompt-submit.fern-command.json"),
+    cwd: projectDir,
+    prompt: "/fern new greetings",
+  });
+  expect(created.exitCode).toBe(0);
+  expect(JSON.parse(created.stdout).reason).toContain("fern ▸ on greetings");
+
+  const prompt1 = await runScript("user-prompt-submit.ts", {
+    ...loadFixture("user-prompt-submit.plain.json"),
+    cwd: projectDir,
+    prompt: "lets wire up a friendly hello world greeting page",
+  });
+  expect(prompt1.exitCode).toBe(0);
+
+  const touched = await runScript("post-tool-use.ts", {
+    ...loadFixture("post-tool-use.read.json"),
+    cwd: projectDir,
+    tool_name: "Write",
+    tool_input: { file_path: join(projectDir, "index.html"), content: "x" },
+  });
+  expect(touched.exitCode).toBe(0);
+
+  const stop1 = await runScript("stop.ts", {
+    ...loadFixture("stop.json"),
+    cwd: projectDir,
+  });
+  expect(stop1.exitCode).toBe(0);
+
+  // A second real prompt + Stop — finalizeExchange runs defensively at
+  // the top of the next /prompt too, but going through the real
+  // UserPromptSubmit -> Stop pair again is what the dogfood session
+  // actually did ("4 prompts"), so that's what this exercises.
+  const prompt2 = await runScript("user-prompt-submit.ts", {
+    ...loadFixture("user-prompt-submit.plain.json"),
+    cwd: projectDir,
+    prompt: "now add some css styling",
+  });
+  expect(prompt2.exitCode).toBe(0);
+  const stop2 = await runScript("stop.ts", {
+    ...loadFixture("stop.json"),
+    cwd: projectDir,
+  });
+  expect(stop2.exitCode).toBe(0);
+
+  const briefPath = join(projectDir, ".fern", "fronds", "greetings.md");
+  const briefText = readFileSync(briefPath, "utf-8");
+  expect(briefText).toContain(
+    "lets wire up a friendly hello world greeting page",
+  );
+  expect(briefText).toContain("index.html");
+  expect(briefText).toContain("now add some css styling");
+}, 20_000);
+
+test("true end-to-end regression: a real duplicate '/fern new greetings' never wipes the real content already there", async () => {
+  await runScript("user-prompt-submit.ts", {
+    ...loadFixture("user-prompt-submit.fern-command.json"),
+    cwd: projectDir,
+    prompt: "/fern new greetings",
+  });
+  await runScript("user-prompt-submit.ts", {
+    ...loadFixture("user-prompt-submit.plain.json"),
+    cwd: projectDir,
+    prompt: "lets wire up a friendly hello world greeting page",
+  });
+  await runScript("stop.ts", {
+    ...loadFixture("stop.json"),
+    cwd: projectDir,
+  });
+
+  const briefPath = join(projectDir, ".fern", "fronds", "greetings.md");
+  expect(readFileSync(briefPath, "utf-8")).toContain(
+    "lets wire up a friendly hello world greeting page",
+  );
+
+  // The exact dogfood sequence: typing "/fern new greetings" again,
+  // once real content already exists.
+  const duplicate = await runScript("user-prompt-submit.ts", {
+    ...loadFixture("user-prompt-submit.fern-command.json"),
+    cwd: projectDir,
+    prompt: "/fern new greetings",
+  });
+  expect(JSON.parse(duplicate.stdout).reason).toBe(
+    "fern ▸ greetings already exists · switched",
+  );
+  expect(readFileSync(briefPath, "utf-8")).toContain(
+    "lets wire up a friendly hello world greeting page",
+  );
+}, 20_000);
+
 test("fern-command.ts --fallback reports the hook didn't run, plus daemon status", async () => {
   const entrypoint = join(import.meta.dir, "../scripts/fern-command.ts");
   const proc = Bun.spawn({

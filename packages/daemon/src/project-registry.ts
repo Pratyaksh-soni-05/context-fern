@@ -57,6 +57,8 @@ export interface ProjectState {
   mode: Mode;
   /** The Claude Code hook session_id last seen for this project, if any. Bookkeeping only — the fern session itself already outlives /clear and compaction; this just stops the field from going stale. */
   lastAgentSessionId: string | null;
+  /** Set by SessionStart's own restore call (via /status's `restored` flag), cleared by the next /prompt, which attaches the restored receipt then — a signal independent of whether Claude Code happens to mint a new agentSessionId across a resume/clear/compaction/fork, which isn't confirmed either way. See docs/decisions.md. */
+  pendingRestoreReceipt: boolean;
   /** Serializes every request for this project — see withProjectLock. */
   lock: Promise<unknown>;
 }
@@ -69,11 +71,22 @@ async function openProject(projectPath: string): Promise<ProjectState> {
   const config = await loadFernConfig(join(fernDir, "config.toml")).catch(() =>
     mergeConfig(),
   );
-  const session = await store.createSession({
-    agent: `${CLI_NAME}-daemon`,
-    projectPath,
-    mode: "suggest",
-  });
+  // Resume the most recent existing session for this exact path, if
+  // one's already on disk, rather than unconditionally starting a
+  // fresh one — this is the one thing that makes a daemon restart (a
+  // crash, a version-check self-heal, a machine reboot) not silently
+  // abandon whatever frond was active, found and fixed during
+  // dogfooding: every getOrOpenProject cache-miss used to insert a
+  // brand-new session with a brand-new empty stem, even when a real,
+  // populated session for this exact path already existed. See
+  // docs/decisions.md.
+  const session =
+    (await store.findSessionByProjectPath(projectPath)) ??
+    (await store.createSession({
+      agent: `${CLI_NAME}-daemon`,
+      projectPath,
+      mode: "suggest",
+    }));
   const routerState = await store.loadRouterState(session.id);
   const { fronds } = await store.getTree(session.id);
   const stem = fronds.find((f) => f.parentId === null);
@@ -92,6 +105,7 @@ async function openProject(projectPath: string): Promise<ProjectState> {
     pendingSuggestion: null,
     mode: session.mode,
     lastAgentSessionId: null,
+    pendingRestoreReceipt: false,
     lock: Promise.resolve(),
   };
 }

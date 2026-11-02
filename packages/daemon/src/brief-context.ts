@@ -1,8 +1,9 @@
 // Caps a brief at ~8KB before it's injected into the model's context (at
 // SessionStart, or via /status) — a full brief is for the user; the
-// model gets a bounded slice. Notes (freeform scratch) is truncated
-// first, since Goal/Decided/Open/Files carry the load-bearing facts a
-// resumed session actually needs — see docs/decisions.md.
+// model gets a bounded slice. Recent (machine-generated, regenerated
+// every turn anyway) is shrunk first, then Notes (the user's own
+// freeform scratch) — Goal/Decided/Open/Files carry the load-bearing
+// facts a resumed session actually needs. See docs/decisions.md.
 
 import { BRIEF_SECTIONS, type BriefSections } from "@context-fern/store";
 
@@ -32,6 +33,23 @@ function truncateToBytes(text: string, maxBytes: number): string {
   return `${text.slice(0, end)}${ELLIPSIS}`;
 }
 
+/** Shrinks `sections[key]` (re-rendering the whole thing each step, since heading/join overhead varies with content) until the total fits, or it's empty. Returns the fitting candidate text, or null if emptying this section alone wasn't enough. */
+function shrinkSection(
+  sections: BriefSections,
+  key: "Recent" | "Notes",
+  maxBytes: number,
+): { candidate: string; fits: boolean } {
+  let text = sections[key];
+  let candidate = renderSections({ ...sections, [key]: text });
+  while (byteLength(candidate) > maxBytes && text.length > 0) {
+    const shrinkBy = Math.max(1, Math.floor(text.length * 0.1));
+    text = text.slice(0, Math.max(0, text.length - shrinkBy));
+    const withEllipsis = text.length > 0 ? `${text}${ELLIPSIS}` : "";
+    candidate = renderSections({ ...sections, [key]: withEllipsis });
+  }
+  return { candidate, fits: byteLength(candidate) <= maxBytes };
+}
+
 export function truncateBriefForContext(
   sections: BriefSections,
   maxBytes: number = DEFAULT_MAX_BYTES,
@@ -39,21 +57,19 @@ export function truncateBriefForContext(
   const full = renderSections(sections);
   if (byteLength(full) <= maxBytes) return full;
 
-  // Shrink Notes first, measuring the real rendered total each step (the
-  // "## Notes" heading and section-join overhead vary with content, so
-  // this re-renders rather than pre-computing a byte budget).
-  let notesText = sections.Notes;
-  let candidate = renderSections({ ...sections, Notes: notesText });
-  while (byteLength(candidate) > maxBytes && notesText.length > 0) {
-    const shrinkBy = Math.max(1, Math.floor(notesText.length * 0.1));
-    notesText = notesText.slice(0, Math.max(0, notesText.length - shrinkBy));
-    const withEllipsis = notesText.length > 0 ? `${notesText}${ELLIPSIS}` : "";
-    candidate = renderSections({ ...sections, Notes: withEllipsis });
-  }
-  if (byteLength(candidate) <= maxBytes) return candidate;
+  // Recent first — it's machine-generated and gets regenerated every
+  // turn anyway, so it's the cheapest thing to lose here.
+  const afterRecent = shrinkSection(sections, "Recent", maxBytes);
+  if (afterRecent.fits) return afterRecent.candidate;
 
-  // Still over cap with Notes emptied (Goal/Decided/Open/Files alone
-  // exceed the budget) — hard-truncate what's left.
-  const withoutNotes = renderSections({ ...sections, Notes: "" });
-  return truncateToBytes(withoutNotes, maxBytes);
+  // Still over with Recent emptied — shrink Notes (the user's own
+  // freeform scratch) next.
+  const withoutRecent = { ...sections, Recent: "" };
+  const afterNotes = shrinkSection(withoutRecent, "Notes", maxBytes);
+  if (afterNotes.fits) return afterNotes.candidate;
+
+  // Still over with both emptied (Goal/Decided/Open/Files alone exceed
+  // the budget) — hard-truncate what's left.
+  const withoutEither = { ...sections, Recent: "", Notes: "" };
+  return truncateToBytes(renderSections(withoutEither), maxBytes);
 }

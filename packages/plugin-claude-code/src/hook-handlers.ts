@@ -79,9 +79,16 @@ function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+export interface HandleUserPromptSubmitDeps {
+  /** Overridable for tests: the real spawnDaemonDetached() binds the real, fixed daemon port as a side effect, which a unit test must never do. Defaults to the real one. */
+  spawnDaemonDetached?: () => void;
+}
+
 export async function handleUserPromptSubmit(
   input: UserPromptSubmitInput,
+  deps: HandleUserPromptSubmitDeps = {},
 ): Promise<Record<string, unknown>> {
+  const spawn = deps.spawnDaemonDetached ?? spawnDaemonDetached;
   const fernDirForLog = findFernDir(input.cwd);
   await debugLog(fernDirForLog, "UserPromptSubmit", input);
 
@@ -129,31 +136,55 @@ export async function handleUserPromptSubmit(
     // the message can distinguish "never started" from "was running
     // old code" — isDaemonRunning() itself is the one that actually
     // stops a stale daemon and clears daemon.json; see its doc comment.
-    const wasStale = await isDaemonStale();
-    const daemonInfo = await isDaemonRunning(
-      AbortSignal.timeout(PASSIVE_TIMEOUT_MS),
-    );
-    if (!daemonInfo) {
-      spawnDaemonDetached();
-      return {
-        decision: "block",
-        reason: wasStale
-          ? `${CLI_NAME} ▸ daemon updated · try again`
-          : `${CLI_NAME} ▸ daemon starting · try again in a moment`,
-      };
-    }
-
+    //
+    // Everything from here down is wrapped in one try/catch, not just
+    // dispatchFernCommand's own call below: dogfooding found a real
+    // case where the FIRST "/fern:fern" after `fern daemon stop` fell
+    // through to the commands/fern.md fallback instead of replying
+    // "daemon starting" — almost certainly because something in the
+    // daemon-is-down detection itself threw or hung, which Claude Code
+    // treats as a hook *failure*, not a block, and a failure (unlike a
+    // block) can fall through to the registered command's own
+    // template. If anything about the daemon is uncertain, this must
+    // still guarantee a block reply — never an uncaught exception.
+    // See docs/decisions.md.
     try {
-      const reason = await dispatchFernCommand({
-        projectPath,
-        rest,
-        ensureDaemon: true,
-      });
-      return { decision: "block", reason };
-    } catch (err) {
+      const wasStale = await isDaemonStale();
+      const daemonInfo = await isDaemonRunning(
+        AbortSignal.timeout(PASSIVE_TIMEOUT_MS),
+      );
+      if (!daemonInfo) {
+        spawn();
+        return {
+          decision: "block",
+          reason: wasStale
+            ? `${CLI_NAME} ▸ daemon updated · try again`
+            : `${CLI_NAME} ▸ daemon starting · try again in a moment`,
+        };
+      }
+
+      try {
+        const reason = await dispatchFernCommand({
+          projectPath,
+          rest,
+          ensureDaemon: true,
+          agentSessionId: input.session_id,
+        });
+        return { decision: "block", reason };
+      } catch (err) {
+        return {
+          decision: "block",
+          reason: `${CLI_NAME} ▸ error: ${errorText(err)}`,
+        };
+      }
+    } catch {
+      // The daemon-is-down check itself failed or hung — same remedy
+      // as the ordinary down-daemon case: spawn and tell the user to
+      // retry, rather than let the exception escape uncaught.
+      spawn();
       return {
         decision: "block",
-        reason: `${CLI_NAME} ▸ error: ${errorText(err)}`,
+        reason: `${CLI_NAME} ▸ daemon starting · try again in a moment`,
       };
     }
   }
@@ -299,7 +330,7 @@ export async function handleSessionStart(
   try {
     const result = await rawGetJson(
       info,
-      `/status?projectPath=${encodeURIComponent(projectPath)}&agentSessionId=${encodeURIComponent(input.session_id)}`,
+      `/status?projectPath=${encodeURIComponent(projectPath)}&agentSessionId=${encodeURIComponent(input.session_id)}&restored=true`,
       AbortSignal.timeout(PASSIVE_TIMEOUT_MS),
     );
     const frondName =
@@ -326,22 +357,20 @@ export async function handleSessionStart(
       ? `${header}\n\n${briefContent}`
       : header;
 
-    const output: Record<string, unknown> = {
+    // The visible receipt — hookSpecificOutput.additionalContext is
+    // model-only, never shown in the transcript UI, which is why
+    // restore read as silently doing nothing even when it worked.
+    // Fires for the stem exactly as for a real frond — most users
+    // never run /fern new at all, so the stem is their only brief, and
+    // it deserves the same visible restore.
+    const filesPart = fileCount > 0 ? ` · ${fileCount} files` : "";
+    return {
       hookSpecificOutput: {
         hookEventName: "SessionStart",
         additionalContext,
       },
+      systemMessage: `${CLI_NAME} ▸ restored ${frondName ?? "stem"} · brief${filesPart}`,
     };
-    // The visible receipt — hookSpecificOutput.additionalContext is
-    // model-only, never shown in the transcript UI, which is why
-    // restore read as silently doing nothing even when it worked. Only
-    // for a real named frond: "restored stem" isn't a meaningful
-    // user-facing receipt.
-    if (frondName) {
-      const filesPart = fileCount > 0 ? ` · ${fileCount} files` : "";
-      output.systemMessage = `${CLI_NAME} ▸ restored ${frondName} · brief${filesPart}`;
-    }
-    return output;
   } catch {
     return {};
   }

@@ -103,8 +103,29 @@ async function readMeta(metaPath: string): Promise<SectionHashes> {
   }
 }
 
-/** Creates a brief with empty sections and its meta file. Recent is never tracked in meta — it's machine-owned and never merge-protected (see pushRecentEntry). */
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await readFile(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Creates a brief with empty sections and its meta file — a no-op if a
+ * brief already exists at this path. Dogfooding traced an empty brief
+ * after real content had already accumulated back to exactly this: the
+ * caller (`createFrond`) has no duplicate-name guard of its own, so a
+ * second `/fern new <existing-name>` (fixed separately — see
+ * docs/decisions.md) called this unconditionally and wiped real
+ * content back to blank templates. Guarding here too, rather than
+ * trusting every caller to check first, since a frond name becomes a
+ * real, name-derived file path (`.fern/fronds/<name>.md`) shared by
+ * anything that creates a frond with that name.
+ */
 export async function createBrief(briefPath: string): Promise<void> {
+  if (await fileExists(briefPath)) return;
   await mkdir(dirname(briefPath), { recursive: true });
   const sections = emptySections();
   await writeFile(briefPath, render(sections), "utf-8");
@@ -179,7 +200,9 @@ export async function writeBriefSections(
  * when this runs — system-written or hand-typed — is simply treated as
  * the current rolling window and carried forward until it rolls off.
  * No-op if `entry` is empty (e.g. a frond created by a direct
- * `/fern new <name>` with no triggering prompt text yet).
+ * `/fern new <name>` with no triggering prompt text yet), or if it's
+ * identical to the current newest entry (a retried/double-submitted
+ * prompt shouldn't fill the window with repeats of the same line).
  */
 export async function pushRecentEntry(
   briefPath: string,
@@ -188,6 +211,10 @@ export async function pushRecentEntry(
   if (!entry) return;
   const current = await readBrief(briefPath);
   const existing = parseRecentEntries(current.Recent);
+  // Collapse a consecutive duplicate (e.g. the same prompt retried, or
+  // a double-submit) rather than filling the window with repeats of
+  // the same line.
+  if (existing[0] === entry) return;
   const nextEntries = [entry, ...existing].slice(0, RECENT_MAX);
   const next: BriefSections = {
     ...current,

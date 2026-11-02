@@ -1,12 +1,14 @@
-// Note: deliberately does NOT exercise the "no daemon running yet"
-// branch of SessionStart, or of UserPromptSubmit's "/fern ..." path
-// (both call spawnDaemonDetached()) — doing so for real would spawn an
-// actual bun process bound to the fixed default port, racing whatever
-// else might be listening there. That spawn path already gets a real,
-// process-level exercise in packages/cli/test/e2e.test.ts; what's new
-// in UserPromptSubmit's version (the immediate "daemon starting" block
-// reply instead of waiting) is pure branching on isDaemonRunning()'s
-// result, which the existing daemon-down test below already forces.
+// Note: deliberately does NOT exercise the real "no daemon running
+// yet" branch of SessionStart (which calls the real, un-injectable
+// spawnDaemonDetached()) — doing so for real would spawn an actual bun
+// process bound to the fixed default port, racing whatever else might
+// be listening there. That spawn path already gets a real,
+// process-level exercise in packages/cli/test/e2e.test.ts.
+// UserPromptSubmit's own "/fern ..." down-daemon branch IS exercised
+// below, safely, via handleUserPromptSubmit's injectable
+// spawnDaemonDetached dependency — see its own test for why that
+// makes it safe where SessionStart's isn't (yet) injectable the same
+// way.
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -163,6 +165,46 @@ test("an unrecognized /fern subcommand still blocks, with a usage message", asyn
   expect(result.reason as string).toContain("usage");
 });
 
+test("'/fern status' with a faked stale/dead daemon.json and an injected stub spawn always replies with a block, never throws — no real port, no real daemon spawn", async () => {
+  // Overwrite daemon.json with the exact combination from the real
+  // dogfood incident (a stale buildId, a dead pid) — see
+  // docs/decisions.md. The pre-existing real daemon from beforeEach
+  // keeps running on its own (random) port regardless, untouched; this
+  // only swaps out what daemon.json *says*. spawnDaemonDetached is
+  // stubbed to a no-op via dependency injection specifically so this
+  // test can assert the reply without ever binding the real, fixed
+  // daemon port — unlike every other test in this file, which avoids
+  // this scenario entirely for exactly that reason.
+  const { writeDaemonInfo } = await import("@context-fern/daemon");
+  await writeDaemonInfo({
+    port: 1,
+    pid: 999999,
+    token: "x",
+    startedAt: new Date().toISOString(),
+    buildId: "stale-build-id",
+  });
+
+  let spawnCalled = false;
+  const result = await handleUserPromptSubmit(
+    {
+      ...loadFixture("user-prompt-submit.fern-command.json"),
+      cwd: projectDir,
+      prompt: "/fern status",
+    },
+    {
+      spawnDaemonDetached: () => {
+        spawnCalled = true;
+      },
+    },
+  );
+
+  expect(result.decision).toBe("block");
+  // isDaemonStale() sees the mismatched buildId regardless of
+  // aliveness, so this is the "updated", not "starting", message.
+  expect(result.reason).toBe("fern ▸ daemon updated · try again");
+  expect(spawnCalled).toBe(true);
+});
+
 test("'/fern brief' blocks with a redirect to the plain-English phrasing, not a usage error", async () => {
   const result = await handleUserPromptSubmit({
     ...loadFixture("user-prompt-submit.fern-command.json"),
@@ -313,6 +355,28 @@ test("SessionStart on resume still names the frond and brief path even when the 
     "brief: .fern/fronds/docker-build.md",
   );
   expect(result.systemMessage).toContain("restored docker-build");
+});
+
+test("SessionStart on resume shows a visible restore receipt for the stem too, with no frond ever created — the common case", async () => {
+  await handleUserPromptSubmit({
+    ...loadFixture("user-prompt-submit.plain.json"),
+    cwd: projectDir,
+    prompt: "fix the typo in the readme",
+  });
+
+  const result = await handleSessionStart({
+    ...loadFixture("session-start.startup.json"),
+    cwd: projectDir,
+    source: "resume",
+  });
+  const hookSpecific = result.hookSpecificOutput as
+    | { hookEventName: string; additionalContext: string }
+    | undefined;
+  expect(hookSpecific?.additionalContext).toContain("Active frond: stem");
+  expect(hookSpecific?.additionalContext).toContain(
+    "brief: .fern/fronds/stem.md",
+  );
+  expect(result.systemMessage).toBe("fern ▸ restored stem · brief");
 });
 
 test("SessionStart no-ops entirely in an uninitialized project", async () => {

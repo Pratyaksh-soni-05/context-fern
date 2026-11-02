@@ -19,6 +19,35 @@ function clamp01(x: number): number {
   return Math.max(0, Math.min(1, x));
 }
 
+// Every "confidence" below that isn't a real, directly-measured cosine
+// similarity is this complement formula — "nothing else matched, so
+// call it confident" — which hits exactly 1.00 whenever the underlying
+// scores are both exactly 0 (no centroid data yet, or genuinely zero
+// overlap). That happened twice in dogfooding (a hardcoded-looking
+// 1.00 on a bare stem, then again on a freshly-created frond) and is a
+// real, reproducible degenerate case, not a coincidence — Stage 0's
+// heuristics were never calibrated against real precision data in the
+// first place (see docs/decisions.md on `suggestionPrecision`), so
+// presenting a bare algebraic complement as if it were should never
+// read as total certainty. Capped below 1.00 rather than fixed at some
+// other value — ordering between heuristic suggestions still matters
+// for suggestionPrecision's bar.
+const HEURISTIC_CONFIDENCE_CAP = 0.95;
+function cappedComplement(score: number): number {
+  return Math.min(HEURISTIC_CONFIDENCE_CAP, clamp01(1 - score));
+}
+
+// A frond is still "forming" for its first few leaflets — its centroid
+// is an average of almost nothing yet, and its touched-files list is
+// often still empty, so "low similarity" or "file divergence" against
+// it is not real evidence of anything. Dogfooding showed the prompt
+// right after `/fern new greetings` itself triggering a confident
+// (1.00) "new frond?" suggestion against the frond that had just been
+// created, for exactly this reason. Scoped to new/stray only — a
+// forming frond can still legitimately be left via `return` to a
+// genuinely more mature one. See docs/decisions.md.
+const FORMING_LEAFLET_THRESHOLD = 3;
+
 /** Exported for the baseline decision functions in baselines.ts. */
 export function bestOther(
   frondSignals: readonly FrondSignal[],
@@ -57,6 +86,31 @@ export function decide(
     signals.stemCosine < thresholds.strayMaxSimilarity &&
     maxFrondCosine < thresholds.strayMaxSimilarity;
   const noFileContext = signals.mentionedFiles.length === 0;
+  // Only meaningful when there IS an active (non-stem) frond — sitting
+  // on the stem with no active frond is not "forming" in this sense,
+  // and must not suppress new/stray there (e.g. a real file-divergent
+  // prompt while on the stem, with other topic fronds existing
+  // elsewhere, should still be free to propose "new").
+  const activeFrondState = state.activeFrondId
+    ? state.fronds[state.activeFrondId]
+    : undefined;
+  const activeFrondIsForming =
+    activeFrondState !== undefined &&
+    activeFrondState.count < FORMING_LEAFLET_THRESHOLD;
+
+  // A short question about the conversation itself — never evidence of
+  // anything; skip every heuristic and explicit cue phrases alike (a
+  // cue phrase inside a question about the session, if that ever
+  // happens, is still about the session, not a real topic switch).
+  if (signals.isConversationMeta) {
+    return {
+      action: "continue",
+      target: state.activeFrondId,
+      confidence: clamp01(activeScore),
+      signals: ["conversation-meta-question"],
+      stage: 0,
+    };
+  }
 
   // Explicit cue phrases override heuristics — a user who says "side
   // question" means it, even on the very first prompt of a session.
@@ -64,15 +118,21 @@ export function decide(
     return {
       action: "stray",
       target: null,
-      confidence: clamp01(1 - Math.max(signals.stemCosine, maxFrondCosine)),
+      confidence: cappedComplement(
+        Math.max(signals.stemCosine, maxFrondCosine),
+      ),
       signals: ["cue:stray"],
       stage: 0,
     };
   }
   // Heuristic stray needs *something* established to be off-topic from —
   // otherwise the very first prompt of a session (no frond yet) could be
-  // misread as a stray instead of founding the first frond.
+  // misread as a stray instead of founding the first frond. Also never
+  // fires against a still-forming active frond (see
+  // FORMING_LEAFLET_THRESHOLD above) — "low similarity" against a
+  // frond with almost no centroid data isn't real evidence.
   if (
+    !activeFrondIsForming &&
     hasEstablishedContext &&
     lowSimilarityEverywhere &&
     noFileContext &&
@@ -81,7 +141,9 @@ export function decide(
     return {
       action: "stray",
       target: null,
-      confidence: clamp01(1 - Math.max(signals.stemCosine, maxFrondCosine)),
+      confidence: cappedComplement(
+        Math.max(signals.stemCosine, maxFrondCosine),
+      ),
       signals: ["low-similarity", "no-file-context", "short-question-form"],
       stage: 0,
     };
@@ -100,7 +162,7 @@ export function decide(
     return {
       action: "new",
       target: null,
-      confidence: clamp01(1 - Math.max(activeScore, otherScore)),
+      confidence: cappedComplement(Math.max(activeScore, otherScore)),
       signals: ["cue:new"],
       stage: 0,
     };
@@ -141,10 +203,14 @@ export function decide(
   // working on?" confidently (and wrongly) proposing a new frond for
   // exactly this reason. Short meta-questions (isShortQuestion) are
   // excluded outright: a question about the fern itself is never itself
-  // the start of a new topic. See docs/decisions.md.
+  // the start of a new topic. Never fires against a still-forming
+  // active frond either — an empty touched-files list trivially
+  // "diverges" from anything, which isn't real evidence. See
+  // docs/decisions.md.
   const fileDivergence =
     signals.mentionedFiles.length > 0 && (active?.fileOverlap ?? 0) === 0;
   if (
+    !activeFrondIsForming &&
     Object.keys(state.fronds).length > 0 &&
     !signals.isShortQuestion &&
     fileDivergence &&
@@ -154,7 +220,7 @@ export function decide(
     return {
       action: "new",
       target: null,
-      confidence: clamp01(1 - Math.max(activeScore, otherScore)),
+      confidence: cappedComplement(Math.max(activeScore, otherScore)),
       signals: ["no-frond-match", "file-divergence"],
       stage: 0,
     };

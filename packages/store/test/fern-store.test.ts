@@ -41,6 +41,32 @@ test("createSession seeds a real stem frond and makes it the active one — neve
   expect(sessionRow.active_frond_id).not.toBeNull();
 });
 
+test("findSessionByProjectPath returns null when no session exists yet, then the most recent one once created", async () => {
+  dir = await withTempFernDir();
+  store = await openFernStore(dir.path);
+
+  expect(await store.findSessionByProjectPath("/repo")).toBeNull();
+
+  const first = await store.createSession({
+    agent: "claude-code",
+    projectPath: "/repo",
+    mode: "suggest",
+  });
+  expect((await store.findSessionByProjectPath("/repo"))?.id).toBe(first.id);
+
+  // A second session for the same path (e.g. a bug, or a genuinely
+  // fresh start) — the most recently started one wins.
+  const second = await store.createSession({
+    agent: "claude-code",
+    projectPath: "/repo",
+    mode: "suggest",
+  });
+  expect((await store.findSessionByProjectPath("/repo"))?.id).toBe(second.id);
+
+  // A different path never sees either of these.
+  expect(await store.findSessionByProjectPath("/other-repo")).toBeNull();
+});
+
 test("loadRouterState translates the stored stem-active pointer back to router-level null", async () => {
   dir = await withTempFernDir();
   store = await openFernStore(dir.path);

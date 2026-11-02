@@ -89,7 +89,16 @@ export interface StatusResponse {
 
 export async function handleStatus(
   state: ProjectState,
+  markRestored = false,
 ): Promise<StatusResponse> {
+  // SessionStart's own restore call opts into this — a signal
+  // independent of whether Claude Code mints a new agentSessionId
+  // across a resume/clear/compaction/fork (not confirmed either way);
+  // the next /prompt call attaches the restored receipt and clears it.
+  // `fern status`/other callers never pass this, so a manual status
+  // check never queues a receipt nobody asked for. See docs/decisions.md.
+  if (markRestored) state.pendingRestoreReceipt = true;
+
   const fronds = await state.store.listFronds(state.sessionId);
   const topicFronds = fronds.filter(
     (f) => f.parentId !== null && f.status !== "merged",

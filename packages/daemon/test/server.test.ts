@@ -259,7 +259,7 @@ test("a later plain prompt's suggestion replaces (expires) an earlier pending on
 
   const accepted = await post("/prompt", projectBody({ prompt: "/fern new" }));
   expect(accepted.status).toBe(200);
-  expect(accepted.json.receipt).toContain("fix-flaky-login");
+  expect(accepted.json.receipt).toContain("flaky-login-test");
   expect(accepted.json.receipt).not.toContain("docker");
 });
 
@@ -275,6 +275,28 @@ test("/fern new <name> works standalone, with no pending suggestion", async () =
   );
   expect(res.status).toBe(200);
   expect(res.json.receipt).toContain("fern ▸ on docker-build");
+});
+
+test("/fern new <name> typed twice switches to the existing frond instead of creating a duplicate", async () => {
+  const first = await post(
+    "/prompt",
+    projectBody({ prompt: "/fern new greetings" }),
+  );
+  expect(first.json.receipt).toContain("fern ▸ on greetings");
+
+  const second = await post(
+    "/prompt",
+    projectBody({ prompt: "/fern new greetings" }),
+  );
+  expect(second.json.receipt).toBe(
+    "fern ▸ greetings already exists · switched",
+  );
+
+  const tree = await get(
+    `/tree?projectPath=${encodeURIComponent(projectDir?.path ?? "")}`,
+  );
+  const fronds = tree.json.fronds as { name: string }[];
+  expect(fronds.filter((f) => f.name === "greetings")).toHaveLength(1);
 });
 
 test("accepting a suggestion deterministically fills the new brief's Goal from the real triggering prompt, no model call", async () => {
@@ -345,6 +367,114 @@ test("Files is filled deterministically from the frond's accumulated touched pat
   expect((await readBrief(frond.briefPath)).Files).toContain("Dockerfile");
 });
 
+test("restore (receipt and brief content) works on the stem, with no frond ever created — the common case, since most users never run /fern new", async () => {
+  await post(
+    "/prompt",
+    projectBody({
+      prompt: "fix the typo in the readme",
+      agentSessionId: "session-A",
+    }),
+  );
+  await post(
+    "/prompt",
+    projectBody({
+      prompt: "also update the changelog",
+      agentSessionId: "session-A",
+    }),
+  );
+
+  // A different agentSessionId simulates /clear.
+  const restored = await post(
+    "/prompt",
+    projectBody({ prompt: "what's next", agentSessionId: "session-B" }),
+  );
+  expect(restored.json.receipt).toContain("fern ▸ restored stem · brief");
+
+  const state = await getOrOpenProject(projectDir?.path ?? "");
+  const stem = (await state.store.listFronds(state.sessionId)).find(
+    (f) => f.parentId === null,
+  );
+  if (!stem) throw new Error("stem not found");
+  const brief = await readBrief(stem.briefPath);
+  expect(brief.Goal).toBe("fix the typo in the readme");
+  expect(brief.Recent).toContain("- also update the changelog");
+
+  const status = await get(
+    `/status?projectPath=${encodeURIComponent(projectDir?.path ?? "")}`,
+  );
+  expect(status.json.brief as string).toContain("fix the typo in the readme");
+});
+
+test("GET /status?restored=true queues the receipt for the next /prompt even when agentSessionId never changes — whether Claude Code mints a new one across /clear isn't confirmed either way", async () => {
+  await post(
+    "/prompt",
+    projectBody({ prompt: "/fern new greetings", agentSessionId: "session-A" }),
+  );
+
+  // Same agentSessionId throughout — simulates Claude Code NOT minting
+  // a new one for /clear, the scenario the agentSessionId-only check
+  // alone would miss entirely.
+  await get(
+    `/status?projectPath=${encodeURIComponent(projectDir?.path ?? "")}&agentSessionId=session-A&restored=true`,
+  );
+
+  const restored = await post(
+    "/prompt",
+    projectBody({ prompt: "what's next", agentSessionId: "session-A" }),
+  );
+  expect(restored.json.receipt).toContain("fern ▸ restored greetings · brief");
+
+  // The flag is one-shot: the call after that gets no receipt.
+  const again = await post(
+    "/prompt",
+    projectBody({ prompt: "and then", agentSessionId: "session-A" }),
+  );
+  expect(again.json.receipt).not.toContain("restored");
+});
+
+test("the first /prompt under a new agentSessionId (a resume/clear/compaction/fork) gets a restored receipt prepended, belt-and-suspenders with SessionStart's own", async () => {
+  await post(
+    "/prompt",
+    projectBody({ prompt: "/fern new greetings", agentSessionId: "session-A" }),
+  );
+
+  // Same agentSessionId again — no restore boundary, no receipt.
+  const samesession = await post(
+    "/prompt",
+    projectBody({ prompt: "hello again", agentSessionId: "session-A" }),
+  );
+  expect(samesession.json.receipt).not.toContain("restored");
+
+  // A different agentSessionId — exactly what Claude Code mints on
+  // resume/clear/compaction/fork — is the restore boundary.
+  const restored = await post(
+    "/prompt",
+    projectBody({ prompt: "what's next", agentSessionId: "session-B" }),
+  );
+  expect(restored.json.receipt).toContain("fern ▸ restored greetings · brief");
+});
+
+test("a session for an existing project path is resumed, not abandoned for a fresh stem, across a cold reopen (the real cause of a broken /clear restore)", async () => {
+  await post("/prompt", projectBody({ prompt: "/fern new greetings" }));
+  const before = await get(
+    `/status?projectPath=${encodeURIComponent(projectDir?.path ?? "")}`,
+  );
+  expect(before.json.activeFrondName).toBe("greetings");
+
+  // Simulates exactly what a daemon restart (a crash, the version-check
+  // self-heal, a reboot) does to the in-memory project registry: the
+  // cache is cleared, so the next call must re-open the SAME
+  // underlying fern.db from scratch — openProject used to always
+  // insert a brand-new session there, silently abandoning the one
+  // above in favor of an empty stem.
+  await closeAllProjects();
+
+  const after = await get(
+    `/status?projectPath=${encodeURIComponent(projectDir?.path ?? "")}`,
+  );
+  expect(after.json.activeFrondName).toBe("greetings");
+});
+
 test("Recent accumulates the last 5 prompts' first lines, newest first, independent of Goal", async () => {
   await post("/prompt", projectBody({ prompt: "/fern new docker-build" }));
   const state = await getOrOpenProject(projectDir?.path ?? "");
@@ -387,14 +517,26 @@ test("a user's own edit to Goal is kept — the deterministic fill never clobber
   );
 });
 
-test("the deterministic fill is never applied to the stem", async () => {
+test("the deterministic fill works on the stem exactly as on a real frond — most users never run /fern new at all", async () => {
   await post("/prompt", projectBody({ prompt: "just a plain prompt" }));
+  await post("/prompt", projectBody({ prompt: "editing the readme" }));
+  await post(
+    "/tools",
+    projectBody({
+      filesTouched: [{ path: "README.md", source: "tool_input" }],
+    }),
+  );
+  await post("/exchange-end", projectBody());
+
   const state = await getOrOpenProject(projectDir?.path ?? "");
   const stem = (await state.store.listFronds(state.sessionId)).find(
     (f) => f.parentId === null,
   );
   if (!stem) throw new Error("stem not found");
-  expect((await readBrief(stem.briefPath)).Goal).toBe("");
+  const brief = await readBrief(stem.briefPath);
+  expect(brief.Goal).toBe("just a plain prompt");
+  expect(brief.Files).toContain("README.md");
+  expect(brief.Recent).toContain("- editing the readme");
 });
 
 test("/fern new <name> rejects a path-traversal name and never creates anything on disk for it", async () => {

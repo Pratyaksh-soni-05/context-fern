@@ -27,6 +27,8 @@ export interface DispatchOptions {
   rest: string[];
   /** The zero-turn hook path and the fallback command script both wait for a down daemon (the user typed an explicit command and expects an answer); only the passive per-turn hooks never do. */
   ensureDaemon: boolean;
+  /** Threaded through to /prompt so a "/fern new|switch|stray" that happens to be the first command after a resume/clear/compaction/fork still gets a restored receipt prepended, same as a plain prompt would. */
+  agentSessionId?: string;
 }
 
 async function daemonInfoOrThrow(ensureDaemon: boolean): Promise<DaemonInfo> {
@@ -72,7 +74,7 @@ async function dispatchInit(projectPath: string): Promise<string> {
 export async function dispatchFernCommand(
   options: DispatchOptions,
 ): Promise<string> {
-  const { projectPath, rest, ensureDaemon } = options;
+  const { projectPath, rest, ensureDaemon, agentSessionId } = options;
   const [subcommand, ...args] = rest;
 
   if (!subcommand) return usage();
@@ -108,7 +110,11 @@ export async function dispatchFernCommand(
       args.length > 0
         ? `/${CLI_NAME} ${subcommand} ${args.join(" ")}`
         : `/${CLI_NAME} ${subcommand}`;
-    const result = await rawPostJson(info, "/prompt", { projectPath, prompt });
+    const result = await rawPostJson(info, "/prompt", {
+      projectPath,
+      prompt,
+      agentSessionId,
+    });
     return typeof result.receipt === "string" ? result.receipt : "";
   }
 
