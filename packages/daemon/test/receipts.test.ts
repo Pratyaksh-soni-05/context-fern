@@ -75,6 +75,15 @@ test("statuslineReceipt omits the ctx clause entirely when nothing has been meas
   );
 });
 
+test("statuslineReceipt and statusReceipt pluralize every count correctly at exactly 1", () => {
+  expect(statuslineReceipt("greetings", 1, 1, 0, 0)).toBe(
+    "fern ▸ greetings · 1 frond · 1 stray",
+  );
+  expect(statusReceipt("greetings", 1, 1, 1, "suggest")).toBe(
+    "fern ▸ greetings · 1 frond · 1 stray · 1 leaflet · suggest",
+  );
+});
+
 test("returnSuggestionReceipt follows the same voice as the new-suggestion receipt", () => {
   expect(returnSuggestionReceipt("auth-refactor", 0.72, ["cue phrase"])).toBe(
     "fern ▸ return to auth-refactor? · 0.72 · cue phrase · /fern switch",

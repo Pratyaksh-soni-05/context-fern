@@ -10,12 +10,14 @@ import {
   buildDecision,
   buildDecisionInverse,
   CLI_NAME,
+  CONFIG_DIR,
   computeSignals,
   decide,
   type Embedder,
   type FileTouch,
   isValidFrondName,
   parseStrayPrefix,
+  pluralize,
   proposeFrondName,
   type RouterAction,
 } from "@context-fern/core";
@@ -614,7 +616,7 @@ async function buildFocusNote(
  * reply. See docs/decisions.md.
  */
 function restoredReceiptText(frondName: string, fileCount: number): string {
-  const filesPart = fileCount > 0 ? ` · ${fileCount} files` : "";
+  const filesPart = fileCount > 0 ? ` · ${pluralize(fileCount, "file")}` : "";
   return `${CLI_NAME} ▸ restored ${frondName} · brief${filesPart}`;
 }
 
@@ -720,10 +722,16 @@ export async function handleMerge(
   return { receipt: mergedReceipt(frondName) };
 }
 
+/** fern's own bookkeeping (brief files, the journal, the SQLite db) must never land in a frond's Files section — the hook's own extractTouchedFiles already filters this, but /tools is a real HTTP endpoint, not something only the hook can call, so this is enforced again at the one place all touched-file writes funnel through. See docs/decisions.md. */
+function isUnderFernDir(relPath: string): boolean {
+  return relPath === CONFIG_DIR || relPath.startsWith(`${CONFIG_DIR}/`);
+}
+
 export function handleTools(
   state: ProjectState,
   filesTouched: FileTouch[],
 ): void {
   if (!state.pendingExchange) return; // nothing in flight — ignore silently
-  state.pendingExchange.filesTouched.push(...filesTouched);
+  const filtered = filesTouched.filter((f) => !isUnderFernDir(f.path));
+  state.pendingExchange.filesTouched.push(...filtered);
 }

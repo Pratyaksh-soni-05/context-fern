@@ -40,6 +40,16 @@ test("renders the exact ASCII shape from the First-run board, with real (not sam
   );
 });
 
+test("roots pluralizes 'memory' correctly at exactly 1", () => {
+  const out = renderTree({
+    stemName: "main",
+    fronds: [],
+    strayCount: 0,
+    rootsCount: 1,
+  });
+  expect(out).toBe(["main ─┬─ strays  ", "roots: 1 memory"].join("\n"));
+});
+
 test("an empty fern (just the stem) attaches the strays row directly", () => {
   const out = renderTree({ stemName: "main", fronds: [], strayCount: 0 });
   expect(out).toBe(["main ─┬─ strays  ", "roots: 0 memories"].join("\n"));

@@ -12,6 +12,8 @@
 // stdout is a TTY and NO_COLOR isn't set — a terminal concern, which is
 // why this lives in the CLI, not the daemon (GET /tree returns plain data).
 
+import { pluralize } from "@context-fern/core";
+
 export interface TreeFrondInput {
   name: string;
   status: "active" | "resting" | "merged";
@@ -75,6 +77,8 @@ export function renderTree(input: TreeInput): string {
       paint(`${"strays".padEnd(nameWidth)}${strayDots}`, TERM_EMBER),
   );
 
-  lines.push(`roots: ${input.rootsCount ?? 0} memories`);
+  lines.push(
+    `roots: ${pluralize(input.rootsCount ?? 0, "memory", "memories")}`,
+  );
   return lines.join("\n");
 }

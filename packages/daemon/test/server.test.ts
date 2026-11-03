@@ -143,6 +143,30 @@ test("the full /prompt -> /tools -> /exchange-end happy path records a leaflet",
   expect(tree.json.stemName).toBe("stem");
 });
 
+test("/tools never records a .fern/ path as a touched file, even if a caller sends one directly — the hook's own filter isn't the only enforcement", async () => {
+  await post("/prompt", projectBody({ prompt: "please fix the login bug" }));
+  await post(
+    "/tools",
+    projectBody({
+      filesTouched: [
+        { path: ".fern/fronds/stem.md", source: "tool_input" },
+        { path: ".fern/journal.jsonl", source: "tool_input" },
+        { path: "src/login.ts", source: "tool_input" },
+      ],
+    }),
+  );
+  await post("/exchange-end", projectBody());
+
+  const state = await getOrOpenProject(projectDir?.path ?? "");
+  const stem = (await state.store.listFronds(state.sessionId)).find(
+    (f) => f.parentId === null,
+  );
+  if (!stem) throw new Error("stem not found");
+  const brief = await readBrief(stem.briefPath);
+  expect(brief.Files).toBe("src/login.ts");
+  expect(brief.Files).not.toContain(".fern");
+});
+
 test("a manual /fern stray (bare) retroactively marks the last exchange", async () => {
   await post(
     "/prompt",
@@ -365,6 +389,36 @@ test("Files is filled deterministically from the frond's accumulated touched pat
   const frond = fronds.find((f) => f.name === "docker-build");
   if (!frond) throw new Error("frond not created");
   expect((await readBrief(frond.briefPath)).Files).toContain("Dockerfile");
+});
+
+test("the restored receipt pluralizes the file count correctly at exactly 1", async () => {
+  await post(
+    "/prompt",
+    projectBody({ prompt: "/fern new greetings", agentSessionId: "session-A" }),
+  );
+  await post(
+    "/prompt",
+    projectBody({
+      prompt: "editing the readme",
+      agentSessionId: "session-A",
+    }),
+  );
+  await post(
+    "/tools",
+    projectBody({
+      filesTouched: [{ path: "README.md", source: "tool_input" }],
+    }),
+  );
+  await post("/exchange-end", projectBody());
+
+  const restored = await post(
+    "/prompt",
+    projectBody({ prompt: "what's next", agentSessionId: "session-B" }),
+  );
+  expect(restored.json.receipt).toContain(
+    "fern ▸ restored greetings · brief · 1 file",
+  );
+  expect(restored.json.receipt).not.toContain("1 files");
 });
 
 test("restore (receipt and brief content) works on the stem, with no frond ever created — the common case, since most users never run /fern new", async () => {
@@ -601,7 +655,7 @@ test("/status's statusReceipt includes the leaflet count and mode, so dogfooding
   expect(res.status).toBe(200);
   expect(res.json.leafletCount).toBe(1);
   expect(res.json.statusReceipt).toBe(
-    "fern ▸ stem · 0 fronds · 0 strays · 1 leaflets · suggest",
+    "fern ▸ stem · 0 fronds · 0 strays · 1 leaflet · suggest",
   );
 });
 

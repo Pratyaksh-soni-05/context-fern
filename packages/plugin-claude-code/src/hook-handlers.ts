@@ -27,7 +27,7 @@
 
 import { appendFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { CLI_NAME } from "@context-fern/core";
+import { CLI_NAME, pluralize } from "@context-fern/core";
 import {
   findFernDir,
   isDaemonRunning,
@@ -363,7 +363,7 @@ export async function handleSessionStart(
     // Fires for the stem exactly as for a real frond — most users
     // never run /fern new at all, so the stem is their only brief, and
     // it deserves the same visible restore.
-    const filesPart = fileCount > 0 ? ` · ${fileCount} files` : "";
+    const filesPart = fileCount > 0 ? ` · ${pluralize(fileCount, "file")}` : "";
     return {
       hookSpecificOutput: {
         hookEventName: "SessionStart",

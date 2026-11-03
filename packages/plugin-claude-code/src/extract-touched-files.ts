@@ -6,9 +6,23 @@
 // docs for PostToolUse's tool_input shape.
 
 import { isAbsolute, relative, resolve } from "node:path";
-import { extractFileMentions, type FileTouch } from "@context-fern/core";
+import {
+  CONFIG_DIR,
+  extractFileMentions,
+  type FileTouch,
+} from "@context-fern/core";
 
 const SHELL_TOOLS = new Set(["Bash", "PowerShell"]);
+
+// fern's own bookkeeping (brief files, the journal, the SQLite db)
+// must never show up as a "touched file" in a frond's own Files
+// section — most plausibly via the "update the fern brief" plain-
+// English flow (an earlier round), which has Claude Edit a brief file
+// directly, firing PostToolUse for it like any other edit. See
+// docs/decisions.md.
+function isUnderFernDir(relPath: string): boolean {
+  return relPath === CONFIG_DIR || relPath.startsWith(`${CONFIG_DIR}/`);
+}
 
 function relativize(projectPath: string, rawPath: string): string {
   const abs = isAbsolute(rawPath) ? rawPath : resolve(projectPath, rawPath);
@@ -25,7 +39,7 @@ export function extractTouchedFiles(
 
   function add(rawPath: string, source: FileTouch["source"]): void {
     const rel = relativize(projectPath, rawPath);
-    if (seen.has(rel)) return;
+    if (seen.has(rel) || isUnderFernDir(rel)) return;
     seen.add(rel);
     result.push({ path: rel, source });
   }

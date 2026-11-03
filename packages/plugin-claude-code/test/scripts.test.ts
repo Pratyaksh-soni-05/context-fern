@@ -168,7 +168,7 @@ test("statusline.ts prints the exact spec format ('fern ▸ <frond> · <n> frond
   ]);
 
   expect(exitCode).toBe(0);
-  expect(stdout.trim()).toBe(`${CLI_NAME} ▸ greetings · 1 fronds · 0 strays`);
+  expect(stdout.trim()).toBe(`${CLI_NAME} ▸ greetings · 1 frond · 0 strays`);
 }, 15_000);
 
 // fern-command.ts's only remaining job: report that the hook didn't run,

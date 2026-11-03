@@ -5,7 +5,7 @@
 // (brand.ts), never the literal word "fern" — CLAUDE.md: name and
 // design are locked, import the constants, never hard-code them.
 
-import { CLI_NAME } from "@context-fern/core";
+import { CLI_NAME, pluralize } from "@context-fern/core";
 
 const PREFIX = `${CLI_NAME} ▸`;
 const CMD = `/${CLI_NAME}`;
@@ -80,7 +80,7 @@ export function statuslineReceipt(
   sentTokens: number,
   fullTokens: number,
 ): string {
-  const base = `${PREFIX} ${activeFrondName} · ${frondCount} fronds · ${strayCount} strays`;
+  const base = `${PREFIX} ${activeFrondName} · ${pluralize(frondCount, "frond")} · ${pluralize(strayCount, "stray")}`;
   // Isolate-mode token accounting isn't real yet — omit the clause
   // entirely rather than ship a fabricated "0/0 ctx" (DESIGN.md Voice:
   // never ship invented numbers).
@@ -102,20 +102,7 @@ export function statusReceipt(
   leafletCount: number,
   mode: string,
 ): string {
-  return `${PREFIX} ${activeFrondName} · ${frondCount} fronds · ${strayCount} strays · ${leafletCount} leaflets · ${mode}`;
-}
-
-/**
- * `SessionStart`'s restore (resume/clear/compaction/fork) — a VISIBLE
- * receipt, unlike `hookSpecificOutput.additionalContext` (model-only,
- * never shown in the transcript UI). Dogfooding found that restore was
- * silently invisible even when it worked, so the user had no way to
- * tell whether anything had actually been restored — see
- * docs/decisions.md.
- */
-export function restoredReceipt(frondName: string, fileCount: number): string {
-  const filesPart = fileCount > 0 ? ` · ${fileCount} files` : "";
-  return `${PREFIX} restored ${frondName} · brief${filesPart}`;
+  return `${PREFIX} ${activeFrondName} · ${pluralize(frondCount, "frond")} · ${pluralize(strayCount, "stray")} · ${pluralize(leafletCount, "leaflet")} · ${mode}`;
 }
 
 function formatK(n: number): string {
