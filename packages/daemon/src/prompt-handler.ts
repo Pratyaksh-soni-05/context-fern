@@ -108,6 +108,7 @@ async function fillBriefDeterministically(
   frondId: string,
   briefPath: string,
   promptText: string,
+  turn: number,
 ): Promise<void> {
   const updates: Partial<Record<MergeableBriefSection, string>> = {};
   const files =
@@ -126,7 +127,7 @@ async function fillBriefDeterministically(
     await writeBriefSections(briefPath, updates);
   }
 
-  await pushRecentEntry(briefPath, goalCandidate);
+  await pushRecentEntry(briefPath, turn, goalCandidate);
 }
 
 /**
@@ -183,6 +184,7 @@ export async function finalizeExchange(state: ProjectState): Promise<void> {
       targetFrondId,
       targetFrond.briefPath,
       exchange.promptText,
+      leaflet.index,
     );
   }
 }
@@ -311,6 +313,7 @@ async function applyManualNew(
     frond.id,
     frond.briefPath,
     exchange?.promptText ?? "",
+    leaflet.index,
   );
 
   const restingName = priorActiveFrondId

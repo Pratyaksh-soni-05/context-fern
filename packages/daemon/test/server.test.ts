@@ -451,7 +451,7 @@ test("restore (receipt and brief content) works on the stem, with no frond ever 
   if (!stem) throw new Error("stem not found");
   const brief = await readBrief(stem.briefPath);
   expect(brief.Goal).toBe("fix the typo in the readme");
-  expect(brief.Recent).toContain("- also update the changelog");
+  expect(brief.Recent).toContain("· also update the changelog");
 
   const status = await get(
     `/status?projectPath=${encodeURIComponent(projectDir?.path ?? "")}`,
@@ -545,10 +545,14 @@ test("Recent accumulates the last 5 prompts' first lines, newest first, independ
 
   const brief = await readBrief(frond.briefPath);
   expect(brief.Goal).toBe("let's wire up the dockerfile first");
+  // Leaflet 0 was "/fern new docker-build" itself (no prompt text, so no
+  // Recent entry); 1 and 2 are the two plain prompts below, tagged with
+  // their own turn numbers so a reader can map text back to a leaflet.
   expect(brief.Recent).toBe(
-    ["- now the compose file too", "- let's wire up the dockerfile first"].join(
-      "\n",
-    ),
+    [
+      "- t2 · now the compose file too",
+      "- t1 · let's wire up the dockerfile first",
+    ].join("\n"),
   );
 });
 
@@ -590,7 +594,7 @@ test("the deterministic fill works on the stem exactly as on a real frond — mo
   const brief = await readBrief(stem.briefPath);
   expect(brief.Goal).toBe("just a plain prompt");
   expect(brief.Files).toContain("README.md");
-  expect(brief.Recent).toContain("- editing the readme");
+  expect(brief.Recent).toContain("· editing the readme");
 });
 
 test("/fern new <name> rejects a path-traversal name and never creates anything on disk for it", async () => {

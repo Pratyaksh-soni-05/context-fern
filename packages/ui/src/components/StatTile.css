@@ -1,0 +1,35 @@
+.stat-tile {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 118px;
+}
+.stat-tile__row {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+.stat-tile__label {
+  color: var(--ink);
+}
+.stat-tile__value {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 40px;
+  line-height: 1;
+}
+.stat-tile__bar {
+  display: flex;
+  gap: 3px;
+}
+.stat-tile__cell {
+  flex: 1;
+  height: 3px;
+  border-radius: 1px;
+}

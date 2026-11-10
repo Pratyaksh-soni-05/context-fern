@@ -23,6 +23,7 @@ import {
   loadFernConfig,
   openFernStore,
 } from "@context-fern/store";
+import { canonicalizeProjectPath } from "./client";
 
 export interface PendingExchange {
   promptHash: string;
@@ -65,6 +66,44 @@ export interface ProjectState {
 
 const registry = new Map<string, Promise<ProjectState>>();
 
+/**
+ * `canonicalizeProjectPath` already normalizes case via the real
+ * on-disk casing `realpathSync.native` returns — this is a backstop
+ * for its one fallback case (the path doesn't exist yet, so native
+ * resolution fails and whatever casing the caller passed in survives
+ * unchanged): the in-memory registry Map still needs one canonical key
+ * regardless, since plain Map key equality can't be case-insensitive
+ * on its own. `projectPath` itself (stored in ProjectState, passed to
+ * the store) keeps its real casing — only this Map-key derivation
+ * folds it.
+ */
+function registryKey(projectPath: string): string {
+  return process.platform === "win32" ? projectPath.toLowerCase() : projectPath;
+}
+
+/**
+ * Looks for any historical session row stored under a different
+ * spelling of this same real project path — a Windows 8.3 short name,
+ * a case difference, or a trailing slash, all of which canonicalize to
+ * the same real directory but didn't exact-match in SQL before this
+ * function existed. Renames every match onto `projectPath` (already
+ * canonical) so the project's full history becomes reachable from one
+ * spelling, merged rather than lost. A no-op, cheap scan once there's
+ * nothing left to migrate (every row is already canonical going
+ * forward, since createSession below always receives a canonical path).
+ */
+async function migrateHistoricalProjectPaths(
+  store: FernStore,
+  projectPath: string,
+): Promise<void> {
+  const distinctPaths = await store.listDistinctProjectPaths();
+  for (const old of distinctPaths) {
+    if (old !== projectPath && canonicalizeProjectPath(old) === projectPath) {
+      await store.renameSessionsProjectPath(old, projectPath);
+    }
+  }
+}
+
 async function openProject(projectPath: string): Promise<ProjectState> {
   const fernDir = join(projectPath, CONFIG_DIR);
   const store = await openFernStore(fernDir);
@@ -80,8 +119,17 @@ async function openProject(projectPath: string): Promise<ProjectState> {
   // brand-new session with a brand-new empty stem, even when a real,
   // populated session for this exact path already existed. See
   // docs/decisions.md.
+  let found = await store.findSessionByProjectPath(projectPath);
+  if (!found) {
+    // Before concluding there's truly no prior session: a differently-
+    // spelled historical row for this same real path may exist (see
+    // docs/decisions.md's path-canonicalization entry) — migrate it
+    // onto the canonical spelling and look again.
+    await migrateHistoricalProjectPaths(store, projectPath);
+    found = await store.findSessionByProjectPath(projectPath);
+  }
   const session =
-    (await store.findSessionByProjectPath(projectPath)) ??
+    found ??
     (await store.createSession({
       agent: `${CLI_NAME}-daemon`,
       projectPath,
@@ -126,8 +174,20 @@ export async function refreshFrondNames(state: ProjectState): Promise<void> {
   state.frondNames = new Map(fronds.map((f) => [f.id, f.name]));
 }
 
-export function getOrOpenProject(projectPath: string): Promise<ProjectState> {
-  let entry = registry.get(projectPath);
+/**
+ * Canonicalizes `rawProjectPath` once here, at the one chokepoint every
+ * caller (CLI, hooks, and every `fern ui` browser request) ultimately
+ * goes through — a short/long Windows path, mixed case, or a trailing
+ * slash for the same real directory now all resolve to the same
+ * registry entry and the same store session, instead of each minting
+ * its own empty one. See docs/decisions.md.
+ */
+export function getOrOpenProject(
+  rawProjectPath: string,
+): Promise<ProjectState> {
+  const projectPath = canonicalizeProjectPath(rawProjectPath);
+  const key = registryKey(projectPath);
+  let entry = registry.get(key);
   if (!entry) {
     entry = openProject(projectPath);
     // A transient failure (locked file, disk hiccup) must not poison this
@@ -137,18 +197,18 @@ export function getOrOpenProject(projectPath: string): Promise<ProjectState> {
     // (possibly successful) entry for the same path.
     const failedEntry = entry;
     failedEntry.catch(() => {
-      if (registry.get(projectPath) === failedEntry)
-        registry.delete(projectPath);
+      if (registry.get(key) === failedEntry) registry.delete(key);
     });
-    registry.set(projectPath, entry);
+    registry.set(key, entry);
   }
   return entry;
 }
 
 /** Test-only: forget a project so a fresh openProject() runs next time. */
-export async function forgetProject(projectPath: string): Promise<void> {
-  const entry = registry.get(projectPath);
-  registry.delete(projectPath);
+export async function forgetProject(rawProjectPath: string): Promise<void> {
+  const key = registryKey(canonicalizeProjectPath(rawProjectPath));
+  const entry = registry.get(key);
+  registry.delete(key);
   if (entry) (await entry).store.close();
 }
 

@@ -30,11 +30,21 @@ export type {
   ProjectState,
 } from "./project-registry";
 export { closeAllProjects, getOrOpenProject } from "./project-registry";
+export type { RecentProject } from "./project-registry-file";
+export {
+  clearRecentProjects,
+  listRecentProjects,
+  projectsFilePath,
+  resolveProjectPath,
+  touchRecentProject,
+} from "./project-registry-file";
 export type { PromptResult, Suggestion } from "./prompt-handler";
 export { DaemonError } from "./prompt-util";
+export { SESSION_COOKIE_NAME } from "./protocol";
 export type { DaemonHandle, StartDaemonOptions } from "./server";
 export { startDaemon, TOKEN_HEADER } from "./server";
 export {
   TimeoutRetryLlmClient,
   type TimeoutRetryLlmClientOptions,
 } from "./timeout-retry-llm-client";
+export { UiSessionStore } from "./ui-session";

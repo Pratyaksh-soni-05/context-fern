@@ -1,0 +1,152 @@
+.list-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.list-view__header,
+.list-view__row {
+  display: grid;
+  grid-template-columns: 44px 200px 84px minmax(0, 1fr) 132px 48px;
+  gap: 14px;
+  align-items: center;
+}
+
+.list-view__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--paper-grid);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.list-view__error {
+  color: var(--stray-ink);
+  padding: 10px 16px;
+}
+
+.list-view__rows {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.list-view__row {
+  width: 100%;
+  padding: 10px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--root-wash);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  font: 400 13px var(--font-sans);
+}
+
+.list-view__row[data-selected="true"] {
+  background: var(--root-wash);
+}
+
+.list-view__row:hover {
+  background: var(--paper-grid);
+}
+
+.list-view__row:focus-visible {
+  outline: 2px solid var(--forest);
+  outline-offset: -2px;
+}
+
+.list-view__turn {
+  font-family: var(--font-mono);
+  color: var(--text-3);
+}
+
+.list-view__frond {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.list-view__frond-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-view__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  border-width: 1.5px;
+}
+
+.list-view__prompt {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-2);
+}
+
+.list-view__context {
+  display: flex;
+  gap: 2px;
+}
+
+.list-view__context-cell {
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  background: var(--off);
+}
+
+.list-view__conf {
+  font-family: var(--font-mono);
+  color: var(--text-3);
+}
+
+.list-view__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--paper-grid);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.list-view__pagination button {
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  padding: 4px 10px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink);
+}
+
+.list-view__pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.list-view__pagination button:focus-visible {
+  outline: 2px solid var(--forest);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .list-view__row {
+    transition: background-color 120ms ease;
+  }
+}

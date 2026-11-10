@@ -16,7 +16,7 @@
 // Every other hook must call the raw, non-spawning helpers below and
 // fail silently (no daemon call at all) if the daemon isn't already up.
 
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { CLI_NAME } from "@context-fern/core";
@@ -104,13 +104,32 @@ export async function isDaemonRunning(
   return alive ? info : null;
 }
 
-/** Fire-and-forget: spawns the daemon detached and returns immediately. Never polls, never waits — the only daemon-start call a hook may make. */
-export function spawnDaemonDetached(): void {
+/**
+ * Spawns `cmd` fully detached from this process — stdio ignored,
+ * unref'd immediately — so the child (and whatever it execs or hands
+ * off to) survives this process exiting right after the call returns.
+ * The hazard this guards against is real, not theoretical: on Windows,
+ * a child spawned without `detached: true` can be torn down by the OS
+ * once its own un-detached parent exits, even when the parent exits
+ * only moments after the spawn call — which is exactly the shape of
+ * every caller here (spawn, then return, then the caller's own process
+ * exits almost immediately after). This was the actual cause of `fern
+ * ui`'s browser intermittently never completing its navigation before
+ * this helper existed — see docs/decisions.md. Every detached spawn in
+ * this codebase must go through this one function, not call
+ * `Bun.spawn` directly, so this can't regress at a new call site.
+ */
+export function spawnDetached(cmd: string[]): void {
   Bun.spawn({
-    cmd: ["bun", "run", ENTRYPOINT],
+    cmd,
     stdio: ["ignore", "ignore", "ignore"],
     detached: true,
   }).unref();
+}
+
+/** Fire-and-forget: spawns the daemon detached and returns immediately. Never polls, never waits — the only daemon-start call a hook may make. */
+export function spawnDaemonDetached(): void {
+  spawnDetached(["bun", "run", ENTRYPOINT]);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -192,12 +211,67 @@ export async function getJson(path: string): Promise<Record<string, unknown>> {
   return rawGetJson(info, path);
 }
 
-function isSamePath(a: string, b: string): boolean {
+export function isSamePath(a: string, b: string): boolean {
   // Windows paths can differ only in case (drive letter, etc.) — the
   // filesystem itself is case-insensitive there, so the comparison must be.
   return process.platform === "win32"
     ? a.toLowerCase() === b.toLowerCase()
     : a === b;
+}
+
+// Memoized per raw input string, not per process lifetime overall — a
+// failed/nonexistent-path resolution is never cached (see below), only
+// a successful native-realpath one. The daemon process is long-lived,
+// so this turns "one real syscall the first time a given raw path is
+// seen" into "free" for every later call with that same raw string —
+// load-bearing for hot paths like /prompt, which every passive hook
+// call hits once per turn.
+const canonicalPathCache = new Map<string, string>();
+
+/**
+ * Resolves `rawPath` to one canonical identity for "this real project
+ * directory" — the same bug class as two differently-spelled paths
+ * (a Windows 8.3 short name vs. the long form, a case difference, a
+ * trailing separator) landing in `sessions.project_path` as if they
+ * were two different projects, each with its own empty session. Used
+ * everywhere a project's identity is derived from a raw path: the CLI,
+ * the Claude Code hooks, the daemon's in-memory project registry and
+ * `~/.fern/projects.json`, and any daemon endpoint that takes a
+ * `projectPath` (indirectly, via `getOrOpenProject`).
+ *
+ * `fs.realpathSync.native` (not the plain JS-implemented `fs.realpath`)
+ * is what actually expands a Windows 8.3 short name and resolves
+ * symlinks via the OS itself — it also returns the path in its real,
+ * on-disk casing, which already normalizes ordinary case differences
+ * without a separate lowercasing step (full case-insensitive EQUALITY
+ * still goes through `isSamePath` as a backstop, for the one case this
+ * doesn't cover: the path doesn't exist yet, so native resolution
+ * fails and the fallback below preserves whatever casing the caller
+ * passed in).
+ *
+ * Never throws: a path that doesn't exist (yet, or any longer) falls
+ * back to a plain `path.resolve()` — every real caller here is
+ * opening a path that's expected to exist, and a canonicalization
+ * helper throwing on a transient/nonexistent path would be a worse
+ * failure mode than a slightly-less-canonical fallback string.
+ */
+export function canonicalizeProjectPath(rawPath: string): string {
+  const cached = canonicalPathCache.get(rawPath);
+  if (cached !== undefined) return cached;
+
+  const resolved = resolve(rawPath).replace(/[\\/]+$/, "") || resolve(rawPath);
+  try {
+    const native = realpathSync.native(resolved);
+    canonicalPathCache.set(rawPath, native);
+    return native;
+  } catch {
+    return resolved; // not cached — try native resolution again next time
+  }
+}
+
+/** Test-only: clears the memoization cache so a test that creates/removes temp directories under colliding raw paths doesn't see a stale resolution from an earlier test. */
+export function clearCanonicalProjectPathCache(): void {
+  canonicalPathCache.clear();
 }
 
 /**

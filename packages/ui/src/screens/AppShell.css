@@ -1,0 +1,138 @@
+.app-shell {
+  /* A hard height, not min-height — exactly the viewport, so
+     .app-shell__main's own overflow-y: auto (below) actually has a
+     real, non-growing box to scroll within instead of just growing the
+     page. See tokens.css's html/body/#root overflow:hidden for the
+     other half of "no page-level scroll, only panels scroll inside". */
+  height: 100dvh;
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--paper-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--paper-grid) 1px, transparent 1px);
+  background-size: var(--grid) var(--grid);
+  color: var(--ink);
+  display: flex;
+}
+.app-shell__main {
+  flex-grow: 1;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  /* A viewport shorter than the design's own 960px reference canvas
+     scrolls instead of clipping the stat tiles row. Only works because
+     .app-shell now has a hard height (100dvh, not min-height) — a flex
+     item's overflow-y: auto is a no-op without a bounded box to scroll
+     inside of. */
+  overflow-y: auto;
+}
+.app-shell__header {
+  height: 48px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.app-shell__wordmark-group {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  min-width: 0;
+}
+.app-shell__wordmark {
+  font-family: var(--font-serif);
+  font-size: 28px;
+  color: var(--forest);
+  white-space: nowrap;
+}
+.app-shell__wordmark em {
+  font-style: italic;
+}
+.app-shell__path {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-shell__view-switch {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line-control);
+  border-radius: 11px;
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.app-shell__view-tab {
+  min-height: 34px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-control);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-2);
+}
+.app-shell__view-tab[data-active="true"] {
+  background: var(--ink);
+  color: var(--on-dark);
+}
+.app-shell__view-tab:focus-visible {
+  outline: 2px solid var(--forest);
+  outline-offset: 1px;
+}
+.app-shell__header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  flex-shrink: 0;
+}
+.app-shell__localhost {
+  color: var(--text-3);
+}
+.app-shell__error {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--stray-ink);
+}
+.app-shell__body {
+  flex-grow: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 352px;
+  /* Without an explicit row track, this single implicit row sizes to
+     its tallest child's own content height (fern-view's SVG canvas,
+     specifically) instead of stretching to the grid's own definite
+     height — which in turn makes `height: 100%` on fern-view/inspector
+     resolve to `auto` against an indefinite ancestor, so both grow
+     past the available space and visually overlap the stat tiles row
+     below. `minmax(0, 1fr)` is the fix: a bare `1fr` track still has
+     an automatic minimum of `auto` (content-based), same footgun as a
+     flex item's default `min-height: auto`. */
+  grid-template-rows: minmax(0, 1fr);
+  gap: 14px;
+}
+.app-shell__stats {
+  height: 120px;
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.app-shell__truncation-note {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+}

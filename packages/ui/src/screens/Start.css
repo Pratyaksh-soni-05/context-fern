@@ -1,0 +1,217 @@
+.start-screen {
+  /* A hard height, not min-height — exactly the viewport, every time,
+     so the card below is forced to fit inside it (and shrink/scroll
+     internally where it can't) rather than growing the page. dvh over
+     vh: stays correct if the browser's own chrome resizes the viewport
+     after load. */
+  height: 100dvh;
+  box-sizing: border-box;
+  /* The vertical component is vh-based (not vw) so it actually shrinks
+     on a short-but-wide viewport (e.g. 1366x768) instead of staying
+     pinned to a width-derived value that has nothing to do with the
+     dimension that's actually tight. */
+  padding: clamp(16px, 4vh, 120px) clamp(16px, 10vw, 180px);
+  background-color: var(--charcoal);
+  background-image:
+    linear-gradient(var(--on-dark-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--on-dark-line) 1px, transparent 1px);
+  background-size: 120px 120px;
+  font-family: var(--font-sans);
+  display: flex;
+}
+
+.start-card {
+  flex-grow: 1;
+  display: grid;
+  grid-template-columns: minmax(320px, 460px) minmax(0, 1fr);
+  background: var(--paper);
+  color: var(--ink);
+  clip-path: polygon(
+    18px 0,
+    calc(100% - 18px) 0,
+    100% 18px,
+    100% calc(100% - 18px),
+    calc(100% - 18px) 100%,
+    18px 100%,
+    0 calc(100% - 18px),
+    0 18px
+  );
+  overflow: hidden;
+  min-height: 0;
+}
+
+.start-card__left {
+  padding: clamp(16px, 3vh, 72px) clamp(24px, 5vw, 64px);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 2vh, 22px);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.start-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.start-heading h1 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 46px;
+  line-height: 48px;
+  color: var(--forest);
+}
+.start-heading p {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 20px;
+  color: var(--text-2);
+}
+
+.start-recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.start-recent-row {
+  width: 100%;
+  min-height: 52px;
+  box-sizing: border-box;
+  padding: 8px 18px;
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: inherit;
+  text-align: left;
+}
+.start-recent-row:hover,
+.start-recent-row:focus-visible {
+  border-color: var(--text-3);
+}
+.start-recent-row__info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.start-recent-row__name {
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.start-recent-row__path {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.start-recent-row__count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+
+.start-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+.start-divider > span {
+  flex-grow: 1;
+  height: 1px;
+  background: var(--line-strong);
+}
+
+.start-folder-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.start-folder-form label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+}
+.start-folder-form input {
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 0 18px;
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink);
+}
+.start-folder-form input:focus-visible {
+  outline: 2px solid var(--forest);
+  outline-offset: 1px;
+}
+
+.start-open-button {
+  min-height: 44px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--ink);
+  color: var(--on-dark);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  cursor: pointer;
+}
+.start-open-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.start-open-button:focus-visible {
+  outline: 2px solid var(--forest);
+  outline-offset: 2px;
+}
+
+.start-error {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--stray-ink);
+}
+
+.start-footer {
+  margin: auto 0 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--text-2);
+  text-align: center;
+}
+
+.start-card__art {
+  position: relative;
+  background: var(--sand);
+}
+
+@media (max-width: 760px) {
+  .start-card {
+    grid-template-columns: 1fr;
+  }
+  .start-card__art {
+    display: none;
+  }
+}

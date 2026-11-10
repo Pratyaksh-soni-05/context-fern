@@ -9,7 +9,8 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readDaemonInfo } from "@context-fern/daemon";
+import { listRecentProjects, readDaemonInfo } from "@context-fern/daemon";
+import { canonicalizeProjectPath } from "@context-fern/daemon/client";
 
 const CLI_ENTRYPOINT = join(import.meta.dir, "../src/index.ts");
 
@@ -64,6 +65,21 @@ test("fern init creates .fern/config.toml and skips .gitignore with --no", async
     join(projectDir, ".fern", "config.toml"),
   ).text();
   expect(configText).toContain("[thresholds]");
+}, 30_000);
+
+test("fern init also materializes .fern/fern.db and registers the project in ~/.fern/projects.json — fern ui's Start screen requires both", async () => {
+  // Reuses the same projectDir the previous test already ran `fern init`
+  // against — this checks the materialize step's own effects, not init
+  // itself (already covered above).
+  const dbExists = await Bun.file(
+    join(projectDir, ".fern", "fern.db"),
+  ).exists();
+  expect(dbExists).toBe(true);
+
+  const projects = await listRecentProjects(fakeHome);
+  expect(
+    projects.some((p) => p.path === canonicalizeProjectPath(projectDir)),
+  ).toBe(true);
 }, 30_000);
 
 test("fern new creates a frond (spawning the daemon on first use)", async () => {

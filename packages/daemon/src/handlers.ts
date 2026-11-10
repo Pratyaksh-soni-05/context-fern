@@ -256,3 +256,24 @@ export async function handleFronds(
   const { fronds } = await handleTree(state);
   return { fronds };
 }
+
+/** GET /leaflets — fern ui's List view, one row per leaflet, windowed. */
+export function handleLeaflets(
+  state: ProjectState,
+  page: { offset: number; limit: number },
+) {
+  return state.store.listLeafletsWithDecisions(state.sessionId, page);
+}
+
+/** GET /stats — fern ui's four stat tiles. `rootsUsed` and `ctxKeptOut` are fixed literals, not queries: `roots` is schema-only and unwritten (spec §15 — writing to roots is out of scope for launch) and isolate-mode token accounting isn't built yet. Composed here, not in the store, since they're daemon-level presentation facts, not derived data. */
+export async function handleStats(state: ProjectState) {
+  const stats = await state.store.getSessionStats(state.sessionId);
+  return { ...stats, rootsUsed: 0 as const, ctxKeptOut: "n/a" as const };
+}
+
+const HEATMAP_MAX_COLUMNS = 60;
+
+/** GET /heatmap — fern ui's Categories view topic-switching heat map, aggregated so a long session doesn't produce one column per turn. */
+export function handleHeatmap(state: ProjectState) {
+  return state.store.heatmapRows(state.sessionId, HEATMAP_MAX_COLUMNS);
+}

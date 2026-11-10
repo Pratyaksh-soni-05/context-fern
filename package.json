@@ -7,12 +7,14 @@
     "bun": "1.4.4"
   },
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "e2e"
   ],
   "scripts": {
     "lint": "biome check . && uv run --project bench ruff check",
-    "typecheck": "tsc -b && tsc -p tsconfig.tests.json && tsc -p tsconfig.bench.json",
-    "test": "bun test packages bench/ts test && uv run --project bench pytest"
+    "typecheck": "tsc -b && tsc -p tsconfig.tests.json && tsc -p tsconfig.bench.json && tsc -p packages/ui/tsconfig.json && tsc -p e2e/tsconfig.json",
+    "test": "bun test --path-ignore-patterns \"packages/ui/**\" --path-ignore-patterns \"e2e/**\" packages bench/ts test && bun test -r ./packages/ui/test/dom-setup.ts packages/ui && uv run --project bench pytest",
+    "demo": "bun scripts/demo.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.2",

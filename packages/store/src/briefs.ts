@@ -86,13 +86,29 @@ function parse(markdown: string): BriefSections {
   return sections;
 }
 
-/** Recent's on-disk entries, one per `- ` bullet, with the machine note stripped — the inverse of what pushRecentEntry writes. */
-function parseRecentEntries(raw: string): string[] {
+export interface RecentEntry {
+  /** The leaflet turn number this entry was written for, or null for a line with no machine-written tag (a hand-typed Recent line, or an entry written before this tag format existed). */
+  turn: number | null;
+  text: string;
+}
+
+const RECENT_ENTRY_RE = /^- t(\d+) · (.*)$/;
+
+/** Recent's on-disk entries, one per `- ` bullet, with the machine note stripped and the `tN · ` turn tag (if present) parsed back out — the inverse of what pushRecentEntry writes. Exported so a caller (the daemon's /leaflets handler) can map a leaflet's turn number back to real prompt text without duplicating this parsing. */
+export function parseRecentEntries(raw: string): RecentEntry[] {
   return raw
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l.length > 0 && l !== RECENT_NOTE)
-    .map((l) => (l.startsWith("- ") ? l.slice(2) : l));
+    .map((l) => {
+      const m = RECENT_ENTRY_RE.exec(l);
+      if (m) return { turn: Number(m[1]), text: m[2] ?? "" };
+      return { turn: null, text: l.startsWith("- ") ? l.slice(2) : l };
+    });
+}
+
+function renderRecentEntry(e: RecentEntry): string {
+  return e.turn !== null ? `- t${e.turn} · ${e.text}` : `- ${e.text}`;
 }
 
 async function readMeta(metaPath: string): Promise<SectionHashes> {
@@ -193,32 +209,45 @@ export async function writeBriefSections(
 
 /**
  * Prepends one entry to Recent's rolling window (newest first, capped
- * at `RECENT_MAX`). No meta/hash check, no merge — unlike every other
- * section, a user's hand-edit to Recent gets no special preservation:
- * there's no second source of truth to restore it from (prompt text
- * lives only in the brief file, never fern.db), so whatever is on disk
- * when this runs — system-written or hand-typed — is simply treated as
- * the current rolling window and carried forward until it rolls off.
+ * at `RECENT_MAX`), tagged with the leaflet `turn` number that produced
+ * it (rendered as `- t<turn> · <entry>`). The tag, not the entry's
+ * position in the window, is what a reader (the daemon's /leaflets
+ * handler) uses to map a specific leaflet back to its real prompt text —
+ * a consecutive duplicate collapses (see below) without ever being
+ * written, so "the Nth-from-top entry" and "the Nth-most-recent leaflet"
+ * are not reliably the same thing. See docs/decisions.md.
+ *
+ * No meta/hash check, no merge — unlike every other section, a user's
+ * hand-edit to Recent gets no special preservation: there's no second
+ * source of truth to restore it from (prompt text lives only in the
+ * brief file, never fern.db), so whatever is on disk when this runs —
+ * system-written or hand-typed — is simply treated as the current
+ * rolling window and carried forward until it rolls off. A hand-typed
+ * line (no `tN · ` tag) round-trips untagged.
+ *
  * No-op if `entry` is empty (e.g. a frond created by a direct
- * `/fern new <name>` with no triggering prompt text yet), or if it's
- * identical to the current newest entry (a retried/double-submitted
- * prompt shouldn't fill the window with repeats of the same line).
+ * `/fern new <name>` with no triggering prompt text yet), or if its text
+ * is identical to the current newest entry's text (a retried/double-
+ * submitted prompt shouldn't fill the window with repeats of the same
+ * line) — in that case the newest entry's turn tag is left as-is, not
+ * updated to the new call's turn.
  */
 export async function pushRecentEntry(
   briefPath: string,
+  turn: number,
   entry: string,
 ): Promise<void> {
   if (!entry) return;
   const current = await readBrief(briefPath);
   const existing = parseRecentEntries(current.Recent);
-  // Collapse a consecutive duplicate (e.g. the same prompt retried, or
-  // a double-submit) rather than filling the window with repeats of
-  // the same line.
-  if (existing[0] === entry) return;
-  const nextEntries = [entry, ...existing].slice(0, RECENT_MAX);
+  if (existing[0]?.text === entry) return;
+  const nextEntries: RecentEntry[] = [{ turn, text: entry }, ...existing].slice(
+    0,
+    RECENT_MAX,
+  );
   const next: BriefSections = {
     ...current,
-    Recent: nextEntries.map((l) => `- ${l}`).join("\n"),
+    Recent: nextEntries.map(renderRecentEntry).join("\n"),
   };
   await writeFile(briefPath, render(next), "utf-8");
 }

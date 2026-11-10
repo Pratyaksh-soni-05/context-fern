@@ -12,10 +12,12 @@ import {
   runUndo,
 } from "./commands/frond";
 import { runInit } from "./commands/init";
+import { materializeAndRegisterProject } from "./commands/init-materialize";
 import { runRoute } from "./commands/route";
 import { runStatus } from "./commands/status";
 import { runStatusline } from "./commands/statusline";
 import { runTree } from "./commands/tree";
+import { runUi } from "./commands/ui";
 
 export { parseArgs } from "./argv";
 export { loadConfig } from "./load-config";
@@ -31,6 +33,7 @@ async function main(): Promise<number> {
         return 0;
       case "init":
         await runInit(flags);
+        await materializeAndRegisterProject(process.cwd());
         return 0;
       case "daemon":
         await runDaemon(positional[0]);
@@ -64,6 +67,9 @@ async function main(): Promise<number> {
         return 0;
       case "statusline":
         await runStatusline(flags);
+        return 0;
+      case "ui":
+        await runUi();
         return 0;
       default:
         console.error(`${CLI_NAME}: unknown command "${command}"`);

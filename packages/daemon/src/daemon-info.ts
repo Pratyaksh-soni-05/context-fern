@@ -54,12 +54,21 @@ export async function writeDaemonInfo(
   homeDir: string = fernHomeDir(),
 ): Promise<void> {
   const dir = join(homeDir, CONFIG_DIR);
-  await mkdir(dir, { recursive: true });
-  await writeFile(
-    daemonInfoPath(homeDir),
-    JSON.stringify(info, null, 2),
-    "utf-8",
-  );
+  // Explicit modes, not left to the process umask — daemon.json holds
+  // the raw token that grants full access to every daemon endpoint
+  // (read any project's leaflets/briefs, flip mode, undo decisions,
+  // mint UI codes). A permissive umask (common on shared Linux/macOS
+  // boxes — e.g. 022 with a traversable home dir) would otherwise
+  // leave this file world-readable. `mode` is effectively a no-op on
+  // Windows (ACL-based, not POSIX-bit-based) — harmless there, since
+  // Windows already restricts a fresh per-profile dir to the owning
+  // account by default. Confirmed via a real adversarial security
+  // review; see docs/decisions.md.
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  await writeFile(daemonInfoPath(homeDir), JSON.stringify(info, null, 2), {
+    encoding: "utf-8",
+    mode: 0o600,
+  });
 }
 
 export async function deleteDaemonInfo(

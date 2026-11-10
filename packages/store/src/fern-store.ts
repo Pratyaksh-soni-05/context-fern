@@ -22,6 +22,7 @@ import {
   appendMergeBlock,
   archiveOrDeleteBrief,
   createBrief,
+  parseRecentEntries,
   readBrief,
   stripMergeBlock,
 } from "./briefs";
@@ -185,10 +186,56 @@ export interface RecordLeafletInput {
   filesTouched: FileTouch[];
 }
 
+/** One row for `fern ui`'s List view — a leaflet joined with its most recent decision and (where recoverable) real prompt text. See docs/decisions.md on why `promptPreview` is `null` for most leaflets: the brief's Recent section is the only place real prompt text exists on disk, and it's capped at 5 tagged entries per frond. */
+export interface UiLeaflet {
+  turn: number;
+  frondName: string;
+  isStray: boolean;
+  strayFromFrondName: string | null;
+  kind: DecisionAction | null;
+  promptPreview: string | null;
+  tokenCount: number;
+  confidence: number | null;
+  filesTouchedCount: number;
+}
+
+export interface UiLeafletPage {
+  leaflets: UiLeaflet[];
+  total: number;
+}
+
+/**
+ * Stat-tile source data. `undo` is `null` ("n/a" in the UI) when there
+ * are fewer than 5 actionable decisions — too few for a ratio to mean
+ * anything. `rootsUsed` and `ctxKeptOut` aren't included here: they're
+ * fixed literals the daemon composes directly (`0` and `"n/a"`), not
+ * derived from a query — see docs/decisions.md on why (`roots` is
+ * schema-only and unwritten; isolate-mode token accounting isn't built).
+ */
+export interface SessionStats {
+  frondCount: number;
+  strayCount: number;
+  undo: { count: number; of: number } | null;
+}
+
+export interface HeatmapRow {
+  frondName: string;
+  cells: (string | null)[];
+}
+
+export interface HeatmapResult {
+  rows: HeatmapRow[];
+  turnsPerCell: number;
+}
+
 export interface FernStore {
   db: Database;
   createSession(input: CreateSessionInput): Promise<Session>;
   findSessionByProjectPath(projectPath: string): Promise<Session | null>;
+  /** Every distinct `project_path` any session row in this store was ever created under — used to migrate historical rows stored under a now-non-canonical spelling (a short/long Windows path, mixed case, a trailing slash) onto the one canonical spelling, without losing their history. See docs/decisions.md. */
+  listDistinctProjectPaths(): Promise<string[]>;
+  /** Rewrites every session row's `project_path` from `oldPath` to `newPath` — the write half of the migration above. A no-op (0 rows) if nothing currently matches `oldPath`. */
+  renameSessionsProjectPath(oldPath: string, newPath: string): Promise<void>;
   createFrond(input: CreateFrondInput): Promise<Frond>;
   recordLeaflet(input: RecordLeafletInput): Promise<Leaflet>;
   recordDecision(
@@ -204,6 +251,17 @@ export interface FernStore {
   markStray(leafletId: string, strayFrom: string | null): Promise<Decision>;
   undoLast(sessionId: string): Promise<Decision>;
   mergeFrond(frondId: string): Promise<Decision>;
+  /** `fern ui`'s List view — windowed, so a session with thousands of leaflets never has to render (or query) them all at once. */
+  listLeafletsWithDecisions(
+    sessionId: string,
+    page: { offset: number; limit: number },
+  ): Promise<UiLeafletPage>;
+  /** `fern ui`'s stat tiles. */
+  getSessionStats(sessionId: string): Promise<SessionStats>;
+  /** `fern ui`'s Categories view topic-switching heat map, aggregated into at most `maxColumns` columns so a long session doesn't produce one column per turn. */
+  heatmapRows(sessionId: string, maxColumns: number): Promise<HeatmapResult>;
+  /** `fern ui`'s Start screen — how many sessions this store has recorded for one project path (almost always every session in this store, since one store serves one project). */
+  countSessionsForProjectPath(projectPath: string): Promise<number>;
   close(): void;
 }
 
@@ -314,6 +372,23 @@ export async function openFernStore(fernDir: string): Promise<FernStore> {
       )
       .get(projectPath) as SessionRow | null;
     return row ? sessionRowToSession(row) : null;
+  }
+
+  async function listDistinctProjectPaths(): Promise<string[]> {
+    const rows = db
+      .query("SELECT DISTINCT project_path FROM sessions")
+      .all() as { project_path: string }[];
+    return rows.map((r) => r.project_path);
+  }
+
+  async function renameSessionsProjectPath(
+    oldPath: string,
+    newPath: string,
+  ): Promise<void> {
+    db.run("UPDATE sessions SET project_path = ? WHERE project_path = ?", [
+      newPath,
+      oldPath,
+    ]);
   }
 
   async function createFrond(input: CreateFrondInput): Promise<Frond> {
@@ -767,10 +842,222 @@ export async function openFernStore(fernDir: string): Promise<FernStore> {
     return recordDecision(decision, null);
   }
 
+  interface LeafletWithDecisionRow {
+    idx: number;
+    frond_id: string | null;
+    frond_name: string | null;
+    stray_from_name: string | null;
+    token_count: number;
+    files_touched: string;
+    action: string | null;
+    confidence: number | null;
+    stage: string | null;
+    signals: string | null;
+  }
+
+  /**
+   * `decisions.confidence` is `NOT NULL` — every manual/forced decision
+   * (stage "manual", or a forced-continue's `signals` entry) still
+   * stores a real `1` there, never a real router score, so it can't be
+   * told apart from a genuine 100%-confidence router decision by value
+   * alone. Rather than loosen the schema constraint, the UI-facing
+   * projection derives the honest value here: `null` ("no router score"
+   * — the List/Inspector show "—"/"forced, no score") for anything
+   * that isn't a real stage 0/2 router decision. See docs/decisions.md.
+   */
+  function hasRealRouterScore(
+    stage: string | null,
+    signalsJson: string | null,
+  ): boolean {
+    if (stage === "manual") return false;
+    if (!signalsJson) return true;
+    try {
+      const signals = JSON.parse(signalsJson) as string[];
+      if (signals.includes("forced-continue")) return false;
+    } catch {
+      // malformed signals JSON — err on the side of trusting the stored
+      // confidence rather than hiding a real one.
+    }
+    return true;
+  }
+
+  async function listLeafletsWithDecisions(
+    sessionId: string,
+    page: { offset: number; limit: number },
+  ): Promise<UiLeafletPage> {
+    const { count: total } = db
+      .query("SELECT COUNT(*) AS count FROM leaflets WHERE session_id = ?")
+      .get(sessionId) as { count: number };
+
+    const rows = db
+      .query(
+        `SELECT
+           l.idx AS idx,
+           l.frond_id AS frond_id,
+           f.name AS frond_name,
+           sf.name AS stray_from_name,
+           l.token_count AS token_count,
+           l.files_touched AS files_touched,
+           d.action AS action,
+           d.confidence AS confidence,
+           d.stage AS stage,
+           d.signals AS signals
+         FROM leaflets l
+         LEFT JOIN fronds f ON l.frond_id = f.id
+         LEFT JOIN fronds sf ON l.stray_from = sf.id
+         LEFT JOIN (
+           SELECT leaflet_id, action, confidence, stage, signals,
+                  ROW_NUMBER() OVER (PARTITION BY leaflet_id ORDER BY seq DESC) AS rn
+           FROM decisions
+           WHERE leaflet_id IS NOT NULL
+         ) d ON d.leaflet_id = l.id AND d.rn = 1
+         WHERE l.session_id = ?
+         ORDER BY l.idx ASC
+         LIMIT ? OFFSET ?`,
+      )
+      .all(sessionId, page.limit, page.offset) as LeafletWithDecisionRow[];
+
+    // The only place real prompt text exists on disk is a frond's brief
+    // Recent section, tagged by turn (see briefs.ts's pushRecentEntry) —
+    // read each distinct frond's brief once, not once per leaflet.
+    const frondIds = new Set(
+      rows.map((r) => r.frond_id).filter((id): id is string => id !== null),
+    );
+    const previewByTurn = new Map<number, string>();
+    for (const frondId of frondIds) {
+      const briefPath = getFrondRow(frondId).brief_path;
+      const sections = await readBrief(briefPath).catch(() => null);
+      if (!sections) continue;
+      for (const entry of parseRecentEntries(sections.Recent)) {
+        if (entry.turn !== null) previewByTurn.set(entry.turn, entry.text);
+      }
+    }
+
+    const leaflets: UiLeaflet[] = rows.map((r) => {
+      const isStray = r.frond_id === null;
+      return {
+        turn: r.idx,
+        frondName: isStray ? "stray" : (r.frond_name ?? "stem"),
+        isStray,
+        strayFromFrondName: r.stray_from_name,
+        kind: (r.action as DecisionAction | null) ?? null,
+        promptPreview: previewByTurn.get(r.idx) ?? null,
+        tokenCount: r.token_count,
+        confidence:
+          r.confidence !== null && hasRealRouterScore(r.stage, r.signals)
+            ? r.confidence
+            : null,
+        filesTouchedCount: (JSON.parse(r.files_touched) as FileTouch[]).length,
+      };
+    });
+
+    return { leaflets, total };
+  }
+
+  async function getSessionStats(sessionId: string): Promise<SessionStats> {
+    const fronds = await listFronds(sessionId);
+    const frondCount = fronds.filter(
+      (f) => f.parentId !== null && f.status !== "merged",
+    ).length;
+    const { count: strayCount } = db
+      .query(
+        "SELECT COUNT(*) AS count FROM leaflets WHERE session_id = ? AND frond_id IS NULL",
+      )
+      .get(sessionId) as { count: number };
+
+    // Every plain continuation already journals a "continue" — counting
+    // those in the denominator would make the ratio sit near 0% forever
+    // and mean nothing. Only decisions that were an actual routing
+    // choice (new/return/combine/stray/merge) count. See docs/decisions.md.
+    const { of_count: of, undone_count: undoneCount } = db
+      .query(
+        `SELECT COUNT(*) AS of_count, COALESCE(SUM(undone), 0) AS undone_count
+         FROM decisions WHERE session_id = ? AND action != 'continue'`,
+      )
+      .get(sessionId) as { of_count: number; undone_count: number };
+
+    return {
+      frondCount,
+      strayCount,
+      undo: of >= 5 ? { count: undoneCount, of } : null,
+    };
+  }
+
+  async function heatmapRows(
+    sessionId: string,
+    maxColumns: number,
+  ): Promise<HeatmapResult> {
+    const leafletRows = db
+      .query(
+        "SELECT idx, frond_id FROM leaflets WHERE session_id = ? ORDER BY idx ASC",
+      )
+      .all(sessionId) as { idx: number; frond_id: string | null }[];
+
+    const totalTurns = leafletRows.length;
+    const turnsPerCell = Math.max(1, Math.ceil(totalTurns / maxColumns));
+    const columnCount =
+      totalTurns === 0 ? 0 : Math.floor((totalTurns - 1) / turnsPerCell) + 1;
+
+    const allFronds = await listFronds(sessionId);
+    const stem = allFronds.find((f) => f.parentId === null);
+    const topicFronds = allFronds.filter((f) => f.parentId !== null);
+    const nameByKey = new Map<string, string>();
+    if (stem) nameByKey.set(stem.id, stem.name);
+    for (const f of topicFronds) nameByKey.set(f.id, f.name);
+    nameByKey.set("stray", "stray");
+    const rowOrder = [
+      ...(stem ? [stem.id] : []),
+      ...topicFronds.map((f) => f.id),
+      "stray",
+    ];
+
+    // Bucket counts per column, per frond key — "stray" for a null frond_id.
+    const buckets: Map<string, number>[] = Array.from(
+      { length: columnCount },
+      () => new Map(),
+    );
+    for (const row of leafletRows) {
+      const bucketIndex = Math.floor(row.idx / turnsPerCell);
+      const key = row.frond_id ?? "stray";
+      const bucket = buckets[bucketIndex];
+      if (!bucket) continue;
+      bucket.set(key, (bucket.get(key) ?? 0) + 1);
+    }
+
+    const rows: HeatmapRow[] = rowOrder.map((key) => {
+      const name = nameByKey.get(key) ?? key;
+      const cells = buckets.map((bucket) => {
+        let bestKey: string | null = null;
+        let bestCount = -1;
+        for (const [k, c] of bucket) {
+          if (c > bestCount) {
+            bestCount = c;
+            bestKey = k;
+          }
+        }
+        return bestKey === key ? name : null;
+      });
+      return { frondName: name, cells };
+    });
+
+    return { rows, turnsPerCell };
+  }
+
+  async function countSessionsForProjectPath(
+    projectPath: string,
+  ): Promise<number> {
+    const { count } = db
+      .query("SELECT COUNT(*) AS count FROM sessions WHERE project_path = ?")
+      .get(projectPath) as { count: number };
+    return count;
+  }
+
   return {
     db,
     createSession,
     findSessionByProjectPath,
+    listDistinctProjectPaths,
+    renameSessionsProjectPath,
     createFrond,
     recordLeaflet,
     recordDecision,
@@ -783,6 +1070,10 @@ export async function openFernStore(fernDir: string): Promise<FernStore> {
     markStray,
     undoLast,
     mergeFrond,
+    listLeafletsWithDecisions,
+    getSessionStats,
+    heatmapRows,
+    countSessionsForProjectPath,
     close: () => db.close(),
   };
 }

@@ -1,11 +1,25 @@
 {
+  // This is a separate program from packages/ui/tsconfig.json, so a
+  // *.tsx test file importing something that pulls in a `*.css` side-
+  // effect import (packages/ui/src/screens/Start.tsx -> ./Start.css)
+  // needs its own copy of the ambient module declaration — hence
+  // vite-env.d.ts is included explicitly below, not just inherited
+  // from packages/ui's own config. See docs/decisions.md.
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "composite": false,
     "declaration": false,
     "declarationMap": false,
     "sourceMap": false,
-    "noEmit": true
+    "noEmit": true,
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx"
   },
-  "include": ["packages/*/test/**/*.ts", "test/**/*.ts"]
+  "include": [
+    "packages/*/test/**/*.ts",
+    "packages/*/test/**/*.tsx",
+    "test/**/*.ts",
+    "scripts/**/*.ts",
+    "packages/ui/src/vite-env.d.ts"
+  ]
 }

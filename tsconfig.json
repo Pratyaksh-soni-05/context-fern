@@ -1,4 +1,11 @@
 {
+  // packages/ui is deliberately NOT referenced here: it's a Vite app,
+  // not a library anything else in the monorepo imports, so it gets no
+  // benefit from composite project-reference semantics (nothing needs
+  // its .d.ts output). package.json's "typecheck" script checks it
+  // separately via `tsc -p packages/ui/tsconfig.json` — the same
+  // pattern already used for tsconfig.tests.json/tsconfig.bench.json.
+  // See docs/decisions.md.
   "files": [],
   "references": [
     { "path": "packages/core" },
@@ -6,7 +13,6 @@
     { "path": "packages/embed" },
     { "path": "packages/daemon" },
     { "path": "packages/cli" },
-    { "path": "packages/plugin-claude-code" },
-    { "path": "packages/ui" }
+    { "path": "packages/plugin-claude-code" }
   ]
 }

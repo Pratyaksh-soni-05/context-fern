@@ -5,6 +5,7 @@ import {
   archiveOrDeleteBrief,
   createBrief,
   isBriefUnmodified,
+  parseRecentEntries,
   pushRecentEntry,
   readBrief,
   writeBriefSections,
@@ -44,7 +45,7 @@ test("createBrief is a no-op if a brief already exists at that path — never wi
   const path = join(dir.path, "greetings.md");
   await createBrief(path);
   await writeBriefSections(path, { Goal: "real goal, already set" });
-  await pushRecentEntry(path, "a real prompt");
+  await pushRecentEntry(path, 1, "a real prompt");
 
   // Simulates exactly what a second, duplicate /fern new <existing-name>
   // used to do before its own guard existed (see docs/decisions.md):
@@ -54,7 +55,7 @@ test("createBrief is a no-op if a brief already exists at that path — never wi
 
   const brief = await readBrief(path);
   expect(brief.Goal).toBe("real goal, already set");
-  expect(brief.Recent).toBe("- a real prompt");
+  expect(brief.Recent).toBe("- t1 · a real prompt");
 });
 
 test("writeBriefSections overwrites a section the user never touched", async () => {
@@ -167,34 +168,41 @@ test("works under a directory path containing a space (the real project path has
   );
 });
 
-test("pushRecentEntry prepends newest-first and caps at 5", async () => {
+test("pushRecentEntry prepends newest-first and caps at 5, tagging each entry with its turn", async () => {
   dir = await withTempFernDir();
   const path = join(dir.path, "docker-build.md");
   await createBrief(path);
 
+  let turn = 1;
   for (const entry of ["one", "two", "three", "four", "five", "six"]) {
-    await pushRecentEntry(path, entry);
+    await pushRecentEntry(path, turn++, entry);
   }
 
   const brief = await readBrief(path);
   expect(brief.Recent).toBe(
-    ["- six", "- five", "- four", "- three", "- two"].join("\n"),
+    [
+      "- t6 · six",
+      "- t5 · five",
+      "- t4 · four",
+      "- t3 · three",
+      "- t2 · two",
+    ].join("\n"),
   );
 });
 
-test("pushRecentEntry collapses a consecutive duplicate instead of filling the window with repeats", async () => {
+test("pushRecentEntry collapses a consecutive duplicate (by text, regardless of turn) instead of filling the window with repeats, keeping the first turn's tag", async () => {
   dir = await withTempFernDir();
   const path = join(dir.path, "docker-build.md");
   await createBrief(path);
 
-  await pushRecentEntry(path, "fix the login bug");
-  await pushRecentEntry(path, "fix the login bug");
-  await pushRecentEntry(path, "fix the login bug");
-  await pushRecentEntry(path, "add a retry");
+  await pushRecentEntry(path, 1, "fix the login bug");
+  await pushRecentEntry(path, 2, "fix the login bug");
+  await pushRecentEntry(path, 3, "fix the login bug");
+  await pushRecentEntry(path, 4, "add a retry");
 
   const brief = await readBrief(path);
   expect(brief.Recent).toBe(
-    ["- add a retry", "- fix the login bug"].join("\n"),
+    ["- t4 · add a retry", "- t1 · fix the login bug"].join("\n"),
   );
 });
 
@@ -203,11 +211,11 @@ test("pushRecentEntry is a no-op for an empty entry", async () => {
   const path = join(dir.path, "docker-build.md");
   await createBrief(path);
 
-  await pushRecentEntry(path, "");
+  await pushRecentEntry(path, 1, "");
   expect((await readBrief(path)).Recent).toBe("");
 });
 
-test("pushRecentEntry is never merge-protected — unlike every other section, a user's hand-edit to Recent gets no special preservation and is just carried forward as part of the rolling window", async () => {
+test("pushRecentEntry is never merge-protected — unlike every other section, a user's hand-edit to Recent gets no special preservation and is just carried forward as part of the rolling window, untagged", async () => {
   dir = await withTempFernDir();
   const path = join(dir.path, "docker-build.md");
   await createBrief(path);
@@ -221,9 +229,9 @@ test("pushRecentEntry is never merge-protected — unlike every other section, a
     "utf-8",
   );
 
-  await pushRecentEntry(path, "a real prompt");
+  await pushRecentEntry(path, 1, "a real prompt");
   expect((await readBrief(path)).Recent).toBe(
-    "- a real prompt\n- the user's own line",
+    "- t1 · a real prompt\n- the user's own line",
   );
 });
 
@@ -232,7 +240,7 @@ test("pushRecentEntry never affects isBriefUnmodified/archiveOrDeleteBrief — i
   const path = join(dir.path, "docker-build.md");
   await createBrief(path);
 
-  await pushRecentEntry(path, "a real prompt");
+  await pushRecentEntry(path, 1, "a real prompt");
   expect(await isBriefUnmodified(path)).toBe(true);
 
   await archiveOrDeleteBrief(path, "docker-build", "decision-1");
@@ -247,6 +255,16 @@ test("archiveOrDeleteBrief: an untouched brief is deleted along with its meta fi
   await archiveOrDeleteBrief(path, "docker-build", "decision-1");
 
   await expect(readFile(path, "utf-8")).rejects.toThrow();
+});
+
+test("parseRecentEntries parses the tN tag back into a turn number, and falls back to turn:null for an untagged (hand-typed) line", () => {
+  expect(parseRecentEntries("- t12 · Fix the login bug")).toEqual([
+    { turn: 12, text: "Fix the login bug" },
+  ]);
+  expect(parseRecentEntries("- the user's own line")).toEqual([
+    { turn: null, text: "the user's own line" },
+  ]);
+  expect(parseRecentEntries("")).toEqual([]);
 });
 
 test("archiveOrDeleteBrief: a user-edited brief is moved intact, never deleted", async () => {

@@ -4,7 +4,7 @@
 // call site drops the argument by mistake (see docs/decisions.md).
 
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -74,6 +74,50 @@ test("deleteDaemonInfo removes the file; readDaemonInfo then returns null again"
   await deleteDaemonInfo(home);
   expect(await readDaemonInfo(home)).toBeNull();
 });
+
+// Found by an adversarial security review: daemon.json holds the raw
+// token that grants full access to every daemon endpoint, and the
+// write had no explicit file mode — on a shared Linux/macOS box with a
+// permissive umask (e.g. 022) the file could end up world-readable.
+// `mode` is POSIX-only (meaningless on Windows, which uses ACLs
+// instead) — these two assertions only run where they mean anything.
+test.skipIf(process.platform === "win32")(
+  "writeDaemonInfo creates daemon.json readable/writable by the owner only — POSIX only",
+  async () => {
+    const home = await freshFakeHome();
+    await writeDaemonInfo(
+      {
+        port: 7420,
+        pid: 1,
+        token: "secret-token",
+        startedAt: "2026-10-27T00:00:00Z",
+        buildId: "0.0.0+abc123",
+      },
+      home,
+    );
+    const stats = await stat(daemonInfoPath(home));
+    expect(stats.mode & 0o777).toBe(0o600);
+  },
+);
+
+test.skipIf(process.platform === "win32")(
+  "writeDaemonInfo creates the .fern directory accessible by the owner only — POSIX only",
+  async () => {
+    const home = await freshFakeHome();
+    await writeDaemonInfo(
+      {
+        port: 7420,
+        pid: 1,
+        token: "secret-token",
+        startedAt: "2026-10-27T00:00:00Z",
+        buildId: "0.0.0+abc123",
+      },
+      home,
+    );
+    const stats = await stat(join(home, ".fern"));
+    expect(stats.mode & 0o777).toBe(0o700);
+  },
+);
 
 test("two different home dirs never see each other's daemon.json", async () => {
   const homeA = await mkdtemp(join(tmpdir(), "fern-home-a-"));

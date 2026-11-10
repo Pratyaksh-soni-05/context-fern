@@ -29,6 +29,7 @@ import { appendFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { CLI_NAME, pluralize } from "@context-fern/core";
 import {
+  canonicalizeProjectPath,
   findFernDir,
   isDaemonRunning,
   isDaemonStale,
@@ -117,7 +118,9 @@ export async function handleUserPromptSubmit(
     // project (CLAUDE.md: installing the plugin must never create it).
     if (!fernDir && rest[0] !== "init") return {};
 
-    const projectPath = fernDir ? dirname(fernDir) : input.cwd;
+    const projectPath = canonicalizeProjectPath(
+      fernDir ? dirname(fernDir) : input.cwd,
+    );
 
     // Never let this hook itself wait for the daemon to start: it's a
     // real prompt the user is waiting on, and hooks.json's own 5s outer
@@ -191,7 +194,7 @@ export async function handleUserPromptSubmit(
 
   const fernDir = fernDirForLog;
   if (!fernDir) return {};
-  const projectPath = dirname(fernDir);
+  const projectPath = canonicalizeProjectPath(dirname(fernDir));
 
   const info = await isDaemonRunning(AbortSignal.timeout(PASSIVE_TIMEOUT_MS));
   if (!info) return {};
@@ -236,14 +239,21 @@ export async function handlePostToolUse(
   const fernDir = findFernDir(input.cwd);
   await debugLog(fernDir, "PostToolUse", input);
   if (!fernDir) return {};
-  const projectPath = dirname(fernDir);
-
+  // Relativizing stays against the RAW (uncanonicalized) project path —
+  // the tool's own reported file paths (tool_input.file_path etc.) are
+  // in whatever form this OS session actually uses (e.g. a Windows 8.3
+  // short name), and mixing that with a canonicalized (long-form) base
+  // for path.relative() produces a nonsensical "../../.." chain instead
+  // of a clean relative path. Only the identity sent to the daemon below
+  // needs to be canonical. See docs/decisions.md.
+  const rawProjectPath = dirname(fernDir);
   const filesTouched = extractTouchedFiles(
     input.tool_name,
     input.tool_input ?? {},
-    projectPath,
+    rawProjectPath,
   );
   if (filesTouched.length === 0) return {};
+  const projectPath = canonicalizeProjectPath(rawProjectPath);
 
   const info = await isDaemonRunning(AbortSignal.timeout(PASSIVE_TIMEOUT_MS));
   if (!info) return {};
@@ -276,7 +286,7 @@ export async function handleStop(
   const fernDir = findFernDir(input.cwd);
   await debugLog(fernDir, "Stop", input);
   if (!fernDir) return {};
-  const projectPath = dirname(fernDir);
+  const projectPath = canonicalizeProjectPath(dirname(fernDir));
 
   const info = await isDaemonRunning(AbortSignal.timeout(PASSIVE_TIMEOUT_MS));
   if (!info) return {};
@@ -308,7 +318,7 @@ export async function handleSessionStart(
   const fernDir = findFernDir(input.cwd);
   await debugLog(fernDir, "SessionStart", input);
   if (!fernDir) return {};
-  const projectPath = dirname(fernDir);
+  const projectPath = canonicalizeProjectPath(dirname(fernDir));
 
   const info = await isDaemonRunning(AbortSignal.timeout(PASSIVE_TIMEOUT_MS));
   if (!info) {
