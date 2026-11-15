@@ -20,7 +20,7 @@ Later: Codex and OpenCode users; agent builders using SDK middleware.
 6. Isolate mode (opt-in) passes the cache property tests and forwards streaming responses without changing content.
 7. `fern uninstall` removes the binary, plugin, hooks and config, and leaves project `.fern/` folders only if the user chooses.
 8. ReplayBench harness, scrubbed traces and results are published with the release.
-9. All six install paths work: curl, PowerShell, npx, pip/uvx, Homebrew, Claude Code plugin marketplace.
+9. Launch install paths are exactly three, chosen because a bare registry package name never needs an owner or organisation in the command: `pip install context-fern`, `uvx context-fern init`, `npx context-fern init`. Any of the three also sets up the Claude Code plugin — `context-fern init` adds the marketplace and installs the plugin through the `claude` CLI when it's present, otherwise prints the exact manual steps. `install.sh`, `install.ps1`, a Homebrew tap, and a standalone `/plugin marketplace add` command all name a GitHub owner or a domain in the command itself and move to post-launch, once the repo has transferred to an organisation or a domain exists (§14; `docs/decisions.md`).
 
 ## 4. Concepts (vocabulary used everywhere: code, UI, docs)
 | Term | Meaning | Code name |
@@ -122,7 +122,11 @@ Frond colours are assigned in order from the palette in `tokens.css` (moss, lake
 - Results as JSON + a markdown table; CI runs a 20-stream smoke set.
 
 ## 14. Distribution
-Signed binaries for macOS, Linux and Windows on x64 and arm64, plus checksums. Install paths: `install.sh`, `install.ps1`, npm package `context-fern` (shim), PyPI package `context-fern` (platform wheels carrying the binary, same approach as ruff/uv), Homebrew tap, Claude Code plugin marketplace manifest.
+Signed binaries for macOS, Linux and Windows on x64 and arm64, plus checksums.
+
+Launch (§3.9): PyPI package `context-fern` (platform wheels carrying the binary, same approach as ruff/uv) and npm package `context-fern` (platform packages as `optionalDependencies` carrying the binary — no postinstall download shim). `context-fern init` — run directly after `pip install`, or via `uvx`/`npx` with no separate install step — also sets up the Claude Code plugin.
+
+Post-launch, once the repo has a GitHub organisation or a domain to stay name-free (`docs/decisions.md`): `install.sh`, `install.ps1` (served from the GitHub Release itself, not a domain, once that's decided), a Homebrew tap, and a standalone Claude Code plugin marketplace manifest add for a user who wants the plugin without running `context-fern init`.
 
 Two binary names ship from the one executable: `fern` for interactive use (matches `CLI_NAME` throughout this spec and §7/§10's commands) and `context-fern` (`CLI_BINARY_NAME`, `packages/core/src/brand.ts`) for every machine-invoked entry point the Claude Code plugin owns — `hooks.json`'s four hook commands, `.claude-plugin/plugin.json`'s MCP server entry, and `commands/fern.md`'s fallback. `fern` collides with the real, already-published Fern API docs CLI; a plugin-registered hook or MCP server that silently resolved to the wrong `fern` on a user's `PATH` would fail invisibly, so those entries need the unambiguous name even though every human-typed command and receipt stays `fern`. Both names are installed together by every install path in this section — never one without the other.
 

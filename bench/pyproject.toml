@@ -2,6 +2,7 @@
 name = "bench"
 version = "0.0.0"
 description = "ReplayBench: scrubber, splicer, runner and metrics for Context Fern"
+authors = [{ name = "Context Fern contributors" }]
 requires-python = "==3.12.*"
 dependencies = []
 

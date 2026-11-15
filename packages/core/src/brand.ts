@@ -6,6 +6,18 @@ export const NPM_PACKAGE = "context-fern";
 export const PYPI_PACKAGE = "context-fern";
 
 /**
+ * The GitHub account this repo lives under today — the one thing to
+ * change when the repo transfers to an organisation (see
+ * docs/decisions.md's "install-names" entry on why no launch install
+ * command may name it). Every future reference to the repo's GitHub
+ * location (release URLs, a Homebrew tap, a marketplace add command —
+ * none of them launch paths; see the same entry) must import this
+ * instead of hardcoding the owner slug a second place.
+ */
+export const REPO_OWNER = "Pratyaksh-soni-05";
+export const REPO_URL = `https://github.com/${REPO_OWNER}/context-fern`;
+
+/**
  * The unambiguous binary name hooks, slash commands, and the MCP server
  * invoke — `fern` collides with the real, already-published Fern API
  * docs CLI, also literally called `fern`. Both names ship and both stay

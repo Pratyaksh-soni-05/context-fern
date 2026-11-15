@@ -1,6 +1,7 @@
 {
   "name": "@context-fern/daemon",
   "version": "0.0.0",
+  "author": "Context Fern contributors",
   "private": true,
   "type": "module",
   "main": "src/index.ts",

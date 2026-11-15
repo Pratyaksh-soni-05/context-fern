@@ -2,6 +2,13 @@
 
 **2026-11-03 note, read this first**: this file is historical. It predates the Context Fern rename (written as ContextTree/`ctree`, branch/trunk — the current, locked vocabulary is fern/frond/stem, `packages/core/src/brand.ts`) and predates spec v0.3. The day-30 gate below (Phase 1) is **resolved, not an open decision**: ReplayBench found that free, local Stage 0+2 routing does not reach a trustworthy auto-routing accuracy, so the plan's own fallback took effect — manual-first routing, shipped in spec v0.3 (`docs/decisions.md`, 2026-10-26). A future session reading this file should not reopen that question; `docs/spec.md` is the current source of truth for scope, and `docs/decisions.md` is the record of what was actually decided and why. Checkboxes below reflect real repo state as of this note, not the original 13-week schedule, which did not hold as written.
 
+**2026-11-10 addendum, same rule applies**: Phase 4's install-paths table and checklist below (`curl`/`irm`/`npx`/Homebrew/marketplace-add, all six at once) are **also superseded**, not current scope. Launch install paths are exactly three — `pip install context-fern`, `uvx context-fern init`, `npx context-fern init` — chosen because no personal or company name may appear in any user-facing install command, and only a bare registry package name manages that without a GitHub owner slug or a domain. `curl`/`install.ps1`/Homebrew/a standalone marketplace-add move to a separate post-launch PR once the repo has an organisation or a domain. See `docs/spec.md` §3.9/§14 and `docs/decisions.md` (2026-11-10) for the current, binding scope — don't reopen this one either.
+
+**Current, not historical — pre-public-release checklist (added 2026-11-10, keep this current when the rest of this file isn't):**
+- [ ] Secret scan over the *full* git history (not just the working tree) before the repo is made public.
+- [ ] GitHub email privacy: Settings → Emails → tick "Keep my email addresses private" and "Block command line pushes that expose my email", and keep the local git identity on the account's `<id>+<login>@users.noreply.github.com` address. History was rewritten into a new repository in November 2026 (see `docs/decisions.md`, 2026-11-23); every commit in it carries a noreply address.
+- [ ] Confirm `bench/denylist.txt` and `bench/data/` (especially `bench/data/private/`, which holds real non-synthetic content) are not tracked in git — point-in-time confirmed clean via `git log --all --full-history` on 2026-11-10 (`docs/decisions.md`); re-run before the actual publish, not just once.
+
 Historical plan, written under the working name ContextTree. Current scope: docs/spec.md (v0.2).
 
 Oct 23, 2026 · @maintainer

@@ -95,6 +95,42 @@ test("repo-root marketplace.json names the 'fern' plugin and its relative source
   );
 });
 
+test("no personal name in any manifest or package author field, or the LICENSE copyright line", async () => {
+  const read = async (path: string) => Bun.file(join(REPO_ROOT, path)).text();
+
+  const marketplace = JSON.parse(
+    await read(".claude-plugin/marketplace.json"),
+  ) as { owner: { name: string } };
+  expect(marketplace.owner.name).toBe("Context Fern");
+
+  const plugin = JSON.parse(
+    await read("packages/plugin-claude-code/.claude-plugin/plugin.json"),
+  ) as { author: { name: string } };
+  expect(plugin.author.name).toBe("Context Fern contributors");
+
+  const packageJsons = [
+    "package.json",
+    "e2e/package.json",
+    ...[
+      "cli",
+      "core",
+      "daemon",
+      "embed",
+      "plugin-claude-code",
+      "store",
+      "ui",
+    ].map((p) => `packages/${p}/package.json`),
+  ];
+  for (const path of packageJsons) {
+    const pkg = JSON.parse(await read(path)) as { author?: string };
+    expect(pkg.author, path).toBe("Context Fern contributors");
+  }
+
+  expect(await read("LICENSE")).toContain(
+    "Copyright 2026 Context Fern contributors",
+  );
+});
+
 test("every CLI subcommand the manifests invoke, and the one script Claude Code plugins can't ship themselves, exists on disk", () => {
   const cliFiles = [
     "commands/hook.ts",
