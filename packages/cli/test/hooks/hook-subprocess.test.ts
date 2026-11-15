@@ -1,10 +1,17 @@
-// The thin scripts/*.ts wrappers as real OS subprocesses (not in-process
-// function calls) — proving stdin JSON in, stdout JSON out, and exit
-// code 0 actually work across a process boundary, and that a project
-// path containing a space (the real reported Windows failure mode, see
-// docs/decisions.md) survives the whole round trip. hook-handlers.test.ts
-// already covers the handlers' own logic in depth; this file is
-// deliberately narrow — one happy-path check per script.
+// The `context-fern hook <event>` and `context-fern fern-fallback`
+// subcommands as real OS subprocesses (not in-process function calls) —
+// proving stdin JSON in, stdout JSON out, and exit code 0 actually work
+// across a process boundary, and that a project path containing a space
+// (the real reported Windows failure mode, see docs/decisions.md)
+// survives the whole round trip. hook-handlers.test.ts already covers
+// the handlers' own logic in depth; this file is deliberately narrow —
+// one happy-path check per event, plus the two true end-to-end flows
+// that only a real process boundary ever caught. Spawns `bun run
+// packages/cli/src/index.ts ...` rather than a compiled `context-fern`
+// binary — there's no compiled artifact in a test run, and this already
+// exercises the real subcommand dispatch (argv parsing, stdin/stdout
+// framing, exit code) as a genuine separate process; the PR 1 spike
+// already covers whether a *compiled* binary behaves the same way.
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -63,6 +70,8 @@ afterEach(async () => {
   await closeAllProjects();
 });
 
+const CLI_ENTRYPOINT = join(import.meta.dir, "../../src/index.ts");
+
 // Bun.spawnSync would block this process's event loop while the daemon
 // above runs in-process in this same test file — the daemon's Bun.serve
 // needs that very event loop to answer the subprocess's request, so a
@@ -70,20 +79,24 @@ afterEach(async () => {
 // its request, but nothing is left to run the server's fetch handler
 // and write a response). Bun.spawn (async) keeps the parent's event
 // loop free the whole time.
-async function runScript(
-  scriptName: string,
-  stdin: unknown,
+async function runCli(
+  args: string[],
+  stdin?: unknown,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const entrypoint = join(import.meta.dir, "../scripts", scriptName);
   const proc = Bun.spawn({
-    cmd: ["bun", "run", entrypoint],
+    cmd: ["bun", "run", CLI_ENTRYPOINT, ...args],
     env: { ...process.env, FERN_HOME: fakeHome },
-    stdin: "pipe",
+    stdin: stdin === undefined ? "ignore" : "pipe",
     stdout: "pipe",
     stderr: "pipe",
   });
-  proc.stdin.write(JSON.stringify(stdin));
-  await proc.stdin.end();
+  if (stdin !== undefined) {
+    // Non-null: this branch only runs when stdio above was "pipe", not
+    // "ignore", so proc.stdin is always a real FileSink here.
+    const sink = proc.stdin as NonNullable<typeof proc.stdin>;
+    sink.write(JSON.stringify(stdin));
+    await sink.end();
+  }
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
@@ -92,8 +105,15 @@ async function runScript(
   return { stdout, stderr, exitCode };
 }
 
-test("user-prompt-submit.ts round-trips a plain prompt against the real daemon", async () => {
-  const res = await runScript("user-prompt-submit.ts", {
+function runHook(
+  event: string,
+  stdin: unknown,
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return runCli(["hook", event], stdin);
+}
+
+test("context-fern hook UserPromptSubmit round-trips a plain prompt against the real daemon", async () => {
+  const res = await runHook("UserPromptSubmit", {
     ...loadFixture("user-prompt-submit.plain.json"),
     cwd: projectDir,
   });
@@ -102,8 +122,8 @@ test("user-prompt-submit.ts round-trips a plain prompt against the real daemon",
   expect(output.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
 }, 15_000);
 
-test("user-prompt-submit.ts blocks a '/fern status' command with zero model turns", async () => {
-  const res = await runScript("user-prompt-submit.ts", {
+test("context-fern hook UserPromptSubmit blocks a '/fern status' command with zero model turns", async () => {
+  const res = await runHook("UserPromptSubmit", {
     ...loadFixture("user-prompt-submit.fern-command.json"),
     cwd: projectDir,
   });
@@ -113,8 +133,8 @@ test("user-prompt-submit.ts blocks a '/fern status' command with zero model turn
   expect(output.reason).toStartWith("fern ▸ ");
 }, 15_000);
 
-test("post-tool-use.ts exits 0 with an empty result for a passive tool call", async () => {
-  const res = await runScript("post-tool-use.ts", {
+test("context-fern hook PostToolUse exits 0 with an empty result for a passive tool call", async () => {
+  const res = await runHook("PostToolUse", {
     ...loadFixture("post-tool-use.read.json"),
     cwd: projectDir,
     tool_name: "Glob",
@@ -124,8 +144,8 @@ test("post-tool-use.ts exits 0 with an empty result for a passive tool call", as
   expect(JSON.parse(res.stdout)).toEqual({});
 }, 15_000);
 
-test("stop.ts exits 0 with an empty result when nothing is pending", async () => {
-  const res = await runScript("stop.ts", {
+test("context-fern hook Stop exits 0 with an empty result when nothing is pending", async () => {
+  const res = await runHook("Stop", {
     ...loadFixture("stop.json"),
     cwd: projectDir,
     last_assistant_message: "done",
@@ -134,8 +154,8 @@ test("stop.ts exits 0 with an empty result when nothing is pending", async () =>
   expect(JSON.parse(res.stdout)).toEqual({});
 }, 15_000);
 
-test("session-start.ts exits 0 with an empty result on startup", async () => {
-  const res = await runScript("session-start.ts", {
+test("context-fern hook SessionStart exits 0 with an empty result on startup", async () => {
+  const res = await runHook("SessionStart", {
     ...loadFixture("session-start.startup.json"),
     cwd: projectDir,
   });
@@ -144,13 +164,16 @@ test("session-start.ts exits 0 with an empty result on startup", async () => {
 }, 15_000);
 
 test("statusline.ts prints the exact spec format ('fern ▸ <frond> · <n> fronds · <s> strays'), reading cwd from stdin JSON like Claude Code's real statusLine protocol", async () => {
-  await runScript("user-prompt-submit.ts", {
+  await runHook("UserPromptSubmit", {
     ...loadFixture("user-prompt-submit.fern-command.json"),
     cwd: projectDir,
     prompt: "/fern new greetings",
   });
 
-  const entrypoint = join(import.meta.dir, "../scripts/statusline.ts");
+  const entrypoint = join(
+    import.meta.dir,
+    "../../../plugin-claude-code/scripts/statusline.ts",
+  );
   const proc = Bun.spawn({
     cmd: ["bun", "run", entrypoint],
     env: { ...process.env, FERN_HOME: fakeHome },
@@ -171,10 +194,11 @@ test("statusline.ts prints the exact spec format ('fern ▸ <frond> · <n> frond
   expect(stdout.trim()).toBe(`${CLI_NAME} ▸ greetings · 1 frond · 0 strays`);
 }, 15_000);
 
-// fern-command.ts's only remaining job: report that the hook didn't run,
-// plus daemon status — it takes no argv besides the fixed "--fallback"
-// literal commands/fern.md invokes it with (see docs/decisions.md on why
-// the old argument-passing design was removed rather than hardened).
+// context-fern fern-fallback's only remaining job: report that the hook
+// didn't run, plus daemon status — it takes no argv at all, the same
+// fixed-literal contract fern-command.ts --fallback had (see
+// docs/decisions.md on why the old argument-passing design was removed
+// rather than hardened).
 test("true end-to-end: real spawned UserPromptSubmit -> PostToolUse -> Stop subprocesses fill the brief on disk, read directly from the filesystem", async () => {
   // Every piece here is a real OS process talking to a real (if
   // FakeEmbedder-backed) daemon over real HTTP — not an in-process
@@ -183,7 +207,7 @@ test("true end-to-end: real spawned UserPromptSubmit -> PostToolUse -> Stop subp
   // left the brief empty (see docs/decisions.md): a real duplicate
   // /fern new wiped it back to blank, a bug no in-process test ever
   // exercised the code path for.
-  const created = await runScript("user-prompt-submit.ts", {
+  const created = await runHook("UserPromptSubmit", {
     ...loadFixture("user-prompt-submit.fern-command.json"),
     cwd: projectDir,
     prompt: "/fern new greetings",
@@ -191,14 +215,14 @@ test("true end-to-end: real spawned UserPromptSubmit -> PostToolUse -> Stop subp
   expect(created.exitCode).toBe(0);
   expect(JSON.parse(created.stdout).reason).toContain("fern ▸ on greetings");
 
-  const prompt1 = await runScript("user-prompt-submit.ts", {
+  const prompt1 = await runHook("UserPromptSubmit", {
     ...loadFixture("user-prompt-submit.plain.json"),
     cwd: projectDir,
     prompt: "lets wire up a friendly hello world greeting page",
   });
   expect(prompt1.exitCode).toBe(0);
 
-  const touched = await runScript("post-tool-use.ts", {
+  const touched = await runHook("PostToolUse", {
     ...loadFixture("post-tool-use.read.json"),
     cwd: projectDir,
     tool_name: "Write",
@@ -206,7 +230,7 @@ test("true end-to-end: real spawned UserPromptSubmit -> PostToolUse -> Stop subp
   });
   expect(touched.exitCode).toBe(0);
 
-  const stop1 = await runScript("stop.ts", {
+  const stop1 = await runHook("Stop", {
     ...loadFixture("stop.json"),
     cwd: projectDir,
   });
@@ -216,13 +240,13 @@ test("true end-to-end: real spawned UserPromptSubmit -> PostToolUse -> Stop subp
   // the top of the next /prompt too, but going through the real
   // UserPromptSubmit -> Stop pair again is what the dogfood session
   // actually did ("4 prompts"), so that's what this exercises.
-  const prompt2 = await runScript("user-prompt-submit.ts", {
+  const prompt2 = await runHook("UserPromptSubmit", {
     ...loadFixture("user-prompt-submit.plain.json"),
     cwd: projectDir,
     prompt: "now add some css styling",
   });
   expect(prompt2.exitCode).toBe(0);
-  const stop2 = await runScript("stop.ts", {
+  const stop2 = await runHook("Stop", {
     ...loadFixture("stop.json"),
     cwd: projectDir,
   });
@@ -238,17 +262,17 @@ test("true end-to-end: real spawned UserPromptSubmit -> PostToolUse -> Stop subp
 }, 20_000);
 
 test("true end-to-end regression: a real duplicate '/fern new greetings' never wipes the real content already there", async () => {
-  await runScript("user-prompt-submit.ts", {
+  await runHook("UserPromptSubmit", {
     ...loadFixture("user-prompt-submit.fern-command.json"),
     cwd: projectDir,
     prompt: "/fern new greetings",
   });
-  await runScript("user-prompt-submit.ts", {
+  await runHook("UserPromptSubmit", {
     ...loadFixture("user-prompt-submit.plain.json"),
     cwd: projectDir,
     prompt: "lets wire up a friendly hello world greeting page",
   });
-  await runScript("stop.ts", {
+  await runHook("Stop", {
     ...loadFixture("stop.json"),
     cwd: projectDir,
   });
@@ -260,7 +284,7 @@ test("true end-to-end regression: a real duplicate '/fern new greetings' never w
 
   // The exact dogfood sequence: typing "/fern new greetings" again,
   // once real content already exists.
-  const duplicate = await runScript("user-prompt-submit.ts", {
+  const duplicate = await runHook("UserPromptSubmit", {
     ...loadFixture("user-prompt-submit.fern-command.json"),
     cwd: projectDir,
     prompt: "/fern new greetings",
@@ -273,19 +297,9 @@ test("true end-to-end regression: a real duplicate '/fern new greetings' never w
   );
 }, 20_000);
 
-test("fern-command.ts --fallback reports the hook didn't run, plus daemon status", async () => {
-  const entrypoint = join(import.meta.dir, "../scripts/fern-command.ts");
-  const proc = Bun.spawn({
-    cmd: ["bun", "run", entrypoint, "--fallback"],
-    env: { ...process.env, FERN_HOME: fakeHome },
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    proc.exited,
-  ]);
-  expect(exitCode).toBe(0);
-  expect(stdout).toContain(`the ${CLI_NAME} hook didn't run`);
-  expect(stdout).toContain("daemon running on 127.0.0.1:");
+test("context-fern fern-fallback reports the hook didn't run, plus daemon status", async () => {
+  const res = await runCli(["fern-fallback"]);
+  expect(res.exitCode).toBe(0);
+  expect(res.stdout).toContain(`the ${CLI_NAME} hook didn't run`);
+  expect(res.stdout).toContain("daemon running on 127.0.0.1:");
 }, 15_000);

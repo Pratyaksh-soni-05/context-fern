@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { extractTouchedFiles } from "../src/extract-touched-files";
+import { extractTouchedFiles } from "../../src/hooks/extract-touched-files";
 
 // A real absolute path for the current OS — "C:/repo" is Windows-only
 // syntax; node:path's isAbsolute()/relative() treat it as a plain

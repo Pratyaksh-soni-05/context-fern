@@ -6,8 +6,8 @@
   "license": "Apache-2.0",
   "mcpServers": {
     "fern": {
-      "command": "bun",
-      "args": ["run", "${CLAUDE_PLUGIN_ROOT}/mcp-server/server.ts"]
+      "command": "context-fern",
+      "args": ["mcp"]
     }
   }
 }

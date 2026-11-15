@@ -6,11 +6,11 @@
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { CLI_BINARY_NAME, CLI_VERSION } from "@context-fern/core";
 
 const PLUGIN_ROOT = resolve(import.meta.dir, "..");
 const REPO_ROOT = resolve(PLUGIN_ROOT, "../..");
-// biome-ignore lint/suspicious/noTemplateCurlyInString: a literal placeholder to search for, not a template literal.
-const PLUGIN_ROOT_PLACEHOLDER = "${CLAUDE_PLUGIN_ROOT}";
+const CLI_SRC = join(REPO_ROOT, "packages/cli/src");
 
 interface HooksConfig {
   hooks: Record<
@@ -27,23 +27,28 @@ interface HooksConfig {
   >;
 }
 
-test("plugin.json is valid JSON, names the plugin 'fern', and its mcpServers command points at a real file", async () => {
+test("plugin.json is valid JSON, names the plugin 'fern', its mcpServers runs the unambiguous binary, and its declared version matches CLI_VERSION", async () => {
   const text = await Bun.file(
     join(PLUGIN_ROOT, ".claude-plugin/plugin.json"),
   ).text();
   const manifest = JSON.parse(text) as {
     name: string;
+    version: string;
     mcpServers: Record<string, { command: string; args: string[] }>;
   };
   expect(manifest.name).toBe("fern");
-
-  const mcpArgs = manifest.mcpServers.fern?.args ?? [];
-  const scriptArg = mcpArgs.find((a) => a.includes(PLUGIN_ROOT_PLACEHOLDER));
-  const scriptPath = scriptArg?.replace(PLUGIN_ROOT_PLACEHOLDER, PLUGIN_ROOT);
-  expect(scriptPath && existsSync(scriptPath)).toBe(true);
+  expect(manifest.mcpServers.fern).toEqual({
+    command: CLI_BINARY_NAME,
+    args: ["mcp"],
+  });
+  // Not just a style check: this is the exact comparison
+  // packages/cli/src/commands/hook.ts makes at runtime to print the
+  // "plugin and binary versions differ" receipt — a mismatch here means
+  // every real hook invocation would show that receipt unconditionally.
+  expect(manifest.version).toBe(CLI_VERSION);
 });
 
-test("hooks.json declares all four events with a 5s timeout and each command path exists", async () => {
+test("hooks.json declares all four events with a 5s timeout, running the unambiguous binary's hook subcommand", async () => {
   const text = await Bun.file(join(PLUGIN_ROOT, "hooks/hooks.json")).text();
   const config = JSON.parse(text) as HooksConfig;
 
@@ -54,29 +59,20 @@ test("hooks.json declares all four events with a 5s timeout and each command pat
     for (const group of groups ?? []) {
       for (const hook of group.hooks) {
         expect(hook.timeout).toBe(5);
-        const scriptArg = hook.args.find((a) =>
-          a.includes(PLUGIN_ROOT_PLACEHOLDER),
-        );
-        const scriptPath = scriptArg?.replace(
-          PLUGIN_ROOT_PLACEHOLDER,
-          PLUGIN_ROOT,
-        );
-        expect(scriptPath && existsSync(scriptPath)).toBe(true);
+        expect(hook.command).toBe(CLI_BINARY_NAME);
+        expect(hook.args).toEqual(["hook", event]);
       }
     }
   }
 });
 
-test("commands/fern.md exists, disables model-invocation, and its shell call names the fallback dispatch script", async () => {
+test("commands/fern.md exists, disables model-invocation, and its shell call is the fixed, argument-free fern-fallback subcommand", async () => {
   const text = await Bun.file(join(PLUGIN_ROOT, "commands/fern.md")).text();
   expect(text).toContain("disable-model-invocation: true");
 
   const match = /!`([^`]+)`/.exec(text);
   expect(match).toBeTruthy();
-  const shellLine = match?.[1] ?? "";
-  expect(shellLine).toContain(PLUGIN_ROOT_PLACEHOLDER);
-  expect(shellLine).toContain("scripts/fern-command.ts");
-  expect(existsSync(join(PLUGIN_ROOT, "scripts/fern-command.ts"))).toBe(true);
+  expect(match?.[1]).toBe(`${CLI_BINARY_NAME} fern-fallback`);
 });
 
 test("repo-root marketplace.json names the 'fern' plugin and its relative source directory exists", async () => {
@@ -99,17 +95,15 @@ test("repo-root marketplace.json names the 'fern' plugin and its relative source
   );
 });
 
-test("every hook script and the MCP server referenced by the manifests exists under scripts/ or mcp-server/", () => {
-  const files = [
-    "scripts/user-prompt-submit.ts",
-    "scripts/post-tool-use.ts",
-    "scripts/stop.ts",
-    "scripts/session-start.ts",
-    "scripts/fern-command.ts",
-    "scripts/statusline.ts",
-    "mcp-server/server.ts",
+test("every CLI subcommand the manifests invoke, and the one script Claude Code plugins can't ship themselves, exists on disk", () => {
+  const cliFiles = [
+    "commands/hook.ts",
+    "commands/mcp.ts",
+    "commands/fern-fallback.ts",
+    "mcp-server.ts",
   ];
-  for (const file of files) {
-    expect(existsSync(join(PLUGIN_ROOT, file))).toBe(true);
+  for (const file of cliFiles) {
+    expect(existsSync(join(CLI_SRC, file))).toBe(true);
   }
+  expect(existsSync(join(PLUGIN_ROOT, "scripts/statusline.ts"))).toBe(true);
 });

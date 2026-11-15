@@ -1,17 +1,21 @@
 // The /fern command dispatch — shared by two callers: the UserPromptSubmit
-// hook's zero-model-turn intercept (src/hook-handlers.ts) and the
-// commands/fern.md fallback's thin wrapper (scripts/fern-command.ts).
-// Both need the exact same subcommand behaviour, so it lives here once.
+// hook's zero-model-turn intercept (hooks/hook-handlers.ts) and the
+// commands/fern.md fallback (commands/fern-fallback.ts). Both need the
+// exact same subcommand behaviour, so it lives here once. Moved here
+// from packages/plugin-claude-code (see docs/decisions.md) now that
+// `context-fern hook <event>` is a CLI subcommand, not a separate
+// bun-run script — this file's own "init" dependency is now a same-
+// package import, not the cross-package "@context-fern/cli/init"
+// subpath it used to need.
 //
-// "init" needs @context-fern/cli's real init logic, which might look
-// like it breaks the hooks' lightweight-import rule — but that import
-// (via the "@context-fern/cli/init" subpath, not cli's full barrel) only
-// touches fs/core/local cli helpers, never store/embed, so this file's
-// own import graph stays clean. test/scripts-import-graph.test.ts
-// verifies this transitively, since scripts/user-prompt-submit.ts
-// imports this file for the zero-turn "/fern" block path.
+// "init" needs the real init logic, which might look like it breaks the
+// hooks' lightweight-import rule — but that import (the local
+// ../commands/init module, not a package-crossing one) only touches
+// fs/core/local cli helpers, never store/embed, so this file's own
+// import graph stays clean. test/hooks/import-graph.test.ts verifies
+// this transitively, since hook.ts's dispatch imports this file for the
+// zero-turn "/fern" block path.
 
-import { runInit } from "@context-fern/cli/init";
 import { CLI_NAME } from "@context-fern/core";
 import {
   type DaemonInfo,
@@ -20,6 +24,7 @@ import {
   rawGetJson,
   rawPostJson,
 } from "@context-fern/daemon/client";
+import { runInit } from "../commands/init";
 
 export interface DispatchOptions {
   projectPath: string;

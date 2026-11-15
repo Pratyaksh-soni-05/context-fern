@@ -6,11 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun",
-            "args": [
-              "run",
-              "${CLAUDE_PLUGIN_ROOT}/scripts/user-prompt-submit.ts"
-            ],
+            "command": "context-fern",
+            "args": ["hook", "UserPromptSubmit"],
             "timeout": 5
           }
         ]
@@ -22,8 +19,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun",
-            "args": ["run", "${CLAUDE_PLUGIN_ROOT}/scripts/post-tool-use.ts"],
+            "command": "context-fern",
+            "args": ["hook", "PostToolUse"],
             "timeout": 5
           }
         ]
@@ -35,8 +32,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun",
-            "args": ["run", "${CLAUDE_PLUGIN_ROOT}/scripts/stop.ts"],
+            "command": "context-fern",
+            "args": ["hook", "Stop"],
             "timeout": 5
           }
         ]
@@ -48,8 +45,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun",
-            "args": ["run", "${CLAUDE_PLUGIN_ROOT}/scripts/session-start.ts"],
+            "command": "context-fern",
+            "args": ["hook", "SessionStart"],
             "timeout": 5
           }
         ]

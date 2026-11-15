@@ -27,7 +27,7 @@ import {
   handleSessionStart,
   handleStop,
   handleUserPromptSubmit,
-} from "../src/hook-handlers";
+} from "../../src/hooks/hook-handlers";
 
 // Fixture payloads built from the real field names and structure of each
 // hook's stdin, confirmed via a live `claude --debug` run on 2.1.312 —

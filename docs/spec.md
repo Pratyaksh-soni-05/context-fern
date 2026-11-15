@@ -124,6 +124,8 @@ Frond colours are assigned in order from the palette in `tokens.css` (moss, lake
 ## 14. Distribution
 Signed binaries for macOS, Linux and Windows on x64 and arm64, plus checksums. Install paths: `install.sh`, `install.ps1`, npm package `context-fern` (shim), PyPI package `context-fern` (platform wheels carrying the binary, same approach as ruff/uv), Homebrew tap, Claude Code plugin marketplace manifest.
 
+Two binary names ship from the one executable: `fern` for interactive use (matches `CLI_NAME` throughout this spec and §7/§10's commands) and `context-fern` (`CLI_BINARY_NAME`, `packages/core/src/brand.ts`) for every machine-invoked entry point the Claude Code plugin owns — `hooks.json`'s four hook commands, `.claude-plugin/plugin.json`'s MCP server entry, and `commands/fern.md`'s fallback. `fern` collides with the real, already-published Fern API docs CLI; a plugin-registered hook or MCP server that silently resolved to the wrong `fern` on a user's `PATH` would fail invisibly, so those entries need the unambiguous name even though every human-typed command and receipt stays `fern`. Both names are installed together by every install path in this section — never one without the other.
+
 ## 15. Out of scope for launch
 Desktop app, hosted service, accounts, cross-user memory, writing to roots, automatic merge, Codex/OpenCode proxy, Cursor transparent routing, fine-tuned Stage 1 classifier, git worktree management, dark theme for the UI (tokens allow it later).
 

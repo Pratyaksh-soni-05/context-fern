@@ -10,7 +10,7 @@
 
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { CLI_NAME, CONFIG_DIR } from "@context-fern/core";
+import { CLI_BINARY_NAME, CLI_NAME, CONFIG_DIR } from "@context-fern/core";
 import { readDaemonInfo } from "@context-fern/daemon";
 import { isAlive } from "@context-fern/daemon/client";
 import { modelCacheDir } from "@context-fern/embed";
@@ -66,6 +66,18 @@ export async function runDoctor(): Promise<void> {
   const cacheOk = await dirHasFiles(modelCacheDir());
   lines.push(
     `model cache: ${cacheOk ? "ok" : "empty (will download on first use)"}`,
+  );
+
+  // The plugin's hooks and MCP server run `context-fern` by bare name,
+  // found on PATH with no shell. Without it they fail silently from the
+  // user's side (a non-blocking hook error), so say so here.
+  // Explicit PATH: Bun.which otherwise answers from a PATH snapshot it
+  // took at startup, which can disagree with process.env.
+  const binary = Bun.which(CLI_BINARY_NAME, { PATH: process.env.PATH ?? "" });
+  lines.push(
+    binary
+      ? `${CLI_BINARY_NAME}: on PATH (${binary})`
+      : `${CLI_BINARY_NAME}: not on PATH — the plugin's hooks and MCP server cannot start. From a source checkout run "bun link --global" in packages/cli`,
   );
 
   const ollamaUrl = await readStage2OllamaUrl();

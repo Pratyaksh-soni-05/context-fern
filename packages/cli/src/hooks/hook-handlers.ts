@@ -1,6 +1,7 @@
-// Exported handler functions behind the thin scripts/*.ts wrappers (see
-// decisions.md's Phase-4 note: once a compiled fern binary exists, these
-// can move behind `fern hook <event>` and end users won't need bun).
+// Exported handler functions behind the `context-fern hook <event>`
+// subcommand (packages/cli/src/commands/hook.ts) — moved here from
+// packages/plugin-claude-code (see docs/decisions.md's Phase-4 PR 2
+// entry) so end users don't need Bun installed to run them.
 //
 // Three of the four events here are passive taps — they must never make
 // the user wait and never error into the session: isDaemonRunning() (no

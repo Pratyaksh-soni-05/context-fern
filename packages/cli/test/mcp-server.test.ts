@@ -63,10 +63,10 @@ afterEach(async () => {
 });
 
 async function connectedClient(): Promise<Client> {
-  const entrypoint = join(import.meta.dir, "../mcp-server/server.ts");
+  const entrypoint = join(import.meta.dir, "../src/index.ts");
   const transport = new StdioClientTransport({
     command: "bun",
-    args: ["run", entrypoint],
+    args: ["run", entrypoint, "mcp"],
     cwd: projectDir,
     env: { ...process.env, FERN_HOME: fakeHome },
   });

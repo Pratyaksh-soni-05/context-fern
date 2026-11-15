@@ -49,6 +49,30 @@ test("fern doctor always prints a non-empty report, with no daemon.json present"
   expect(logs.join("\n")).toContain("daemon:");
 });
 
+test("fern doctor reports whether context-fern is on PATH, with the one command that fixes it when it is not", async () => {
+  const originalPath = process.env.PATH;
+  const shimDir = await mkdtemp(join(tmpdir(), "fern-shim-"));
+  const name =
+    process.platform === "win32" ? "context-fern.exe" : "context-fern";
+  try {
+    process.env.PATH = shimDir; // nothing on it
+    const missing = (await runDoctorCapturingLogs()).join("\n");
+    expect(missing).toContain("context-fern: not on PATH");
+    expect(missing).toContain('run "bun link --global" in packages/cli');
+
+    await Bun.write(join(shimDir, name), "");
+    if (process.platform !== "win32") {
+      await Bun.spawn(["chmod", "+x", join(shimDir, name)]).exited;
+    }
+    expect((await runDoctorCapturingLogs()).join("\n")).toContain(
+      `context-fern: on PATH (${join(shimDir, name)})`,
+    );
+  } finally {
+    process.env.PATH = originalPath;
+    await rm(shimDir, { recursive: true, force: true });
+  }
+});
+
 test("fern doctor completes promptly (doesn't hang) even with a daemon.json pointing at a dead pid/port", async () => {
   const { writeDaemonInfo } = await import("@context-fern/daemon");
   await writeDaemonInfo({

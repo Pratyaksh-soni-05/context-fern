@@ -9,7 +9,7 @@
 // file imports it; see docs/decisions.md.
 
 import { dirname } from "node:path";
-import { CLI_NAME } from "@context-fern/core";
+import { CLI_NAME, CLI_VERSION } from "@context-fern/core";
 import {
   type DaemonInfo,
   findFernDir,
@@ -17,7 +17,6 @@ import {
   rawGetJson,
 } from "@context-fern/daemon/client";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
 interface ToolResult {
@@ -105,7 +104,7 @@ async function callFrondRecall(name: string): Promise<ToolResult> {
 }
 
 export function createServer(): McpServer {
-  const server = new McpServer({ name: CLI_NAME, version: "0.1.0" });
+  const server = new McpServer({ name: CLI_NAME, version: CLI_VERSION });
 
   server.registerTool(
     "frond_list",
@@ -137,10 +136,4 @@ export function createServer(): McpServer {
   );
 
   return server;
-}
-
-if (import.meta.main) {
-  const server = createServer();
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
 }

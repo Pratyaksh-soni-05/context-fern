@@ -9,12 +9,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@context-fern/cli": "workspace:*",
     "@context-fern/core": "workspace:*",
-    "@context-fern/daemon": "workspace:*",
-    "@context-fern/embed": "workspace:*",
-    "@context-fern/store": "workspace:*",
-    "@modelcontextprotocol/sdk": "1.32.2",
-    "zod": "4.6.7"
+    "@context-fern/daemon": "workspace:*"
   }
 }
