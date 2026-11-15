@@ -289,8 +289,11 @@ test("true end-to-end regression: a real duplicate '/fern new greetings' never w
     cwd: projectDir,
     prompt: "/fern new greetings",
   });
+  // greetings is the frond already active, so this is now a pure no-op
+  // (nothing recorded) rather than a switch — the brief is untouched
+  // either way, which is what this test is about.
   expect(JSON.parse(duplicate.stdout).reason).toBe(
-    "fern ▸ greetings already exists · switched",
+    "fern ▸ greetings already exists · already on it",
   );
   expect(readFileSync(briefPath, "utf-8")).toContain(
     "lets wire up a friendly hello world greeting page",

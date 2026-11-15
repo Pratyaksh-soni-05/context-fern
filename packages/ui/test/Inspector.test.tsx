@@ -59,6 +59,30 @@ test("default headline is a real computed count, not the fabricated 'Nothing los
   expect(screen.queryByText("Nothing lost.")).toBeNull();
 });
 
+test("default headline names the frond-opening leaflets, so a count one higher than the prompts typed is explained", () => {
+  render(
+    <Inspector
+      projectPath="/repo"
+      fronds={[frond()]}
+      leaflets={[
+        leaflet({ turn: 1 }),
+        leaflet({ turn: 2 }),
+        leaflet({ turn: 3, kind: "new" }),
+      ]}
+      strayCount={0}
+      frondOpenings={1}
+      rootsUsed={0}
+      selection={null}
+      onSelect={() => {}}
+      onUndo={() => {}}
+      undoBusy={false}
+    />,
+  );
+  expect(
+    screen.getByText("3 leaflets · 1 frond · 1 frond opening"),
+  ).toBeDefined();
+});
+
 test("default headline reads 'No turns yet.' for a genuinely empty session", () => {
   render(
     <Inspector

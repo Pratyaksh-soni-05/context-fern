@@ -41,6 +41,7 @@ import {
 } from "./prompt-util";
 import {
   alreadyExistsReceipt,
+  alreadyOnReceipt,
   mergedReceipt,
   newSuggestionReceipt,
   onFrondReceipt,
@@ -258,6 +259,13 @@ async function applyManualNew(
     (f) => f.name === frondName && f.parentId !== null && f.status !== "merged",
   );
   if (existing) {
+    // Already on it: nothing changes, so nothing is recorded — no
+    // leaflet, no decision (a `return` that returns nowhere would also
+    // be an undoable no-op). A pending exchange stays pending and is
+    // finalized as usual by the next plain prompt.
+    if (existing.id === state.routerState.activeFrondId) {
+      return { receipt: alreadyOnReceipt(frondName) };
+    }
     const switched = await applyManualSwitch(state, frondName);
     return { ...switched, receipt: alreadyExistsReceipt(frondName) };
   }

@@ -65,6 +65,11 @@ export function alreadyExistsReceipt(frondName: string): string {
   return `${PREFIX} ${frondName} already exists · switched`;
 }
 
+/** `/fern new <name>` where `<name>` is the frond you are already on — nothing to do, so nothing is recorded. */
+export function alreadyOnReceipt(frondName: string): string {
+  return `${PREFIX} ${frondName} already exists · already on it`;
+}
+
 export function undoneReceipt(action: string): string {
   return `${PREFIX} undone · ${action} reversed`;
 }
@@ -101,8 +106,14 @@ export function statusReceipt(
   strayCount: number,
   leafletCount: number,
   mode: string,
+  frondOpenings = 0,
 ): string {
-  return `${PREFIX} ${activeFrondName} · ${pluralize(frondCount, "frond")} · ${pluralize(strayCount, "stray")} · ${pluralize(leafletCount, "leaflet")} · ${mode}`;
+  // Opening a frond records a leaflet of its own (undoing it moves that
+  // leaflet back to the stem), so the leaflet count is turns plus
+  // openings. Say so rather than leave the extra one unexplained.
+  const openings =
+    frondOpenings > 0 ? ` · ${pluralize(frondOpenings, "frond opening")}` : "";
+  return `${PREFIX} ${activeFrondName} · ${pluralize(frondCount, "frond")} · ${pluralize(strayCount, "stray")} · ${pluralize(leafletCount, "leaflet")}${openings} · ${mode}`;
 }
 
 function formatK(n: number): string {

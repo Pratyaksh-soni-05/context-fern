@@ -12,6 +12,8 @@ export interface InspectorProps {
   fronds: TreeFrond[];
   leaflets: UiLeaflet[];
   strayCount: number;
+  /** Leaflets that open a frond; part of the leaflet count, named in the headline. */
+  frondOpenings?: number;
   rootsUsed: number;
   selection: Selection;
   onSelect: (selection: Selection) => void;
@@ -34,6 +36,7 @@ export function Inspector({
   fronds,
   leaflets,
   strayCount,
+  frondOpenings = 0,
   rootsUsed,
   selection,
   onSelect,
@@ -71,7 +74,14 @@ export function Inspector({
     };
   }, [projectPath, frondName]);
 
-  const detail = buildDetail(selection, fronds, leaflets, strayCount, brief);
+  const detail = buildDetail(
+    selection,
+    fronds,
+    leaflets,
+    strayCount,
+    frondOpenings,
+    brief,
+  );
 
   return (
     <aside aria-label="Inspector" className="inspector">
@@ -118,11 +128,12 @@ function buildDetail(
   fronds: TreeFrond[],
   leaflets: UiLeaflet[],
   strayCount: number,
+  frondOpenings: number,
   brief: { goal: string; decided: string; open: string; files: string } | null,
 ): Detail {
   if (selection?.kind === "leaflet") {
     const l = leaflets.find((x) => x.turn === selection.turn);
-    if (!l) return emptyDetail(fronds, leaflets);
+    if (!l) return emptyDetail(fronds, leaflets, frondOpenings);
     return {
       kicker: `turn ${String(l.turn).padStart(2, "0")} · ${l.isStray ? `stray from ${l.strayFromFrondName ?? "stem"}` : l.frondName}`,
       title: l.promptPreview ?? "n/a",
@@ -141,7 +152,7 @@ function buildDetail(
   }
   if (selection?.kind === "frond") {
     const frond = fronds.find((f) => f.id === selection.id);
-    if (!frond) return emptyDetail(fronds, leaflets);
+    if (!frond) return emptyDetail(fronds, leaflets, frondOpenings);
     return {
       kicker: `frond · ${frond.name}`,
       title: brief?.goal || "(no goal recorded yet)",
@@ -187,7 +198,7 @@ function buildDetail(
       fields: [{ k: "status", v: "writing roots isn't wired up yet" }],
     };
   }
-  return emptyDetail(fronds, leaflets);
+  return emptyDetail(fronds, leaflets, frondOpenings);
 }
 
 /**
@@ -199,7 +210,11 @@ function buildDetail(
  * yet." when there truly aren't any, "<n> leaflets · <n> fronds"
  * otherwise.
  */
-function emptyDetail(fronds: TreeFrond[], leaflets: UiLeaflet[]): Detail {
+function emptyDetail(
+  fronds: TreeFrond[],
+  leaflets: UiLeaflet[],
+  frondOpenings: number,
+): Detail {
   const hasData = leaflets.length > 0;
   // Matches the "fronds" stat tile's own definition (AppShell.tsx,
   // getSessionStats) — merged fronds excluded — so the two panels never
@@ -208,7 +223,7 @@ function emptyDetail(fronds: TreeFrond[], leaflets: UiLeaflet[]): Detail {
   return {
     kicker: "session",
     title: hasData
-      ? `${pluralize(leaflets.length, "leaflet")} · ${pluralize(activeFrondCount, "frond")}`
+      ? `${pluralize(leaflets.length, "leaflet")} · ${pluralize(activeFrondCount, "frond")}${frondOpenings > 0 ? ` · ${pluralize(frondOpenings, "frond opening")}` : ""}`
       : "No turns yet.",
     fields: hasData
       ? [

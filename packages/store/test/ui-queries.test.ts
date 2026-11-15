@@ -320,6 +320,52 @@ test("an undone decision's leaflet survives the undo (reparented to its prior fr
   expect(afterUndo.leaflets[0]?.kind).toBe("new");
 });
 
+test("getSessionStats counts frond openings, and undoing the opening takes it back out", async () => {
+  const { store: s, sessionId, stemId } = await freshSession();
+  expect((await s.getSessionStats(sessionId)).frondOpenings).toBe(0);
+
+  const before = await s.loadRouterState(sessionId);
+  const frond = await s.createFrond({
+    sessionId,
+    parentId: stemId,
+    name: "auth-refactor",
+    colorIndex: 0,
+    centroid: null,
+  });
+  const leaflet = await s.recordLeaflet({
+    sessionId,
+    index: 0,
+    frondId: frond.id,
+    strayFrom: null,
+    promptHash: "sha256:opening",
+    tokenCount: 0,
+    filesTouched: [],
+  });
+  await s.recordDecision(
+    buildDecision({
+      id: "decision-opening",
+      createdAt: "2026-10-26T00:00:00Z",
+      sessionId,
+      leafletId: leaflet.id,
+      action: "new",
+      target: null,
+      stage: "manual",
+      signals: ["manual"],
+      confidence: 1,
+      tokensBefore: 0,
+      tokensAfter: 0,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      inverse: buildDecisionInverse(before, "new", frond.id),
+    }),
+    null,
+  );
+  expect((await s.getSessionStats(sessionId)).frondOpenings).toBe(1);
+
+  await s.undoLast(sessionId);
+  expect((await s.getSessionStats(sessionId)).frondOpenings).toBe(0);
+});
+
 test("a leaflet on a frond that later got merged keeps its real frondName and its brief's tagged prompt text", async () => {
   const { store: s, sessionId, stemId } = await freshSession();
   const frond = await s.createFrond({

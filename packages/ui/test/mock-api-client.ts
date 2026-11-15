@@ -49,6 +49,7 @@ export function createApiClientMocks() {
       Promise.resolve({
         frondCount: 0,
         strayCount: 0,
+        frondOpenings: 0,
         rootsUsed: 0,
         undo: null,
         ctxKeptOut: "n/a",

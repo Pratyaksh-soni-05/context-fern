@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  alreadyOnReceipt,
   mergedReceipt,
   newSuggestionReceipt,
   onFrondReceipt,
@@ -93,4 +94,22 @@ test("returnSuggestionReceipt follows the same voice as the new-suggestion recei
 test("undoneReceipt and mergedReceipt start with the fern ▸ voice marker", () => {
   expect(undoneReceipt("new")).toStartWith("fern ▸ ");
   expect(mergedReceipt("docker-build")).toStartWith("fern ▸ ");
+});
+
+test("statusReceipt names the frond-opening leaflets inside the leaflet count, and stays unchanged when there are none", () => {
+  expect(statusReceipt("auth", 1, 0, 5, "suggest", 1)).toBe(
+    "fern ▸ auth · 1 frond · 0 strays · 5 leaflets · 1 frond opening · suggest",
+  );
+  expect(statusReceipt("auth", 2, 0, 7, "suggest", 2)).toBe(
+    "fern ▸ auth · 2 fronds · 0 strays · 7 leaflets · 2 frond openings · suggest",
+  );
+  expect(statusReceipt("stem", 0, 0, 3, "suggest")).toBe(
+    "fern ▸ stem · 0 fronds · 0 strays · 3 leaflets · suggest",
+  );
+});
+
+test("alreadyOnReceipt says nothing was done", () => {
+  expect(alreadyOnReceipt("greetings")).toBe(
+    "fern ▸ greetings already exists · already on it",
+  );
 });

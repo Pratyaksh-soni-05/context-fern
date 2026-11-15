@@ -192,6 +192,7 @@ export function AppShell({ projectPath, projectName }: AppShellProps) {
             fronds={fronds}
             leaflets={leaflets}
             strayCount={stats?.strayCount ?? 0}
+            frondOpenings={stats?.frondOpenings ?? 0}
             rootsUsed={stats?.rootsUsed ?? 0}
             selection={selection}
             onSelect={setSelection}

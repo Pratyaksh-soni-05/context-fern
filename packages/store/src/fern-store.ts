@@ -215,6 +215,8 @@ export interface UiLeafletPage {
 export interface SessionStats {
   frondCount: number;
   strayCount: number;
+  /** Leaflets that open a frond (a `new` decision, not undone). Each is a real leaflet in the leaflet count, so the count is turns plus these. */
+  frondOpenings: number;
   undo: { count: number; of: number } | null;
 }
 
@@ -976,9 +978,16 @@ export async function openFernStore(fernDir: string): Promise<FernStore> {
       )
       .get(sessionId) as { of_count: number; undone_count: number };
 
+    const { count: frondOpenings } = db
+      .query(
+        "SELECT COUNT(*) AS count FROM decisions WHERE session_id = ? AND action = 'new' AND undone = 0",
+      )
+      .get(sessionId) as { count: number };
+
     return {
       frondCount,
       strayCount,
+      frondOpenings,
       undo: of >= 5 ? { count: undoneCount, of } : null,
     };
   }

@@ -301,26 +301,79 @@ test("/fern new <name> works standalone, with no pending suggestion", async () =
   expect(res.json.receipt).toContain("fern ▸ on docker-build");
 });
 
-test("/fern new <name> typed twice switches to the existing frond instead of creating a duplicate", async () => {
-  const first = await post(
-    "/prompt",
-    projectBody({ prompt: "/fern new greetings" }),
-  );
-  expect(first.json.receipt).toContain("fern ▸ on greetings");
+test("/fern new <name> for a frond that exists but is not the active one switches to it instead of creating a duplicate", async () => {
+  await post("/prompt", projectBody({ prompt: "/fern new greetings" }));
+  await post("/prompt", projectBody({ prompt: "/fern new billing" }));
 
-  const second = await post(
+  const back = await post(
     "/prompt",
     projectBody({ prompt: "/fern new greetings" }),
   );
-  expect(second.json.receipt).toBe(
-    "fern ▸ greetings already exists · switched",
-  );
+  expect(back.json.receipt).toBe("fern ▸ greetings already exists · switched");
 
   const tree = await get(
     `/tree?projectPath=${encodeURIComponent(projectDir?.path ?? "")}`,
   );
   const fronds = tree.json.fronds as { name: string }[];
   expect(fronds.filter((f) => f.name === "greetings")).toHaveLength(1);
+});
+
+test("/fern new <name> typed for the frond you are already on records nothing: no leaflet, no decision", async () => {
+  await post("/prompt", projectBody({ prompt: "/fern new greetings" }));
+  const before = await get(
+    `/status?projectPath=${encodeURIComponent(projectDir?.path ?? "")}`,
+  );
+
+  const again = await post(
+    "/prompt",
+    projectBody({ prompt: "/fern new greetings" }),
+  );
+  expect(again.json.receipt).toBe(
+    "fern ▸ greetings already exists · already on it",
+  );
+
+  const after = await get(
+    `/status?projectPath=${encodeURIComponent(projectDir?.path ?? "")}`,
+  );
+  expect(after.json.leafletCount).toBe(before.json.leafletCount);
+  expect(after.json.frondOpeningCount).toBe(1);
+
+  const state = await getOrOpenProject(projectDir?.path ?? "");
+  const decisions = state.store.db
+    .query("SELECT action FROM decisions WHERE session_id = ?")
+    .all(state.sessionId) as { action: string }[];
+  expect(decisions.map((d) => d.action)).toEqual(["new"]);
+});
+
+test("four prompts plus one /fern new is five leaflets, and fern status says one of them is a frond opening", async () => {
+  for (const prompt of ["one", "two", "three", "four"]) {
+    await post("/prompt", projectBody({ prompt }));
+    await post("/exchange-end", projectBody());
+  }
+  await post("/prompt", projectBody({ prompt: "/fern new auth" }));
+
+  const res = await get(
+    `/status?projectPath=${encodeURIComponent(projectDir?.path ?? "")}`,
+  );
+  expect(res.json.leafletCount).toBe(5);
+  expect(res.json.frondOpeningCount).toBe(1);
+  expect(res.json.statusReceipt).toBe(
+    "fern ▸ auth · 1 frond · 0 strays · 5 leaflets · 1 frond opening · suggest",
+  );
+
+  const state = await getOrOpenProject(projectDir?.path ?? "");
+  const page = await state.store.listLeafletsWithDecisions(state.sessionId, {
+    offset: 0,
+    limit: 10,
+  });
+  expect(page.leaflets.map((l) => l.kind)).toEqual([
+    "continue",
+    "continue",
+    "continue",
+    "continue",
+    "new",
+  ]);
+  expect(page.leaflets[4]?.frondName).toBe("auth");
 });
 
 test("accepting a suggestion deterministically fills the new brief's Goal from the real triggering prompt, no model call", async () => {

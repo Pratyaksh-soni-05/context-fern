@@ -48,6 +48,7 @@ export interface UiLeafletPage {
 export interface UiStats {
   frondCount: number;
   strayCount: number;
+  frondOpenings: number;
   rootsUsed: number;
   undo: { count: number; of: number } | null;
   ctxKeptOut: "n/a";

@@ -62,6 +62,7 @@ const leaflets: UiLeafletPage = {
 const stats: UiStats = {
   frondCount: 1,
   strayCount: 0,
+  frondOpenings: 1,
   rootsUsed: 0,
   undo: { count: 1, of: 6 },
   ctxKeptOut: "n/a",

@@ -37,6 +37,15 @@ function countStrays(state: ProjectState): number {
   return row.count;
 }
 
+function countFrondOpenings(state: ProjectState): number {
+  const row = state.store.db
+    .query(
+      "SELECT COUNT(*) AS count FROM decisions WHERE session_id = ? AND action = 'new' AND undone = 0",
+    )
+    .get(state.sessionId) as { count: number };
+  return row.count;
+}
+
 function countLeaflets(state: ProjectState): number {
   const row = state.store.db
     .query("SELECT COUNT(*) AS count FROM leaflets WHERE session_id = ?")
@@ -78,6 +87,8 @@ export interface StatusResponse {
   frondCount: number;
   strayCount: number;
   leafletCount: number;
+  /** Of leafletCount, how many are a frond's opening (`/fern new`) rather than a prompt. */
+  frondOpeningCount: number;
   mode: Mode;
   /** The active frond's brief, capped ~8KB (Notes truncated first). Omitted in observe mode — see docs/decisions.md. */
   brief?: string;
@@ -109,6 +120,7 @@ export async function handleStatus(
     : null;
   const strayCount = countStrays(state);
   const leafletCount = countLeaflets(state);
+  const frondOpeningCount = countFrondOpenings(state);
 
   const { session } = await state.store.getTree(state.sessionId);
 
@@ -127,6 +139,7 @@ export async function handleStatus(
     strayCount,
     leafletCount,
     session.mode,
+    frondOpeningCount,
   );
 
   const activeFrondId = activeId ?? state.stemFrondId;
@@ -152,6 +165,7 @@ export async function handleStatus(
     frondCount: topicFronds.length,
     strayCount,
     leafletCount,
+    frondOpeningCount,
     mode: session.mode,
     activeBriefPath,
     activeFileCount,
