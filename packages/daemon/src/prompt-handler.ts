@@ -7,6 +7,7 @@
 
 import { relative } from "node:path";
 import {
+  allCuePhrases,
   buildDecision,
   buildDecisionInverse,
   CLI_NAME,
@@ -16,11 +17,13 @@ import {
   decide,
   type Embedder,
   type FileTouch,
+  hasMeasuredScore,
   isValidFrondName,
   parseStrayPrefix,
   pluralize,
   proposeFrondName,
   type RouterAction,
+  sanitizeReplyGist,
 } from "@context-fern/core";
 import {
   type MergeableBriefSection,
@@ -43,6 +46,7 @@ import {
 } from "./prompt-util";
 import {
   alreadyExistsReceipt,
+  alreadyOnFrondReceipt,
   alreadyOnReceipt,
   mergedReceipt,
   newSuggestionReceipt,
@@ -113,6 +117,7 @@ async function fillBriefDeterministically(
   briefPath: string,
   promptText: string,
   turn: number,
+  replyGist?: string | null,
 ): Promise<void> {
   const updates: Partial<Record<MergeableBriefSection, string>> = {};
   const files =
@@ -131,7 +136,7 @@ async function fillBriefDeterministically(
     await writeBriefSections(briefPath, updates);
   }
 
-  await pushRecentEntry(briefPath, turn, goalCandidate);
+  await pushRecentEntry(briefPath, turn, goalCandidate, replyGist);
 }
 
 /** Manual decisions made while the daemon has no model carry the same journal tag as Stage 0 decisions. */
@@ -147,7 +152,10 @@ function manualSignals(state: ProjectState): string[] {
  * the top of every /prompt, in case a previous exchange's /exchange-end
  * never arrived (a crashed hook must never silently lose a leaflet).
  */
-export async function finalizeExchange(state: ProjectState): Promise<void> {
+export async function finalizeExchange(
+  state: ProjectState,
+  replyGist?: string,
+): Promise<void> {
   const exchange = state.pendingExchange;
   if (!exchange) return;
 
@@ -198,6 +206,13 @@ export async function finalizeExchange(state: ProjectState): Promise<void> {
       targetFrond.briefPath,
       exchange.promptText,
       leaflet.index,
+      // Only when the project keeps it (config `[briefs] record_reply_gist`,
+      // default on); sanitized again here so whatever reached the daemon
+      // is redacted and capped before it touches a file. Brief file only,
+      // never fern.db.
+      state.config.briefs.recordReplyGist && replyGist
+        ? sanitizeReplyGist(replyGist)
+        : null,
     );
   }
 }
@@ -372,6 +387,13 @@ async function applyManualSwitch(
     targetName = state.frondNames.get(targetId) ?? targetId;
   }
 
+  // Already on it: nothing changes, so nothing is recorded — no
+  // leaflet, no decision. A pending exchange stays pending and is
+  // finalized by the next plain prompt as usual.
+  if (targetId === state.routerState.activeFrondId) {
+    return { receipt: alreadyOnFrondReceipt(targetName) };
+  }
+
   const exchange = state.pendingExchange;
   const leaflet = await state.store.recordLeaflet({
     sessionId: state.sessionId,
@@ -407,7 +429,7 @@ async function applyManualSwitch(
   state.pendingExchange = null;
   state.pendingSuggestion = null;
 
-  return { receipt: returnedReceipt(targetName, 1) };
+  return { receipt: returnedReceipt(targetName) };
 }
 
 async function applyManualStray(state: ProjectState): Promise<PromptResult> {
@@ -551,7 +573,14 @@ async function handlePlainPrompt(
   // for everything else in this mode.)
   const degraded = signals.embeddingUnavailable === true;
   const cueDriven = rawDecision.signals.some((s) => s.startsWith("cue:"));
-  const shownConfidence = degraded ? null : rawDecision.confidence;
+  // A number only where Stage 0 measured one; a cue phrase, a heuristic
+  // or a model-less decision shows its signal instead.
+  const shownConfidence = hasMeasuredScore(
+    rawDecision.stage,
+    rawDecision.signals,
+  )
+    ? rawDecision.confidence
+    : null;
   const clears = (min: number) =>
     degraded ? cueDriven : rawDecision.confidence >= min;
 
@@ -566,7 +595,7 @@ async function handlePlainPrompt(
     // decide.ts's no-frond-match guard and docs/decisions.md).
     const proposedName = signals.isShortQuestion
       ? null
-      : proposeFrondName(promptText);
+      : proposeFrondName(promptText, 3, allCuePhrases(state.config.cues));
     suggestion = {
       action: "new",
       confidence: shownConfidence,
@@ -717,7 +746,9 @@ export async function handlePrompt(
   const focusNote = await buildFocusNote(state);
   if (focusNote !== undefined) result = { ...result, focusNote };
 
-  if (isFirstPromptAfterRestore) {
+  // Not in observe mode: restore injects nothing there (spec §6), so a
+  // "restored" receipt would claim context that was never sent.
+  if (isFirstPromptAfterRestore && state.mode !== "observe") {
     // Works exactly the same on the stem as on any topic frond — most
     // users never run /fern new at all, so the stem is their only
     // brief, and it deserves the same visible restore as a real frond.

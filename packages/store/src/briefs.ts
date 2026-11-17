@@ -90,25 +90,37 @@ export interface RecentEntry {
   /** The leaflet turn number this entry was written for, or null for a line with no machine-written tag (a hand-typed Recent line, or an entry written before this tag format existed). */
   turn: number | null;
   text: string;
+  /** First line of the assistant's reply to this prompt, already redacted and capped (core's `sanitizeReplyGist`). Written on the line under the prompt as `  ↳ reply: <gist>`. Absent when none was recorded. */
+  reply?: string;
 }
 
 const RECENT_ENTRY_RE = /^- t(\d+) · (.*)$/;
+const RECENT_REPLY_RE = /^↳ reply: (.*)$/;
 
-/** Recent's on-disk entries, one per `- ` bullet, with the machine note stripped and the `tN · ` turn tag (if present) parsed back out — the inverse of what pushRecentEntry writes. Exported so a caller (the daemon's /leaflets handler) can map a leaflet's turn number back to real prompt text without duplicating this parsing. */
+/** Recent's on-disk entries, one per `- ` bullet (plus the `↳ reply:` line under it, if any), with the machine note stripped and the `tN · ` turn tag (if present) parsed back out — the inverse of what pushRecentEntry writes. Exported so a caller (the daemon's /leaflets handler) can map a leaflet's turn number back to real prompt text without duplicating this parsing. */
 export function parseRecentEntries(raw: string): RecentEntry[] {
-  return raw
+  const entries: RecentEntry[] = [];
+  for (const l of raw
     .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0 && l !== RECENT_NOTE)
-    .map((l) => {
-      const m = RECENT_ENTRY_RE.exec(l);
-      if (m) return { turn: Number(m[1]), text: m[2] ?? "" };
-      return { turn: null, text: l.startsWith("- ") ? l.slice(2) : l };
-    });
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && line !== RECENT_NOTE)) {
+    const reply = RECENT_REPLY_RE.exec(l);
+    const previous = entries[entries.length - 1];
+    if (reply && previous) {
+      previous.reply = reply[1] ?? "";
+      continue;
+    }
+    const m = RECENT_ENTRY_RE.exec(l);
+    if (m) entries.push({ turn: Number(m[1]), text: m[2] ?? "" });
+    else
+      entries.push({ turn: null, text: l.startsWith("- ") ? l.slice(2) : l });
+  }
+  return entries;
 }
 
 function renderRecentEntry(e: RecentEntry): string {
-  return e.turn !== null ? `- t${e.turn} · ${e.text}` : `- ${e.text}`;
+  const line = e.turn !== null ? `- t${e.turn} · ${e.text}` : `- ${e.text}`;
+  return e.reply ? `${line}\n  ↳ reply: ${e.reply}` : line;
 }
 
 async function readMeta(metaPath: string): Promise<SectionHashes> {
@@ -225,6 +237,11 @@ export async function writeBriefSections(
  * rolling window and carried forward until it rolls off. A hand-typed
  * line (no `tN · ` tag) round-trips untagged.
  *
+ * `reply`, when given, is the gist of the assistant's answer to this
+ * prompt (core's `sanitizeReplyGist` output), kept on the line under it.
+ * Recent lists prompts and, where recorded, a one-line gist of each
+ * reply — never outcomes, and never file contents.
+ *
  * No-op if `entry` is empty (e.g. a frond created by a direct
  * `/fern new <name>` with no triggering prompt text yet), or if its text
  * is identical to the current newest entry's text (a retried/double-
@@ -236,15 +253,31 @@ export async function pushRecentEntry(
   briefPath: string,
   turn: number,
   entry: string,
+  reply?: string | null,
 ): Promise<void> {
   if (!entry) return;
   const current = await readBrief(briefPath);
   const existing = parseRecentEntries(current.Recent);
-  if (existing[0]?.text === entry) return;
-  const nextEntries: RecentEntry[] = [{ turn, text: entry }, ...existing].slice(
-    0,
-    RECENT_MAX,
-  );
+  if (existing[0]?.text === entry) {
+    // A retried prompt keeps its entry and turn tag, but a reply gist the
+    // first attempt never got is still worth keeping.
+    if (reply && !existing[0].reply) {
+      const filled = [{ ...existing[0], reply }, ...existing.slice(1)];
+      await writeFile(
+        briefPath,
+        render({
+          ...current,
+          Recent: filled.map(renderRecentEntry).join("\n"),
+        }),
+        "utf-8",
+      );
+    }
+    return;
+  }
+  const nextEntries: RecentEntry[] = [
+    { turn, text: entry, ...(reply ? { reply } : {}) },
+    ...existing,
+  ].slice(0, RECENT_MAX);
   const next: BriefSections = {
     ...current,
     Recent: nextEntries.map(renderRecentEntry).join("\n"),

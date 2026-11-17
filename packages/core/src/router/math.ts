@@ -1,6 +1,8 @@
 // Pure numeric helpers for the router. No I/O, no randomness.
 
 import { CLI_NAME } from "../brand";
+import { DEFAULT_CONFIG } from "./config";
+import type { CueConfig } from "./types";
 
 export function cosineSimilarity(
   a: ArrayLike<number> | null | undefined,
@@ -254,7 +256,22 @@ const NAME_STOPWORDS = new Set([
   "add",
   "fix",
   "update",
+  // Filler that follows a cue phrase ("switching to SOMETHING ELSE: HOW
+  // would I ...") and is never the topic. Added after dogfooding proposed
+  // "something-else-how"; see docs/decisions.md.
+  "how",
+  "why",
+  "something",
+  "anything",
+  "else",
+  "another",
+  "different",
 ]);
+
+// A word that introduces the purpose or detail of a topic ("add a README
+// badge FOR build status") rather than the topic itself: once at least
+// one topic word has been collected, the name stops here.
+const NAME_CUT_WORDS = new Set(["for", "about", "regarding", "because"]);
 
 // A short list of common file extensions — stripped (with the
 // preceding dot) before tokenizing, so "notes.txt" contributes the
@@ -310,15 +327,48 @@ export function isValidFrondName(name: string): boolean {
   return FROND_NAME_RE.test(name);
 }
 
-export function proposeFrondName(text: string, maxWords = 3): string | null {
-  const contentText = text
-    .split("\n")
-    .filter((line) => !FERN_COMMAND_LINE_RE.test(line.trim()))
-    .join(" ")
-    .replace(FILE_EXTENSION_RE, "");
-  const words = (contentText.toLowerCase().match(/[a-z0-9']+/g) ?? [])
-    .map((w) => w.replace(/'/g, ""))
-    .filter((w) => w.length > 1 && !NAME_STOPWORDS.has(w));
-  const slug = words.slice(0, maxWords).join("-");
+const CURLY_APOSTROPHE_RE = /[\u2018\u2019]/g;
+
+function removeCuePhrases(text: string, cues: readonly string[]): string {
+  const phrases = cues
+    .map((c) => c.toLowerCase().replace(CURLY_APOSTROPHE_RE, "'").trim())
+    .filter((c) => c.length > 0)
+    .sort((x, y) => y.length - x.length)
+    .map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  if (phrases.length === 0) return text;
+  const re = new RegExp(
+    `(?<![a-z0-9])(?:${phrases.join("|")})(?![a-z0-9])`,
+    "gi",
+  );
+  return text.replace(re, " ");
+}
+
+/** Every cue phrase in `config.cues`, for callers that want a name proposed from a prompt that may contain one. */
+export function allCuePhrases(cues: CueConfig): string[] {
+  return [...cues.new, ...cues.return, ...cues.stray];
+}
+
+export function proposeFrondName(
+  text: string,
+  maxWords = 3,
+  cues: readonly string[] = allCuePhrases(DEFAULT_CONFIG.cues),
+): string | null {
+  const contentText = removeCuePhrases(
+    text
+      .split("\n")
+      .filter((line) => !FERN_COMMAND_LINE_RE.test(line.trim()))
+      .join(" ")
+      .replace(CURLY_APOSTROPHE_RE, "'")
+      .replace(FILE_EXTENSION_RE, ""),
+    cues,
+  );
+  const picked: string[] = [];
+  for (const raw of contentText.toLowerCase().match(/[a-z0-9']+/g) ?? []) {
+    const word = raw.replace(/'/g, "");
+    if (picked.length > 0 && NAME_CUT_WORDS.has(word)) break;
+    if (word.length > 1 && !NAME_STOPWORDS.has(word)) picked.push(word);
+    if (picked.length >= maxWords) break;
+  }
+  const slug = picked.join("-");
   return slug.length > 0 ? slug : null;
 }

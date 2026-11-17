@@ -140,7 +140,7 @@ function buildDetail(
       fields: [
         {
           k: "routing",
-          v: `${l.kind ?? "continue"} · ${l.confidence !== null ? `confidence ${l.confidence.toFixed(2)}` : "no score"}`,
+          v: `${l.kind ?? "continue"} · ${l.confidence !== null ? `confidence ${l.confidence.toFixed(2)}` : (l.basis ?? "no score")}`,
         },
         {
           k: "context this turn",

@@ -22,8 +22,10 @@ UI and site work must follow `docs/design/DESIGN.md` and `docs/design/tokens.css
 
 ```
 bun install              # install workspace deps
-bun test                 # all TS tests
-bun test packages/core   # one package
+bun run test             # all TS tests (UI tests need DOM setup, so not plain `bun test`) + bench pytest
+bun run test:e2e         # build the fern ui, then Playwright/Chromium (CI's e2e step runs this)
+bun run test:all         # test + test:e2e: run before pushing any UI string or layout change
+bun test packages/core   # one package (not for packages/ui; use `bun run test`)
 bun run dev              # daemon + UI in watch mode
 bun run build            # compile the fern binary for this OS
 uv run --project bench bench smoke   # small ReplayBench run

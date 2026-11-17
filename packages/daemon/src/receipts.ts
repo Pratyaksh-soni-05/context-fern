@@ -5,14 +5,43 @@
 // (brand.ts), never the literal word "fern" — CLAUDE.md: name and
 // design are locked, import the constants, never hard-code them.
 
-import { CLI_NAME, pluralize } from "@context-fern/core";
+import {
+  CLI_NAME,
+  DEGRADED_SIGNAL,
+  describeSignals,
+  pluralize,
+} from "@context-fern/core";
 
 const PREFIX = `${CLI_NAME} ▸`;
 const CMD = `/${CLI_NAME}`;
 
-/** "—" when Stage 0 had no embedding model: no number is better than a made-up one. */
-function confidenceText(confidence: number | null): string {
-  return confidence === null ? "—" : confidence.toFixed(2);
+/**
+ * The middle of a suggestion receipt: a number only when there is a
+ * measured Stage 0 score, then the signals in plain words. Never an
+ * invented number. A "—" appears in exactly one case: the decision was
+ * made with no embedding model and rests on no named signal, so it is the
+ * place a similarity number would have gone and none could be measured
+ * (DESIGN.md Voice; docs/decisions.md, 2026-11-17). A cue phrase or a
+ * manual command names itself instead and never shows a dash.
+ */
+function basis(confidence: number | null, signals: string[]): string {
+  const named = describeSignals(signals);
+  if (confidence === null && !named && signals.includes(DEGRADED_SIGNAL)) {
+    return "—";
+  }
+  return [confidence === null ? null : confidence.toFixed(2), named || null]
+    .filter((part): part is string => part !== null)
+    .join(" · ");
+}
+
+function withBasis(
+  head: string,
+  confidence: number | null,
+  signals: string[],
+  tail: string,
+): string {
+  const middle = basis(confidence, signals);
+  return middle ? `${head} · ${middle} · ${tail}` : `${head} · ${tail}`;
 }
 
 /** `proposedName` is null when no real content word survived proposeFrondName's extraction — the receipt then asks for a name explicitly rather than showing a fabricated placeholder. */
@@ -23,7 +52,7 @@ export function newSuggestionReceipt(
 ): string {
   const namePart = proposedName ? ` ${proposedName}` : "";
   const cmd = proposedName ? `${CMD} new` : `${CMD} new <name>`;
-  return `${PREFIX} new frond?${namePart} · ${confidenceText(confidence)} · ${signals.join(", ")} · ${cmd}`;
+  return withBasis(`${PREFIX} new frond?${namePart}`, confidence, signals, cmd);
 }
 
 /** Mirrors newSuggestionReceipt's shape for a return/combine suggestion — spec gives no literal example for this one, so it follows the same voice. */
@@ -32,7 +61,12 @@ export function returnSuggestionReceipt(
   confidence: number | null,
   signals: string[],
 ): string {
-  return `${PREFIX} return to ${frondName}? · ${confidenceText(confidence)} · ${signals.join(", ")} · ${CMD} switch`;
+  return withBasis(
+    `${PREFIX} return to ${frondName}?`,
+    confidence,
+    signals,
+    `${CMD} switch`,
+  );
 }
 
 export function onFrondReceipt(
@@ -53,7 +87,7 @@ export function straySuggestionReceipt(
   confidence: number | null,
   signals: string[],
 ): string {
-  return `${PREFIX} stray? · ${confidenceText(confidence)} · ${signals.join(", ")} · ${CMD} stray`;
+  return withBasis(`${PREFIX} stray?`, confidence, signals, `${CMD} stray`);
 }
 
 /** A past leaflet retroactively marked stray via bare `/fern stray` — undoable. */
@@ -61,8 +95,14 @@ export function strayMarkedReceipt(): string {
   return `${PREFIX} stray (marked) · answered, kept off every frond · ${CMD} undo`;
 }
 
-export function returnedReceipt(frondName: string, confidence: number): string {
-  return `${PREFIX} returned to ${frondName} · ${confidence.toFixed(2)} · ${CMD} undo`;
+/** A manual `/fern switch` is the user's own command, not a score: no number. */
+export function returnedReceipt(frondName: string): string {
+  return `${PREFIX} returned to ${frondName} · ${CMD} undo`;
+}
+
+/** `/fern switch <name>` for the frond you are already on — nothing to do, so nothing is recorded. */
+export function alreadyOnFrondReceipt(frondName: string): string {
+  return `${PREFIX} already on ${frondName}`;
 }
 
 /** `/fern new <name>` where `<name>` already exists — switched to it instead of creating a duplicate. */

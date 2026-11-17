@@ -15,6 +15,8 @@
     "lint": "biome check . && uv run --project bench ruff check",
     "typecheck": "tsc -b && tsc -p tsconfig.tests.json && tsc -p tsconfig.bench.json && tsc -p packages/ui/tsconfig.json && tsc -p e2e/tsconfig.json",
     "test": "bun test --path-ignore-patterns \"packages/ui/**\" --path-ignore-patterns \"e2e/**\" packages bench/ts test && bun test -r ./packages/ui/test/dom-setup.ts packages/ui && uv run --project bench pytest",
+    "test:e2e": "bun run --cwd packages/ui build && bun run --cwd e2e test",
+    "test:all": "bun run test && bun run test:e2e",
     "demo": "bun scripts/demo.ts"
   },
   "devDependencies": {

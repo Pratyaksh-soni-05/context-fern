@@ -11,6 +11,7 @@ export function renderDefaultConfigToml(): string {
   const c = DEFAULT_CONFIG.cues;
   const e = DEFAULT_CONFIG.escalation;
   const sp = DEFAULT_CONFIG.suggestionPrecision;
+  const b = DEFAULT_CONFIG.briefs;
 
   const strList = (xs: readonly string[]) =>
     `[${xs.map((x) => JSON.stringify(x)).join(", ")}]`;
@@ -46,5 +47,13 @@ high = ${e.high}
 [suggestion_precision]
 new = ${sp.new}
 stray = ${sp.stray}
+
+# What a frond's brief file keeps next to each prompt in its Recent section.
+# Text stays in the brief file only — never in fern.db. Set to false to keep
+# prompts only: no reply gist is then written. The gist is the first line of
+# the assistant's reply, at most 120 characters, secrets redacted, never
+# file contents.
+[briefs]
+record_reply_gist = ${b.recordReplyGist}
 `;
 }

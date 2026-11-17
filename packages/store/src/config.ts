@@ -20,6 +20,7 @@ const TOP_LEVEL_SECTIONS = new Set([
   "cues",
   "escalation",
   "suggestion_precision",
+  "briefs",
 ]);
 
 const UNIT_INTERVAL_FIELDS = new Set([
@@ -175,6 +176,27 @@ function toSuggestionPrecision(raw: Record<string, unknown> | undefined) {
   return out;
 }
 
+function toBriefs(raw: Record<string, unknown> | undefined) {
+  if (!raw) return {};
+  const out: { recordReplyGist?: boolean } = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (key !== "record_reply_gist") {
+      throw new ConfigValidationError(
+        `briefs.${key}`,
+        "is not a recognized briefs field",
+      );
+    }
+    if (typeof value !== "boolean") {
+      throw new ConfigValidationError(
+        "briefs.record_reply_gist",
+        `must be true or false, got ${JSON.stringify(value)}`,
+      );
+    }
+    out.recordReplyGist = value;
+  }
+  return out;
+}
+
 /** No path given returns core's unmodified `DEFAULT_CONFIG` — including the interim `suggestionPrecision` thresholds. */
 export async function loadFernConfig(path?: string): Promise<RouterConfig> {
   if (!path) return mergeConfig();
@@ -209,6 +231,7 @@ export async function loadFernConfig(path?: string): Promise<RouterConfig> {
     suggestionPrecision: toSuggestionPrecision(
       parsed.suggestion_precision as Record<string, unknown> | undefined,
     ),
+    briefs: toBriefs(parsed.briefs as Record<string, unknown> | undefined),
   });
 }
 

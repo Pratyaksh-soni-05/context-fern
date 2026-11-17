@@ -5,7 +5,7 @@
 import { expect, test } from "@playwright/test";
 import { mintFixture } from "../fixtures/fixture-client";
 
-test("List view: every seeded leaflet renders as a row with real turn, frond, kind, and confidence", async ({
+test("List view: every seeded leaflet renders as a row with real turn, frond, kind, and basis", async ({
   page,
 }) => {
   const { url, projectName } = await mintFixture();
@@ -23,7 +23,7 @@ test("List view: every seeded leaflet renders as a row with real turn, frond, ki
   await expect(header.getByText("kind")).toBeVisible();
   await expect(header.getByText("prompt")).toBeVisible();
   await expect(header.getByText("context")).toBeVisible();
-  await expect(header.getByText("conf")).toBeVisible();
+  await expect(header.getByText("basis")).toBeVisible();
 
   // The fixture's 13-turn plan yields 12 leaflets (one turn is a merge,
   // which records no leaflet of its own) — every one of them should be

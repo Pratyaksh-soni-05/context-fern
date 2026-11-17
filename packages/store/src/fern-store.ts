@@ -7,13 +7,14 @@ import type { Database } from "bun:sqlite";
 import { join } from "node:path";
 import {
   buildDecision,
-  DEGRADED_SIGNAL,
   type Decision,
   type DecisionAction,
   type DecisionInverse,
+  describeSignals,
   type FileTouch,
   type Frond,
   type FrondStatus,
+  hasMeasuredScore,
   type Leaflet,
   type Mode,
   type RouterState,
@@ -197,7 +198,10 @@ export interface UiLeaflet {
   kind: DecisionAction | null;
   promptPreview: string | null;
   tokenCount: number;
+  /** A measured Stage 0 similarity score, or null — see `basis`. */
   confidence: number | null;
+  /** What the decision rests on when there is no measured score ("manual", "cue phrase", ...), shown instead of a number. Null for a plain continued turn. */
+  basis: string | null;
   filesTouchedCount: number;
 }
 
@@ -860,33 +864,29 @@ export async function openFernStore(fernDir: string): Promise<FernStore> {
   }
 
   /**
-   * `decisions.confidence` is `NOT NULL` — every manual/forced decision
-   * (stage "manual", or a forced-continue's `signals` entry) still
-   * stores a real `1` there, never a real router score, so it can't be
-   * told apart from a genuine 100%-confidence router decision by value
-   * alone. Rather than loosen the schema constraint, the UI-facing
-   * projection derives the honest value here: `null` ("no router score"
-   * — the List/Inspector show "—"/"forced, no score") for anything
-   * that isn't a real stage 0/2 router decision. A decision made
-   * with no embedding model (tagged `degraded:no-embedding`) is the same
-   * case: its stored number is the complement of a structural 0, not a
-   * measurement. See docs/decisions.md.
+   * `decisions.confidence` is `NOT NULL`, so every decision stores a
+   * number, but only a measured Stage 0 similarity score is evidence
+   * (core's `hasMeasuredScore`): a manual or forced decision stores a
+   * placeholder `1`, a cue-phrase decision the complement of unrelated
+   * scores capped at 0.95, a degraded one a structural 0. Rather than
+   * loosen the schema, the UI-facing projection reports `null` for all of
+   * those and a `basis` (the signal) to show in its place. See
+   * docs/decisions.md (2026-11-17).
    */
-  function hasRealRouterScore(
-    stage: string | null,
-    signalsJson: string | null,
-  ): boolean {
-    if (stage === "manual") return false;
-    if (!signalsJson) return true;
+  function parseSignals(signalsJson: string | null): string[] {
+    if (!signalsJson) return [];
     try {
-      const signals = JSON.parse(signalsJson) as string[];
-      if (signals.includes("forced-continue")) return false;
-      if (signals.includes(DEGRADED_SIGNAL)) return false;
+      const parsed = JSON.parse(signalsJson) as unknown;
+      return Array.isArray(parsed) ? parsed.map(String) : [];
     } catch {
-      // malformed signals JSON — err on the side of trusting the stored
-      // confidence rather than hiding a real one.
+      return [];
     }
-    return true;
+  }
+
+  function basisFor(stage: string | null, signals: string[]): string | null {
+    if (stage === "manual") return "manual";
+    if (signals.includes("forced-continue")) return null;
+    return describeSignals(signals) || null;
   }
 
   async function listLeafletsWithDecisions(
@@ -952,9 +952,11 @@ export async function openFernStore(fernDir: string): Promise<FernStore> {
         promptPreview: previewByTurn.get(r.idx) ?? null,
         tokenCount: r.token_count,
         confidence:
-          r.confidence !== null && hasRealRouterScore(r.stage, r.signals)
+          r.confidence !== null &&
+          hasMeasuredScore(r.stage, parseSignals(r.signals))
             ? r.confidence
             : null,
+        basis: basisFor(r.stage, parseSignals(r.signals)),
         filesTouchedCount: (JSON.parse(r.files_touched) as FileTouch[]).length,
       };
     });

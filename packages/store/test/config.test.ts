@@ -84,3 +84,29 @@ for (const { name, toml, messageContains } of invalidCases) {
     );
   });
 }
+
+test("[briefs] record_reply_gist defaults to on, and false turns the gist off", async () => {
+  expect(DEFAULT_CONFIG.briefs.recordReplyGist).toBe(true);
+  expect((await loadFernConfig()).briefs.recordReplyGist).toBe(true);
+
+  dir = await withTempFernDir();
+  const path = join(dir.path, "config.toml");
+  await Bun.write(path, "[briefs]\nrecord_reply_gist = false\n");
+  expect((await loadFernConfig(path)).briefs.recordReplyGist).toBe(false);
+
+  await Bun.write(path, "[thresholds]\ncontinue_min = 0.4\n");
+  expect((await loadFernConfig(path)).briefs.recordReplyGist).toBe(true);
+});
+
+test("[briefs] rejects a non-boolean value and an unknown key, naming the exact key", async () => {
+  dir = await withTempFernDir();
+  const path = join(dir.path, "config.toml");
+
+  await Bun.write(path, '[briefs]\nrecord_reply_gist = "no"\n');
+  await expect(loadFernConfig(path)).rejects.toThrow(
+    /briefs\.record_reply_gist.*true or false/,
+  );
+
+  await Bun.write(path, "[briefs]\nrecord_replies = true\n");
+  await expect(loadFernConfig(path)).rejects.toThrow(/briefs\.record_replies/);
+});

@@ -9,7 +9,10 @@ import {
   type BriefSection,
   readBrief,
 } from "@context-fern/store";
-import { truncateBriefForContext } from "./brief-context";
+import {
+  truncateBriefForContext,
+  truncateBriefsForContext,
+} from "./brief-context";
 import { degradedReceipt, type EmbedderHealth } from "./embedder";
 import type { ProjectState } from "./project-registry";
 import { DaemonError } from "./prompt-util";
@@ -93,6 +96,11 @@ export interface StatusResponse {
   mode: Mode;
   /** The active frond's brief, capped ~8KB (Notes truncated first). Omitted in observe mode — see docs/decisions.md. */
   brief?: string;
+  /** On a frond other than the stem: the stem's brief ("" when empty) and its path, sharing the ~8KB budget with `brief`. Omitted when the stem is the active frond, and in observe mode. */
+  stemBrief?: string;
+  stemBriefPath?: string;
+  /** True when the active frond is the stem, so a restore knows whether a second brief is expected. */
+  activeIsStem: boolean;
   /** The active frond's brief path, project-relative — unlike `brief`, never mode-gated: a restore/focus note must be able to name where the brief lives even when its sections are still empty. See docs/decisions.md. */
   activeBriefPath: string | null;
   /** The active frond's accumulated touched-file count — not mode-gated, same reasoning as activeBriefPath. */
@@ -100,6 +108,15 @@ export interface StatusResponse {
   /** Whether Stage 0 has a usable embedding model. `degraded` means cue phrases and file overlap only. */
   embedder: EmbedderHealth;
 }
+
+const EMPTY_SECTIONS = {
+  Goal: "",
+  Decided: "",
+  Open: "",
+  Files: "",
+  Notes: "",
+  Recent: "",
+};
 
 export async function handleStatus(
   state: ProjectState,
@@ -112,8 +129,8 @@ export async function handleStatus(
   // the next /prompt call attaches the restored receipt and clears it.
   // `fern status`/other callers never pass this, so a manual status
   // check never queues a receipt nobody asked for. See docs/decisions.md.
-  if (markRestored) state.pendingRestoreReceipt = true;
-
+  // Observe mode injects nothing on restore (spec §6), so it queues no
+  // "restored" receipt either: that line would claim context that was not sent.
   const fronds = await state.store.listFronds(state.sessionId);
   const topicFronds = fronds.filter(
     (f) => f.parentId !== null && f.status !== "merged",
@@ -127,6 +144,9 @@ export async function handleStatus(
   const frondOpeningCount = countFrondOpenings(state);
 
   const { session } = await state.store.getTree(state.sessionId);
+  if (markRestored && session.mode !== "observe") {
+    state.pendingRestoreReceipt = true;
+  }
 
   // Token accounting (isolate-mode payload sizing) isn't built yet —
   // report 0/0 rather than inventing numbers. See docs/decisions.md.
@@ -156,10 +176,34 @@ export async function handleStatus(
     state.routerState.stemFiles
   ).length;
 
+  // Restore needs the stem too (spec §8: stem first, then the active
+  // frond): the real work is often on the stem while the active frond is
+  // new and empty. Both share one ~8KB budget; an empty brief is "".
   let brief: string | undefined;
+  let stemBrief: string | undefined;
+  let stemBriefPath: string | undefined;
   if (session.mode !== "observe" && activeFrond) {
-    const sections = await readBrief(activeFrond.briefPath).catch(() => null);
-    if (sections) brief = truncateBriefForContext(sections);
+    const activeSections = await readBrief(activeFrond.briefPath).catch(
+      () => EMPTY_SECTIONS,
+    );
+    const stemFrond = fronds.find((f) => f.id === state.stemFrondId);
+    if (activeSections && stemFrond && stemFrond.id !== activeFrond.id) {
+      const stemSections = await readBrief(stemFrond.briefPath).catch(
+        () => EMPTY_SECTIONS,
+      );
+      if (stemSections) {
+        const fitted = truncateBriefsForContext(stemSections, activeSections);
+        brief = fitted.active;
+        stemBrief = fitted.stem;
+        stemBriefPath = relative(
+          state.projectPath,
+          stemFrond.briefPath,
+        ).replace(/\\/g, "/");
+      }
+    }
+    if (brief === undefined && activeSections) {
+      brief = truncateBriefForContext(activeSections);
+    }
   }
 
   return {
@@ -178,7 +222,11 @@ ${degradedReceipt(health.reason)}`
     mode: session.mode,
     activeBriefPath,
     activeFileCount,
+    activeIsStem: activeFrondId === state.stemFrondId,
     ...(brief !== undefined ? { brief } : {}),
+    ...(stemBrief !== undefined && stemBriefPath !== undefined
+      ? { stemBrief, stemBriefPath }
+      : {}),
   };
 }
 

@@ -240,6 +240,7 @@ export function gridSearch(
       cues,
       escalation: DEFAULT_CONFIG.escalation,
       suggestionPrecision: DEFAULT_CONFIG.suggestionPrecision,
+      briefs: DEFAULT_CONFIG.briefs,
     };
     const predicted = rows.map((row) => predictRow(row, config));
     const metrics = computeMetrics(predicted);
@@ -329,6 +330,7 @@ async function main(): Promise<void> {
       cues: DEFAULT_CONFIG_FOR_SIGNALS().cues,
       escalation: DEFAULT_CONFIG_FOR_SIGNALS().escalation,
       suggestionPrecision: DEFAULT_CONFIG_FOR_SIGNALS().suggestionPrecision,
+      briefs: DEFAULT_CONFIG_FOR_SIGNALS().briefs,
     };
     const testPredicted = fold.test.map((r) => predictRow(r, testConfig));
     const testMetrics = computeMetrics(testPredicted);

@@ -5,9 +5,14 @@
 // freeform scratch) — Goal/Decided/Open/Files carry the load-bearing
 // facts a resumed session actually needs. See docs/decisions.md.
 
+import { quoteSnippetLines } from "@context-fern/core";
 import { BRIEF_SECTIONS, type BriefSections } from "@context-fern/store";
 
-const DEFAULT_MAX_BYTES = 8 * 1024;
+/** What the model gets, framing included: ~8KB. */
+const TOTAL_MAX_BYTES = 8 * 1024;
+/** Room kept for the restore note, header and labels the hook adds around the briefs. */
+const FRAMING_RESERVE_BYTES = 1536;
+const DEFAULT_MAX_BYTES = TOTAL_MAX_BYTES - FRAMING_RESERVE_BYTES;
 const ELLIPSIS = "\n…(truncated)";
 
 function byteLength(text: string): number {
@@ -15,9 +20,13 @@ function byteLength(text: string): number {
 }
 
 function renderSections(sections: BriefSections): string {
-  return BRIEF_SECTIONS.filter((s) => sections[s].trim().length > 0)
-    .map((s) => `## ${s}\n\n${sections[s]}`)
-    .join("\n\n");
+  return (
+    BRIEF_SECTIONS.filter((s) => sections[s].trim().length > 0)
+      // Quoted, redacted and filtered here, before the byte budget is
+      // applied, so the cap is measured on exactly what the model receives.
+      .map((s) => `## ${s}\n\n${quoteSnippetLines(sections[s])}`)
+      .join("\n\n")
+  );
 }
 
 /** Truncates `text` so slice+ellipsis together fit within maxBytes. */
@@ -72,4 +81,34 @@ export function truncateBriefForContext(
   // the budget) — hard-truncate what's left.
   const withoutEither = { ...sections, Recent: "", Notes: "" };
   return truncateToBytes(renderSections(withoutEither), maxBytes);
+}
+
+/**
+ * The stem's brief and the active frond's brief share one budget (spec §8:
+ * the stem is always sent, then the active frond). Each gets half, and a
+ * brief that needs less than half hands the rest to the other; within its
+ * own share each is shrunk exactly as `truncateBriefForContext` does
+ * (Recent first, then Notes). An empty brief renders as "".
+ */
+export function truncateBriefsForContext(
+  stem: BriefSections,
+  active: BriefSections,
+  maxBytes: number = DEFAULT_MAX_BYTES,
+): { stem: string; active: string } {
+  const stemFull = byteLength(renderSections(stem));
+  const activeFull = byteLength(renderSections(active));
+  if (stemFull + activeFull <= maxBytes) {
+    return { stem: renderSections(stem), active: renderSections(active) };
+  }
+  let stemBudget = Math.floor(maxBytes / 2);
+  if (stemFull < stemBudget) stemBudget = stemFull;
+  let activeBudget = maxBytes - stemBudget;
+  if (activeFull < activeBudget) {
+    activeBudget = activeFull;
+    stemBudget = maxBytes - activeBudget;
+  }
+  return {
+    stem: truncateBriefForContext(stem, stemBudget),
+    active: truncateBriefForContext(active, activeBudget),
+  };
 }

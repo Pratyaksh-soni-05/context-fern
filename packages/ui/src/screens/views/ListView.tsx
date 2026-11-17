@@ -83,7 +83,7 @@ export function ListView({
         <span>kind</span>
         <span>prompt</span>
         <span>context</span>
-        <span>conf</span>
+        <span>basis</span>
       </div>
       {error && (
         <p role="alert" className="list-view__error">
@@ -160,7 +160,9 @@ export function ListView({
                 })}
               </span>
               <span className="list-view__conf">
-                {l.confidence !== null ? l.confidence.toFixed(2) : "—"}
+                {l.confidence !== null
+                  ? l.confidence.toFixed(2)
+                  : (l.basis ?? "—")}
               </span>
             </button>
           );

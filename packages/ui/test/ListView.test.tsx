@@ -37,6 +37,7 @@ function leaflet(overrides: Partial<UiLeaflet>): UiLeaflet {
     promptPreview: "fix the login bug",
     tokenCount: 400,
     confidence: 0.82,
+    basis: null,
     filesTouchedCount: 2,
     ...overrides,
   };
@@ -66,7 +67,7 @@ test("renders the column header and a real leaflet row", async () => {
   expect(screen.getByText("kind")).toBeDefined();
   expect(screen.getByText("prompt")).toBeDefined();
   expect(screen.getByText("context")).toBeDefined();
-  expect(screen.getByText("conf")).toBeDefined();
+  expect(screen.getByText("basis")).toBeDefined();
 
   await waitFor(() => {
     expect(screen.getByText("fix the login bug")).toBeDefined();
@@ -74,6 +75,42 @@ test("renders the column header and a real leaflet row", async () => {
   expect(screen.getByText("auth-refactor")).toBeDefined();
   expect(screen.getByText("new")).toBeDefined();
   expect(screen.getByText("0.82")).toBeDefined();
+});
+
+test("a decision with no measured score shows what it rests on instead of a number", async () => {
+  getLeafletsMock.mockImplementation(() =>
+    Promise.resolve({
+      leaflets: [
+        leaflet({
+          turn: 1,
+          kind: "new",
+          confidence: null,
+          basis: "cue phrase",
+        }),
+        leaflet({
+          turn: 2,
+          kind: "return",
+          confidence: null,
+          basis: "manual",
+        }),
+      ],
+      total: 2,
+    }),
+  );
+  render(
+    <ListView
+      projectPath="/repo"
+      fronds={fronds}
+      selection={null}
+      onSelect={() => {}}
+    />,
+  );
+
+  await waitFor(() => {
+    expect(screen.getByText("cue phrase")).toBeDefined();
+  });
+  expect(screen.getByText("manual")).toBeDefined();
+  expect(screen.queryByText(/[0-9]\.[0-9][0-9]/)).toBeNull();
 });
 
 test("shows n/a for a leaflet with no matching Recent entry, and — (not a fabricated 1.00) for one with no real router score", async () => {

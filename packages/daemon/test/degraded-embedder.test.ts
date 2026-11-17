@@ -148,7 +148,7 @@ test("model present but corrupt: refused by checksum, never loaded, cue phrases 
     "cue:stray",
     "degraded:no-embedding",
   ]);
-  expect(cued.receipt).toContain("stray? · — · cue:stray");
+  expect(cued.receipt).toContain("stray? · cue phrase · /fern stray");
   expect(String(cued.receipt)).not.toMatch(/\d\.\d\d/);
 
   expect(outboundHosts).toEqual([]);
@@ -226,7 +226,9 @@ test("degraded: a cue phrase suggests, a prompt that merely names unrelated file
   });
   expect(cue.suggestion).toMatchObject({ action: "new", confidence: null });
   expect(String(cue.receipt)).toContain("new frond?");
-  expect(String(cue.receipt)).toContain(" · — · ");
+  expect(String(cue.receipt)).toContain(
+    "new frond? payments · cue phrase · /fern new",
+  );
 
   await call("POST", "/exchange-end", { projectPath: project.path });
   const files = await call("POST", "/prompt", {

@@ -64,17 +64,14 @@ jobs:
       # Chromium on the Windows runner is slow and flaky — Playwright
       # runs in this Linux job only. Component/server tests above
       # already cover both OSes. See docs/decisions.md.
-      - name: build fern ui
-        if: matrix.os == 'ubuntu-latest'
-        run: bun run build
-        working-directory: packages/ui
-
       - name: install Playwright Chromium
         if: matrix.os == 'ubuntu-latest'
         run: bunx playwright install --with-deps chromium
         working-directory: e2e
 
+      # Same command a developer runs locally (`bun run test:all` is this
+      # plus the step above), so a UI string change fails on their machine
+      # first, not only here. It builds the fern ui, then runs Playwright.
       - name: e2e (fern ui, Chromium)
         if: matrix.os == 'ubuntu-latest'
-        run: bunx playwright test
-        working-directory: e2e
+        run: bun run test:e2e

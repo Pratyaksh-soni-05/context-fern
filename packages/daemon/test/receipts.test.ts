@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  alreadyOnFrondReceipt,
   alreadyOnReceipt,
   mergedReceipt,
   newSuggestionReceipt,
@@ -16,14 +17,20 @@ import {
 
 // Literal strings from docs/spec.md §7.
 
-test("newSuggestionReceipt matches spec §7's literal example", () => {
+test("newSuggestionReceipt matches spec §7's literal example: the signal, no invented number", () => {
+  expect(newSuggestionReceipt("docker-build", null, ["cue:new"])).toBe(
+    "fern ▸ new frond? docker-build · cue phrase · /fern new",
+  );
+});
+
+test("a measured Stage 0 score is still shown, ahead of the signals", () => {
   expect(
     newSuggestionReceipt("docker-build", 0.86, [
-      "cue phrase",
-      "no file overlap",
+      "no-frond-match",
+      "file-divergence",
     ]),
   ).toBe(
-    "fern ▸ new frond? docker-build · 0.86 · cue phrase, no file overlap · /fern new",
+    "fern ▸ new frond? docker-build · 0.86 · no frond match, file divergence · /fern new",
   );
 });
 
@@ -53,10 +60,14 @@ test("strayMarkedReceipt matches spec §7's literal example", () => {
   );
 });
 
-test("returnedReceipt matches spec §7's literal example", () => {
-  expect(returnedReceipt("auth-refactor", 0.88)).toBe(
-    "fern ▸ returned to auth-refactor · 0.88 · /fern undo",
+test("returnedReceipt matches spec §7's literal example: a manual switch carries no number", () => {
+  expect(returnedReceipt("auth-refactor")).toBe(
+    "fern ▸ returned to auth-refactor · /fern undo",
   );
+});
+
+test("alreadyOnFrondReceipt says nothing was done", () => {
+  expect(alreadyOnFrondReceipt("cleanup")).toBe("fern ▸ already on cleanup");
 });
 
 test("statuslineReceipt matches spec §7's format when ctx numbers are real", () => {
@@ -97,15 +108,43 @@ test("undoneReceipt and mergedReceipt start with the fern ▸ voice marker", () 
   expect(mergedReceipt("docker-build")).toStartWith("fern ▸ ");
 });
 
-test("a suggestion made with no embedding model shows a dash, never a number", () => {
+test("a suggestion without a measured score shows its signal, never a number or a placeholder", () => {
   expect(newSuggestionReceipt("auth-work", null, ["cue:new"])).toBe(
-    "fern ▸ new frond? auth-work · — · cue:new · /fern new",
+    "fern ▸ new frond? auth-work · cue phrase · /fern new",
   );
   expect(straySuggestionReceipt(null, ["cue:stray"])).toBe(
-    "fern ▸ stray? · — · cue:stray · /fern stray",
+    "fern ▸ stray? · cue phrase · /fern stray",
   );
   expect(returnSuggestionReceipt("auth-work", null, ["cue:return"])).toBe(
-    "fern ▸ return to auth-work? · — · cue:return · /fern switch",
+    "fern ▸ return to auth-work? · cue phrase · /fern switch",
+  );
+  // the degraded tag is reported elsewhere, not repeated in every receipt
+  expect(
+    newSuggestionReceipt("auth-work", null, [
+      "cue:new",
+      "degraded:no-embedding",
+    ]),
+  ).toBe("fern ▸ new frond? auth-work · cue phrase · /fern new");
+  expect(newSuggestionReceipt(null, null, [])).toBe(
+    "fern ▸ new frond? · /fern new <name>",
+  );
+});
+
+test("a dash stands in only where a similarity number would have gone and no model could measure one", () => {
+  // degraded, no named signal: the number's slot, honestly empty
+  expect(
+    newSuggestionReceipt("auth-work", null, ["degraded:no-embedding"]),
+  ).toBe("fern ▸ new frond? auth-work · — · /fern new");
+  // degraded but driven by a cue phrase: the cue names itself, no dash
+  expect(
+    newSuggestionReceipt("auth-work", null, [
+      "cue:new",
+      "degraded:no-embedding",
+    ]),
+  ).toBe("fern ▸ new frond? auth-work · cue phrase · /fern new");
+  // not degraded and no score: nothing to stand in for, nothing shown
+  expect(newSuggestionReceipt("auth-work", null, [])).toBe(
+    "fern ▸ new frond? auth-work · /fern new",
   );
 });
 

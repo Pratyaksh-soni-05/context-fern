@@ -160,6 +160,10 @@ test.skipIf(process.platform !== "win32")(
     ).trim();
     await assertFrondFoundViaGetOrOpenProject(shortPath2, "greetings");
   },
+  // Two cold powershell.exe launches (each loads the COM scripting runtime
+  // and may be scanned by Defender on a fresh runner) can pass bun's 5 s
+  // default on a loaded Windows CI box; nothing here is a perf check.
+  30_000,
 );
 
 test("canonicalizeProjectPath itself: trailing slash normalizes away (every OS)", async () => {

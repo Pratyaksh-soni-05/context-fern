@@ -43,6 +43,7 @@ const leaflets: UiLeafletPage = {
       promptPreview: null,
       tokenCount: 5,
       confidence: 0.9,
+      basis: null,
       filesTouchedCount: 0,
     },
     {
@@ -54,6 +55,7 @@ const leaflets: UiLeafletPage = {
       promptPreview: "fix auth",
       tokenCount: 6,
       confidence: 0.8,
+      basis: null,
       filesTouchedCount: 1,
     },
   ],

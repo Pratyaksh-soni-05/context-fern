@@ -36,7 +36,10 @@ export interface UiLeaflet {
   kind: DecisionAction | null;
   promptPreview: string | null;
   tokenCount: number;
+  /** A measured Stage 0 similarity score, or null — see `basis`. */
   confidence: number | null;
+  /** What the decision rests on when there is no measured score ("manual", "cue phrase", ...). Null for a plain continued turn. */
+  basis: string | null;
   filesTouchedCount: number;
 }
 

@@ -289,3 +289,71 @@ test("archiveOrDeleteBrief: a user-edited brief is moved intact, never deleted",
   );
   expect(archived.Notes).toBe("the user's own investigation notes");
 });
+
+test("a reply gist is kept on the line under its prompt, tagged with the same turn, and parses back", async () => {
+  dir = await withTempFernDir();
+  const path = join(dir.path, "auth.md");
+  await createBrief(path);
+
+  await pushRecentEntry(
+    path,
+    3,
+    "fix the login bug",
+    "Changed src/auth.ts to refresh the token.",
+  );
+  await pushRecentEntry(path, 4, "now add a test"); // no gist recorded
+
+  const brief = await readBrief(path);
+  expect(brief.Recent).toBe(
+    [
+      "- t4 · now add a test",
+      "- t3 · fix the login bug",
+      "  ↳ reply: Changed src/auth.ts to refresh the token.",
+    ].join("\n"),
+  );
+
+  expect(parseRecentEntries(brief.Recent)).toEqual([
+    { turn: 4, text: "now add a test" },
+    {
+      turn: 3,
+      text: "fix the login bug",
+      reply: "Changed src/auth.ts to refresh the token.",
+    },
+  ]);
+});
+
+test("the reply line never becomes part of a prompt's text, so the UI's promptPreview stays the prompt", async () => {
+  dir = await withTempFernDir();
+  const path = join(dir.path, "auth.md");
+  await createBrief(path);
+  await pushRecentEntry(path, 1, "the prompt", "the gist");
+
+  const [entry] = parseRecentEntries((await readBrief(path)).Recent);
+  expect(entry?.text).toBe("the prompt");
+  expect(entry?.reply).toBe("the gist");
+});
+
+test("an entry's gist rolls off with it when the window of 5 turns over", async () => {
+  dir = await withTempFernDir();
+  const path = join(dir.path, "auth.md");
+  await createBrief(path);
+  for (let turn = 1; turn <= 6; turn++) {
+    await pushRecentEntry(path, turn, `prompt ${turn}`, `gist ${turn}`);
+  }
+  const text = (await readBrief(path)).Recent;
+  expect(text).toContain("gist 6");
+  expect(text).toContain("gist 2");
+  expect(text).not.toContain("gist 1");
+});
+
+test("a retried prompt keeps its entry and turn, and gains the gist its first attempt lacked", async () => {
+  dir = await withTempFernDir();
+  const path = join(dir.path, "auth.md");
+  await createBrief(path);
+  await pushRecentEntry(path, 1, "same prompt");
+  await pushRecentEntry(path, 2, "same prompt", "it worked");
+
+  expect((await readBrief(path)).Recent).toBe(
+    "- t1 · same prompt\n  ↳ reply: it worked",
+  );
+});

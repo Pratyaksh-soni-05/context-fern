@@ -45,6 +45,7 @@ function leaflet(overrides: Partial<UiLeaflet>): UiLeaflet {
     promptPreview: null,
     tokenCount: 100,
     confidence: 0.8,
+    basis: null,
     filesTouchedCount: 1,
     ...overrides,
   };

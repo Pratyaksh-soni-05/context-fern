@@ -399,7 +399,9 @@ async function route(
   if (req.method === "POST" && pathname === "/exchange-end") {
     const body = await readJsonBody(req);
     const state = await projectFromBody(body);
-    await withProjectLock(state, (s) => finalizeExchange(s));
+    const replyGist =
+      typeof body.replyGist === "string" ? body.replyGist : undefined;
+    await withProjectLock(state, (s) => finalizeExchange(s, replyGist));
     return jsonResponse({ ok: true });
   }
 

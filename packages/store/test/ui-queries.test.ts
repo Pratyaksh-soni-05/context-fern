@@ -106,7 +106,7 @@ test("a forced continue's confidence is null — not the real-looking placeholde
   expect(page.leaflets[0]?.confidence).toBeNull();
 });
 
-test("a real stage-0 router decision's confidence passes through untouched", async () => {
+test("a measured stage-0 similarity decision's confidence passes through untouched", async () => {
   const { store: s, sessionId, stemId } = await freshSession();
   const before = await s.loadRouterState(sessionId);
   const leaflet = await s.recordLeaflet({
@@ -126,7 +126,7 @@ test("a real stage-0 router decision's confidence passes through untouched", asy
     action: "continue",
     target: stemId,
     stage: 0,
-    signals: ["similarity"],
+    signals: ["other-frond-match"],
     confidence: 0.82,
     tokensBefore: 0,
     tokensAfter: 0,

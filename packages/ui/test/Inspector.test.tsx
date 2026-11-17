@@ -36,6 +36,7 @@ function leaflet(overrides: Partial<UiLeafletType> = {}): UiLeafletType {
     promptPreview: null,
     tokenCount: 5,
     confidence: null,
+    basis: null,
     filesTouchedCount: 0,
     ...overrides,
   };
@@ -116,6 +117,30 @@ test("a forced continue (confidence null) shows 'no score', never a fabricated 1
   );
   expect(screen.getByText("continue · no score")).toBeDefined();
   expect(screen.queryByText(/1\.00/)).toBeNull();
+});
+
+test("a decision with no measured score names what it rests on in the routing line, not a number", () => {
+  render(
+    <Inspector
+      projectPath="/repo"
+      fronds={[frond()]}
+      leaflets={[
+        leaflet({
+          turn: 1,
+          kind: "new",
+          confidence: null,
+          basis: "cue phrase",
+        }),
+      ]}
+      strayCount={0}
+      rootsUsed={0}
+      selection={{ kind: "leaflet", turn: 1 }}
+      onSelect={() => {}}
+      onUndo={() => {}}
+      undoBusy={false}
+    />,
+  );
+  expect(screen.getByText("new · cue phrase")).toBeDefined();
 });
 
 test("a leaflet with a real router score shows the real confidence number", () => {

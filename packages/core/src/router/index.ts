@@ -5,6 +5,7 @@ export * from "./decision";
 export * from "./math";
 export * from "./route-turn";
 export * from "./route-turn-stage2";
+export * from "./signal-display";
 export * from "./signals";
 export * from "./stage0";
 export * from "./stage2";

@@ -70,12 +70,19 @@ export interface SuggestionPrecisionConfig {
   stray: number;
 }
 
+/** What the brief files keep. Text only ever lives in the brief file, never in fern.db. */
+export interface BriefsConfig {
+  /** Keep the first line of the assistant's reply (max 120 chars, secrets redacted, never file contents) next to its prompt in a brief's Recent section. On by default. */
+  recordReplyGist: boolean;
+}
+
 export interface RouterConfig {
   thresholds: RouterThresholds;
   weights: RouterWeights;
   cues: CueConfig;
   escalation: EscalationConfig;
   suggestionPrecision: SuggestionPrecisionConfig;
+  briefs: BriefsConfig;
 }
 
 export interface FrondSignal {

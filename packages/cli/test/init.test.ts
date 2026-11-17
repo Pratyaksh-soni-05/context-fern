@@ -97,3 +97,12 @@ test("a pre-existing .claude/commands/fern.md is left untouched and never re-ask
   );
   expect(await readFile(path, "utf-8")).toBe(original);
 });
+
+test("init says plainly that briefs keep short prompt and reply snippets locally, and how to stop it", async () => {
+  const logs = await runInitCapturingLogs({ yes: "true", statusline: "no" });
+  const line = logs.find((l) => l.includes("briefs keep short prompt"));
+  expect(line).toBeDefined();
+  expect(line).toContain("reply snippets");
+  expect(line).toContain("this machine only");
+  expect(line).toContain("record_reply_gist = false");
+});

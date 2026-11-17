@@ -221,3 +221,65 @@ test("isValidFrondName rejects path traversal and shell-meaningful names", () =>
   expect(isValidFrondName("-leading-hyphen")).toBe(false);
   expect(isValidFrondName("UPPERCASE")).toBe(false);
 });
+
+// --- frond names from a prompt that opens with a cue phrase -----------
+// Dogfooding: "Switching to something else: how would I add a README
+// badge for build status?" proposed "something-else-how".
+
+test("proposeFrondName: strips the cue phrase and its filler, naming the topic (readme-badge)", () => {
+  expect(
+    proposeFrondName(
+      "Switching to something else: how would I add a README badge for build status?",
+    ),
+  ).toBe("readme-badge");
+});
+
+test("proposeFrondName: every default cue phrase is removed before a name is derived", () => {
+  expect(proposeFrondName("New topic: payments webhooks")).toBe(
+    "payments-webhooks",
+  );
+  expect(proposeFrondName("let's switch to the release notes")).toBe(
+    "release-notes",
+  );
+  expect(proposeFrondName("let’s switch to the release notes")).toBe(
+    "release-notes",
+  );
+  expect(proposeFrondName("Moving on to database migrations")).toBe(
+    "database-migrations",
+  );
+  expect(proposeFrondName("back to the cleanup")).toBe("cleanup");
+});
+
+test("proposeFrondName: a prompt that is only a cue phrase and filler has no name — the caller asks for one", () => {
+  expect(proposeFrondName("Switching to something else")).toBeNull();
+  expect(
+    proposeFrondName("switching to something else: how would I do it?"),
+  ).toBeNull();
+  expect(proposeFrondName("new topic")).toBeNull();
+});
+
+test("proposeFrondName: cue phrases come from the caller's list, so a project's own cues are stripped too", () => {
+  expect(proposeFrondName("heads up, fresh subject: invoice pdf")).toBe(
+    "heads-fresh-subject",
+  );
+  expect(
+    proposeFrondName("heads up, fresh subject: invoice pdf", 3, [
+      "heads up, fresh subject",
+    ]),
+  ).toBe("invoice-pdf");
+});
+
+test("proposeFrondName: the name stops where the purpose or detail begins ('for', 'about')", () => {
+  expect(
+    proposeFrondName("how would I add a README badge for build status"),
+  ).toBe("readme-badge");
+  expect(proposeFrondName("write something about retry backoff")).toBe("write");
+  // a leading 'for' with no topic word yet does not cut anything
+  expect(proposeFrondName("for the login page, fix the layout")).toBe(
+    "login-page-layout",
+  );
+});
+
+test("proposeFrondName: a cue phrase inside a longer word is left alone", () => {
+  expect(proposeFrondName("renew topical docs")).toBe("renew-topical-docs");
+});

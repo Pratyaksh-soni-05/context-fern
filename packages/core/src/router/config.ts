@@ -1,4 +1,5 @@
 import type {
+  BriefsConfig,
   CueConfig,
   EscalationConfig,
   RouterConfig,
@@ -15,6 +16,7 @@ export interface PartialRouterConfig {
   cues?: Partial<CueConfig>;
   escalation?: Partial<EscalationConfig>;
   suggestionPrecision?: Partial<SuggestionPrecisionConfig>;
+  briefs?: Partial<BriefsConfig>;
 }
 
 /**
@@ -59,6 +61,9 @@ export const DEFAULT_CONFIG: RouterConfig = {
     new: 0.88,
     stray: 0.603,
   },
+  briefs: {
+    recordReplyGist: true,
+  },
 };
 
 /** Core stays pure (no fs) — callers read the TOML file and pass the parsed
@@ -80,5 +85,6 @@ export function mergeConfig(partial: PartialRouterConfig = {}): RouterConfig {
       ...DEFAULT_CONFIG.suggestionPrecision,
       ...partial.suggestionPrecision,
     },
+    briefs: { ...DEFAULT_CONFIG.briefs, ...partial.briefs },
   };
 }

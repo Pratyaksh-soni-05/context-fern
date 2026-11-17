@@ -29,3 +29,11 @@ high = 0.5
 [suggestion_precision]
 new = 0.88
 stray = 0.603
+
+# What a frond's brief file keeps next to each prompt in its Recent section.
+# Text stays in the brief file only — never in fern.db. Set to false to keep
+# prompts only: no reply gist is then written. The gist is the first line of
+# the assistant's reply, at most 120 characters, secrets redacted, never
+# file contents.
+[briefs]
+record_reply_gist = true

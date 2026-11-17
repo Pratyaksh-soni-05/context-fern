@@ -539,6 +539,31 @@ test("GET /status?restored=true queues the receipt for the next /prompt even whe
   expect(again.json.receipt).not.toContain("restored");
 });
 
+test("observe mode queues no restored receipt, by either route: restore injected nothing, so the receipt would claim context that was never sent", async () => {
+  await post(
+    "/prompt",
+    projectBody({ prompt: "/fern new greetings", agentSessionId: "session-A" }),
+  );
+  await post("/mode", projectBody({ mode: "observe" }));
+
+  // Route 1: SessionStart's restore call.
+  await get(
+    `/status?projectPath=${encodeURIComponent(projectDir?.path ?? "")}&agentSessionId=session-A&restored=true`,
+  );
+  const afterStatus = await post(
+    "/prompt",
+    projectBody({ prompt: "what's next", agentSessionId: "session-A" }),
+  );
+  expect(afterStatus.json.receipt ?? "").not.toContain("restored");
+
+  // Route 2: the agent session id changing (resume/clear/compaction/fork).
+  const afterNewSession = await post(
+    "/prompt",
+    projectBody({ prompt: "and then", agentSessionId: "session-B" }),
+  );
+  expect(afterNewSession.json.receipt ?? "").not.toContain("restored");
+});
+
 test("the first /prompt under a new agentSessionId (a resume/clear/compaction/fork) gets a restored receipt prepended, belt-and-suspenders with SessionStart's own", async () => {
   await post(
     "/prompt",

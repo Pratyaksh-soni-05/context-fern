@@ -117,6 +117,9 @@ export async function runInit(flags: Record<string, string>): Promise<void> {
   // at all, which isn't a sensible silent default for a tool whose
   // entire value is manual-first suggestions. See docs/decisions.md.
   console.log(
+    `${CLI_NAME} ▸ briefs keep short prompt and reply snippets in ${CONFIG_DIR}/fronds/*.md on this machine only, never in the database · to stop keeping reply snippets set record_reply_gist = false under [briefs] in ${CONFIG_DIR}/config.toml`,
+  );
+  console.log(
     `${CLI_NAME} ▸ ready · mode suggest · run "${CLI_NAME} mode observe" for a quiet, no-suggestions mode`,
   );
 }

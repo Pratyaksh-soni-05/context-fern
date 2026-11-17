@@ -32,7 +32,7 @@ Later: Codex and OpenCode users; agent builders using SDK middleware.
 | Stray | an off-topic exchange: answered, then kept off every frond and out of future context | `Stray` |
 | Root | a memory from an earlier session that feeds a frond (read-only in v1; imported from CLAUDE.md, MEMORY.md or memory tools) | `Root` |
 | Graft | a merge back to the stem, or a combined turn that used two fronds | `Graft` |
-| Brief | markdown at `.fern/fronds/<name>.md` with Goal, Decided, Open, Files, Notes, Recent. Goal/Decided/Open/Files/Notes are user-editable; Recent (last 5 prompts, newest first) is machine-maintained — rewritten on every update, never merged with user edits | `Brief` |
+| Brief | markdown at `.fern/fronds/<name>.md` with Goal, Decided, Open, Files, Notes, Recent. Goal/Decided/Open/Files/Notes are user-editable; Recent (last 5 prompts, newest first, each optionally followed by a one-line reply gist — first line of the reply, ≤120 chars, secrets redacted, never file contents; on by default, off with `[briefs] record_reply_gist = false`; stored in the brief file only, never `fern.db`, `docs/decisions.md` 2026-11-17) is machine-maintained — rewritten on every update, never merged with user edits | `Brief` |
 | Decision | one routing action recorded in the journal with its inverse | `Decision` |
 
 ## 5. Router
@@ -68,7 +68,7 @@ Rules:
 
 ## 7. Hooks and commands (Claude Code plugin)
 - `UserPromptSubmit`: if the prompt starts with `/fern`, dispatch it against the daemon directly (or run `fern init` locally) and return `decision: "block"` with the receipt as `reason` — zero model turns, the one exception to "never block" below (it's a command, not a routing decision on a real prompt; see `docs/decisions.md`). Otherwise, POST to daemon `/prompt` and return the receipt as the top-level `systemMessage` (user-visible, omitted entirely when there's nothing to show — quiet by default) and, outside observe mode, a minimal focus note as `hookSpecificOutput.additionalContext` (model-only). Never block a real prompt. 300 ms internal timeout on this passive path; on timeout or a down daemon, pass through silently.
-- `SessionStart`: starts the daemon if it isn't already running (fire-and-forget, never waits for it); after `/clear`, compaction, resume, or fork — not a fresh `startup`, which has nothing to restore yet — injects the active frond's brief as `additionalContext`, capped ~8KB with `Notes` truncated first, omitted in observe mode.
+- `SessionStart`: starts the daemon if it isn't already running (fire-and-forget, never waits for it); after `/clear`, compaction, resume, or fork — not a fresh `startup`, which has nothing to restore yet — injects the stem's brief and then the active frond's as `additionalContext` (an empty brief is said to be empty in one line), every recorded line quoted, secret-redacted and filtered for instruction-like text, capped ~8KB in total with `Recent` trimmed first and then `Notes`, nothing injected in observe mode.
 - `PreCompact`: in isolate mode, block client compaction when the upstream payload is within budget; otherwise allow and snapshot the brief first.
 - `PostToolUse`: report files touched (paths only, relativized to the project root) via `/tools`. Never tool output or file contents.
 
@@ -79,11 +79,12 @@ Slash commands: `/fern status`, `/fern new <name>`, `/fern switch <name>`, `/fer
 
 MCP tools (max three): `frond_list`, `frond_search`, `frond_recall`.
 Receipts (exact formats, see DESIGN.md §Voice):
-- `fern ▸ new frond? docker-build · 0.86 · cue phrase, no file overlap · /fern new`
+- `fern ▸ new frond? docker-build · cue phrase · /fern new` (a number appears here only where Stage 0 measured a similarity score, e.g. `· 0.86 ·`; never for a cue phrase, a manual command or a degraded decision — `docs/decisions.md`, 2026-11-17)
 - `fern ▸ on docker-build · auth-refactor rests with its brief`
 - `fern ▸ stray · answered, kept off every frond`
 - `fern ▸ stray (marked) · answered, kept off every frond · /fern undo`
-- `fern ▸ returned to auth-refactor · 0.88 · /fern undo`
+- `fern ▸ returned to auth-refactor · /fern undo`
+- `fern ▸ already on auth-refactor` (`/fern switch` to the frond you are on: nothing is recorded)
 Statusline: `fern ▸ <frond> · <n> fronds · <s> strays · <sent>/<full> ctx` (the `.../... ctx` clause is omitted until isolate-mode token accounting is real — never a fabricated `0/0`). Claude Code plugins can't register a statusline directly (confirmed against the docs); `fern statusline --install` writes the equivalent command into the user's own Claude Code settings instead, never overwriting an existing one.
 
 ## 8. Assembly (isolate mode)
