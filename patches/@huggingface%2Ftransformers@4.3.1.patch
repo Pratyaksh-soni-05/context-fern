@@ -1,0 +1,36 @@
+diff --git a/dist/transformers.node.mjs b/dist/transformers.node.mjs
+index 7f65e73c286e064f5d9257a0a76742bcd64f4eba..076771ea9cfac629e4d16fa8f9a17b45693719ac 100644
+--- a/dist/transformers.node.mjs	
++++ b/dist/transformers.node.mjs	
+@@ -8491,10 +8491,13 @@ var uint16_to_float32 = /* @__PURE__ */ (function() {
+ })();
+ 
+ // src/backends/onnx-node.js
+-import { createRequire } from "module";
+-var requireFromHere = createRequire(import.meta.url ?? __filename);
++// Patched (context-fern, docs/decisions.md): Bun's --compile bundler
++// can't trace a require() call through createRequire()'s returned
++// function reference, so the whole onnxruntime-node package silently
++// failed to embed. A plain static import is visible to Bun's bundler.
++import onnxruntimeNodePatched from "onnxruntime-node";
+ process.env.ORT_DISABLE_TELEMETRY = "1";
+-var onnx_node_default = requireFromHere("onnxruntime-node");
++var onnx_node_default = onnxruntimeNodePatched;
+ 
+ // ../../node_modules/.pnpm/onnxruntime-web@1.31.0-dev.20260914-8d85527a0/node_modules/onnxruntime-web/dist/ort.webgpu.bundle.min.mjs
+ var ort_webgpu_bundle_min_exports = {};
+@@ -18831,7 +18834,13 @@ var CohereAsrProcessor = class extends Processor {
+ };
+ 
+ // src/utils/image.js
+-import sharp from "sharp";
++// Patched (context-fern, docs/decisions.md): sharp's native addon ships
++// as a separate per-platform npm package and can't be resolved inside
++// a compiled binary's sandboxed module graph. Context Fern only calls
++// pipeline("feature-extraction", ...) on plain text — the image
++// functions below that would call sharp() are never exercised, so a
++// stub is safe; if that ever changes, this throws loudly, not silently.
++const sharp = /** @type {any} */ ({});
+ var createCanvasFunction;
+ var ImageDataClass;
+ var loadImageFunction;

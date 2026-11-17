@@ -51,6 +51,13 @@ jobs:
       - name: typecheck
         run: bun run typecheck
 
+      # The product never downloads its model at runtime (spec §3.2), so
+      # tests that need the real embedder get it from this one explicit,
+      # checksum-verified fetch.
+      - name: fetch the embedding model
+        timeout-minutes: 5
+        run: bun run scripts/fetch-model.ts
+
       - name: test
         run: bun run test
 

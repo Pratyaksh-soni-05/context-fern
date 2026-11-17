@@ -1,0 +1,297 @@
+name: Release
+
+# Builds the four launch targets (win-x64, linux-x64, linux-arm64,
+# darwin-arm64 — docs/spec.md §14) on native runners, smoke-tests each
+# compiled binary, and writes one SHA-256SUMS over everything.
+#
+# Publishing (attestation + GitHub Release) happens in exactly one job,
+# `publish`, and only when all three hold: the event is a pushed tag,
+# the tag matches v*, and the repository is public. A manual run
+# (workflow_dispatch) is always a dry run — there is no input that turns
+# publishing on. Nothing here triggers on pull_request or branch pushes.
+#
+# Structure notes, each from a real failed run (docs/decisions.md):
+# - `inputs` cannot be referenced from the top-level `env:` block.
+# - `matrix` is not available in a job's own `if:`/`continue-on-error:`,
+#   so `targets` filtering is done by `config` emitting an already
+#   filtered matrix as JSON, and linux-arm64 is its own job.
+# - Every job has a timeout: an earlier version hung for four hours.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: "Dry run only. Comma-separated subset of win-x64,linux-x64,linux-arm64,darwin-arm64"
+        type: string
+        default: "win-x64,linux-x64,linux-arm64,darwin-arm64"
+
+# Read-only by default; only `publish` asks for more.
+permissions:
+  contents: read
+
+# A newer manual run on the same ref replaces the older manual run. The
+# event name is part of the group so that nothing — not even a manual
+# run started on the tag itself — can cancel a tag run mid-publish; a
+# re-pushed tag queues behind the run already in progress.
+concurrency:
+  group: release-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
+
+env:
+  BUN_VERSION: "1.4.4"
+
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.resolve.outputs.matrix }}
+      run_arm64: ${{ steps.resolve.outputs.run_arm64 }}
+    steps:
+      - id: resolve
+        env:
+          # Passed through the environment, never interpolated into the
+          # script text, so the input cannot inject shell.
+          TARGETS_INPUT: ${{ inputs.targets }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            TARGETS="$TARGETS_INPUT"
+          else
+            TARGETS="win-x64,linux-x64,linux-arm64,darwin-arm64"
+          fi
+
+          # runtime-dir must be exactly `${process.platform}-${process.arch}`
+          # (what the patched onnxruntime-node binding looks for next to
+          # the binary) — "win32-x64", not the target label "win-x64".
+          FULL='[
+            {"target":"win-x64","runs-on":"windows-latest","ext":".exe","runtime-dir":"win32-x64","native-dir":"win32/x64","native-files":"onnxruntime_binding.node onnxruntime.dll"},
+            {"target":"linux-x64","runs-on":"ubuntu-latest","ext":"","runtime-dir":"linux-x64","native-dir":"linux/x64","native-files":"onnxruntime_binding.node libonnxruntime.so.1"},
+            {"target":"darwin-arm64","runs-on":"macos-latest","ext":"","runtime-dir":"darwin-arm64","native-dir":"darwin/arm64","native-files":"onnxruntime_binding.node libonnxruntime.1.dylib"}
+          ]'
+          FILTERED=$(echo "$FULL" | jq -c --arg targets "$TARGETS" '($targets | split(",")) as $wanted | [.[] | select(.target as $t | $wanted | index($t) != null)]')
+          echo "matrix=$FILTERED" >> "$GITHUB_OUTPUT"
+
+          if echo ",$TARGETS," | grep -q ",linux-arm64,"; then
+            echo "run_arm64=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_arm64=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: config
+    if: needs.config.outputs.matrix != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.config.outputs.matrix) }}
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: bun install
+        run: bun install --frozen-lockfile
+
+      - name: verify dependency patches (fails, not warns, if a bump dropped one)
+        run: bun test packages/embed/test/patches-verified.test.ts
+
+      - name: compile context-fern
+        run: bun build packages/cli/src/index.ts --compile --outfile dist/context-fern${{ matrix.ext }}
+
+      - name: assemble the native sidecar
+        shell: bash
+        run: |
+          mkdir -p "dist/onnxruntime-native/${{ matrix.runtime-dir }}"
+          for f in ${{ matrix.native-files }}; do
+            cp "node_modules/onnxruntime-node/bin/napi-v6/${{ matrix.native-dir }}/$f" "dist/onnxruntime-native/${{ matrix.runtime-dir }}/"
+          done
+          du -sh "dist/onnxruntime-native/${{ matrix.runtime-dir }}"/* dist/context-fern${{ matrix.ext }}
+
+      - name: fetch the model and verify it against the pinned SHA-256
+        timeout-minutes: 5
+        run: bun run scripts/fetch-model.ts
+
+      - name: block huggingface.co — Linux/macOS
+        if: runner.os != 'Windows'
+        run: |
+          echo "127.0.0.1 huggingface.co" | sudo tee -a /etc/hosts
+          echo "127.0.0.1 cdn-lfs.huggingface.co" | sudo tee -a /etc/hosts
+
+      - name: block huggingface.co — Windows
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Add-Content -Path "$env:SystemRoot\System32\drivers\etc\hosts" -Value "`n127.0.0.1 huggingface.co`n127.0.0.1 cdn-lfs.huggingface.co"
+
+      - name: smoke test (sqlite, offline embedding, daemon self-spawn, ui)
+        timeout-minutes: 5
+        run: bun run scripts/smoke-test.ts dist/context-fern${{ matrix.ext }}
+
+      # Packaged here, not later: upload-artifact drops the executable
+      # bit, a tarball made on the build machine keeps it.
+      - name: package
+        shell: bash
+        run: tar czf "context-fern-${{ matrix.target }}.tar.gz" -C dist .
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: context-fern-${{ matrix.target }}
+          path: context-fern-${{ matrix.target }}.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+
+  # Its own job, not a matrix entry: see the header note on `matrix`.
+  # Soft-fails only on a manual dry run; a tag run needs it to succeed.
+  build-arm64:
+    needs: config
+    if: needs.config.outputs.run_arm64 == 'true'
+    continue-on-error: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: bun install
+        run: bun install --frozen-lockfile
+
+      - name: verify dependency patches (fails, not warns, if a bump dropped one)
+        run: bun test packages/embed/test/patches-verified.test.ts
+
+      - name: compile context-fern
+        run: bun build packages/cli/src/index.ts --compile --outfile dist/context-fern
+
+      - name: assemble the native sidecar
+        run: |
+          mkdir -p dist/onnxruntime-native/linux-arm64
+          cp node_modules/onnxruntime-node/bin/napi-v6/linux/arm64/onnxruntime_binding.node dist/onnxruntime-native/linux-arm64/
+          cp node_modules/onnxruntime-node/bin/napi-v6/linux/arm64/libonnxruntime.so.1 dist/onnxruntime-native/linux-arm64/
+          du -sh dist/onnxruntime-native/linux-arm64/* dist/context-fern
+
+      - name: fetch the model and verify it against the pinned SHA-256
+        timeout-minutes: 5
+        run: bun run scripts/fetch-model.ts
+
+      - name: block huggingface.co
+        run: |
+          echo "127.0.0.1 huggingface.co" | sudo tee -a /etc/hosts
+          echo "127.0.0.1 cdn-lfs.huggingface.co" | sudo tee -a /etc/hosts
+
+      - name: smoke test (sqlite, offline embedding, daemon self-spawn, ui)
+        timeout-minutes: 5
+        run: bun run scripts/smoke-test.ts dist/context-fern
+
+      - name: package
+        run: tar czf context-fern-linux-arm64.tar.gz -C dist .
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: context-fern-linux-arm64
+          path: context-fern-linux-arm64.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+
+  model:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: bun install
+        run: bun install --frozen-lockfile
+      - name: fetch the model and verify it against the pinned SHA-256
+        timeout-minutes: 5
+        run: bun run scripts/fetch-model.ts model-asset
+      - name: package
+        run: |
+          tar czf model-xenova-all-MiniLM-L6-v2-q8.tar.gz -C model-asset .
+          du -sh model-xenova-all-MiniLM-L6-v2-q8.tar.gz
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: context-fern-model
+          path: model-xenova-all-MiniLM-L6-v2-q8.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+
+  # SHA-256SUMS is computed here, by the workflow, over the artifacts the
+  # build jobs uploaded — never supplied by hand. A manual dry run may
+  # checksum a partial set; a tag run needs every build to have succeeded.
+  checksums:
+    needs: [build, build-arm64, model]
+    if: >
+      !cancelled() && needs.model.result == 'success' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (needs.build.result == 'success' && needs.build-arm64.result == 'success'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: artifacts
+          pattern: "context-fern-*"
+
+      - name: collect the tarballs and write SHA-256SUMS
+        run: |
+          mkdir -p release
+          cp artifacts/*/*.tar.gz release/
+          cd release
+          for f in context-fern-*.tar.gz; do tar tzvf "$f"; done
+          sha256sum *.tar.gz > SHA-256SUMS && cat SHA-256SUMS
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-bundle
+          path: release/
+          if-no-files-found: error
+          retention-days: 3
+
+  # The only job that can publish, and the only one with write access.
+  # All three conditions are required: a push event, a v* tag ref, and a
+  # public repository. While the repo is private a v* tag still builds,
+  # smoke-tests and checksums, and this job is skipped.
+  publish:
+    needs: checksums
+    if: >
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-bundle
+          path: release
+
+      - name: re-verify SHA-256SUMS before anything is published
+        run: cd release && sha256sum -c SHA-256SUMS
+
+      - name: attest build provenance
+        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1
+        with:
+          subject-path: "release/*.tar.gz"
+
+      - name: create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" --title "$TAG" --generate-notes \
+            release/*.tar.gz release/SHA-256SUMS

@@ -122,7 +122,7 @@ Frond colours are assigned in order from the palette in `tokens.css` (moss, lake
 - Results as JSON + a markdown table; CI runs a 20-stream smoke set.
 
 ## 14. Distribution
-Signed binaries for macOS, Linux and Windows on x64 and arm64, plus checksums.
+Checksummed, attested binaries for four targets: `win-x64`, `linux-x64`, `linux-arm64`, `darwin-arm64`. **`darwin-x64` (Intel Mac) is out of scope for launch** — a deliberate scope change (`docs/decisions.md`, 2026-11-10): `onnxruntime-node@1.30.0`, the native embedding backend PR 1's spike recommended, ships no native binary for that platform at all, so the native-ONNX approach cannot produce a working binary there with this dependency. Wherever the embedding model is missing, fails its pinned SHA-256 or will not load, the daemon still runs in a degraded Stage 0 — it suggests only on an explicit cue phrase (never on file divergence or similarity), shows no confidence number ("—"), and never fetches anything — and says so in `fern status`, `fern doctor`, the first receipt of the session and on every routing decision journalled while degraded (`degraded:no-embedding`). That mode is also the path to a future Intel Mac build, which still needs a binary this release does not produce. `win-arm64` is also out of scope for launch (no GitHub-hosted ARM Windows runner existed when this was scoped).
 
 Launch (§3.9): PyPI package `context-fern` (platform wheels carrying the binary, same approach as ruff/uv) and npm package `context-fern` (platform packages as `optionalDependencies` carrying the binary — no postinstall download shim). `context-fern init` — run directly after `pip install`, or via `uvx`/`npx` with no separate install step — also sets up the Claude Code plugin.
 

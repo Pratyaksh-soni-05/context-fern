@@ -10,24 +10,29 @@ import { CLI_NAME, pluralize } from "@context-fern/core";
 const PREFIX = `${CLI_NAME} ▸`;
 const CMD = `/${CLI_NAME}`;
 
+/** "—" when Stage 0 had no embedding model: no number is better than a made-up one. */
+function confidenceText(confidence: number | null): string {
+  return confidence === null ? "—" : confidence.toFixed(2);
+}
+
 /** `proposedName` is null when no real content word survived proposeFrondName's extraction — the receipt then asks for a name explicitly rather than showing a fabricated placeholder. */
 export function newSuggestionReceipt(
   proposedName: string | null,
-  confidence: number,
+  confidence: number | null,
   signals: string[],
 ): string {
   const namePart = proposedName ? ` ${proposedName}` : "";
   const cmd = proposedName ? `${CMD} new` : `${CMD} new <name>`;
-  return `${PREFIX} new frond?${namePart} · ${confidence.toFixed(2)} · ${signals.join(", ")} · ${cmd}`;
+  return `${PREFIX} new frond?${namePart} · ${confidenceText(confidence)} · ${signals.join(", ")} · ${cmd}`;
 }
 
 /** Mirrors newSuggestionReceipt's shape for a return/combine suggestion — spec gives no literal example for this one, so it follows the same voice. */
 export function returnSuggestionReceipt(
   frondName: string,
-  confidence: number,
+  confidence: number | null,
   signals: string[],
 ): string {
-  return `${PREFIX} return to ${frondName}? · ${confidence.toFixed(2)} · ${signals.join(", ")} · ${CMD} switch`;
+  return `${PREFIX} return to ${frondName}? · ${confidenceText(confidence)} · ${signals.join(", ")} · ${CMD} switch`;
 }
 
 export function onFrondReceipt(
@@ -45,10 +50,10 @@ export function strayReceipt(): string {
 
 /** Mirrors newSuggestionReceipt's shape for an unconfirmed stray suggestion. */
 export function straySuggestionReceipt(
-  confidence: number,
+  confidence: number | null,
   signals: string[],
 ): string {
-  return `${PREFIX} stray? · ${confidence.toFixed(2)} · ${signals.join(", ")} · ${CMD} stray`;
+  return `${PREFIX} stray? · ${confidenceText(confidence)} · ${signals.join(", ")} · ${CMD} stray`;
 }
 
 /** A past leaflet retroactively marked stray via bare `/fern stray` — undoable. */

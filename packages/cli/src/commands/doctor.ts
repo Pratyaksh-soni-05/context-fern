@@ -8,21 +8,11 @@
 // here (not through loadFernConfig, which doesn't recognize that
 // section yet since nothing routes on it in this PR).
 
-import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { CLI_BINARY_NAME, CLI_NAME, CONFIG_DIR } from "@context-fern/core";
 import { readDaemonInfo } from "@context-fern/daemon";
 import { isAlive } from "@context-fern/daemon/client";
-import { modelCacheDir } from "@context-fern/embed";
-
-async function dirHasFiles(path: string): Promise<boolean> {
-  try {
-    const entries = await readdir(path);
-    return entries.length > 0;
-  } catch {
-    return false;
-  }
-}
+import { checkModelFiles } from "@context-fern/embed";
 
 async function readStage2OllamaUrl(): Promise<string | null> {
   try {
@@ -63,9 +53,13 @@ export async function runDoctor(): Promise<void> {
     `daemon: ${daemonOk ? "ok" : `not running — run "${CLI_NAME} daemon start"`}`,
   );
 
-  const cacheOk = await dirHasFiles(modelCacheDir());
+  // The model is never downloaded at runtime. Without it the daemon
+  // still runs, routing on cue phrases and file overlap only.
+  const problem = await checkModelFiles();
   lines.push(
-    `model cache: ${cacheOk ? "ok" : "empty (will download on first use)"}`,
+    problem
+      ? `model: ${problem.kind === "missing" ? "missing" : "failed its checksum"} (${problem.path}) — suggestions are limited to cue phrases. From a source checkout run "bun run scripts/fetch-model.ts"`
+      : "model: ok",
   );
 
   // The plugin's hooks and MCP server run `context-fern` by bare name,

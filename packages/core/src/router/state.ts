@@ -16,7 +16,13 @@ function updateFrond(
 ): FrondState {
   return {
     ...frond,
-    centroid: runningMean(frond.centroid, frond.count, embedding),
+    // A zero-length embedding means "no model" (see Signals'
+    // embeddingUnavailable): the leaflet still counts, the centroid
+    // must not be overwritten with nothing.
+    centroid:
+      embedding.length === 0
+        ? frond.centroid
+        : runningMean(frond.centroid, frond.count, embedding),
     count: frond.count + 1,
     files: Array.from(new Set([...frond.files, ...files])),
     status: "active",
@@ -71,7 +77,8 @@ export function applyDecision(
       }
       const fresh: FrondState = {
         id: newFrondId,
-        centroid: Array.from(promptEmbedding),
+        centroid:
+          promptEmbedding.length === 0 ? null : Array.from(promptEmbedding),
         count: 1,
         files: Array.from(new Set(filesTouchedThisExchange)),
         status: "active",

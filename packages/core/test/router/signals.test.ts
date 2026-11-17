@@ -100,3 +100,34 @@ test("isShortQuestion reflects the configured word-count threshold", async () =>
   expect(short.isShortQuestion).toBe(true);
   expect(long.isShortQuestion).toBe(false);
 });
+
+test("a zero-length embedding marks the signals embeddingUnavailable, with every cosine a plain 0", async () => {
+  const noModel = {
+    embed: async (texts: string[]) => texts.map(() => new Float32Array(0)),
+  };
+  const state = {
+    activeFrondId: "f1",
+    stemCentroid: [1, 0],
+    stemFiles: [],
+    fronds: {
+      f1: {
+        id: "f1",
+        centroid: [1, 0],
+        count: 3,
+        files: ["src/a.ts"],
+        status: "active" as const,
+      },
+    },
+  };
+  const signals = await computeSignals(
+    "look at src/a.ts",
+    state,
+    noModel,
+    DEFAULT_CONFIG,
+  );
+
+  expect(signals.embeddingUnavailable).toBe(true);
+  expect(signals.stemCosine).toBe(0);
+  expect(signals.frondSignals[0]?.cosine).toBe(0);
+  expect(signals.frondSignals[0]?.fileOverlap).toBe(1);
+});

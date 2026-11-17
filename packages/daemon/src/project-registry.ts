@@ -30,14 +30,15 @@ export interface PendingExchange {
   /** In-memory only — never persisted to fern.db (only promptHash is). The one place this reaches disk at all is a brief .md file's Goal section, which is explicitly local/gitignored/user-editable. See docs/decisions.md. */
   promptText: string;
   tokenCount: number;
-  promptEmbedding: number[];
+  /** Null when the daemon has no usable embedding model (routing degraded). */
+  promptEmbedding: number[] | null;
   filesTouched: FileTouch[];
   startedAt: string;
 }
 
 export interface PendingSuggestion {
   action: RouterAction;
-  confidence: number;
+  confidence: number | null;
   signals: string[];
   target: string | null;
   proposedName?: string;
@@ -60,6 +61,10 @@ export interface ProjectState {
   lastAgentSessionId: string | null;
   /** Set by SessionStart's own restore call (via /status's `restored` flag), cleared by the next /prompt, which attaches the restored receipt then — a signal independent of whether Claude Code happens to mint a new agentSessionId across a resume/clear/compaction/fork, which isn't confirmed either way. See docs/decisions.md. */
   pendingRestoreReceipt: boolean;
+  /** Whether this project has already been told, on a prompt receipt, that routing is degraded — said once per daemon run, not on every prompt. */
+  degradedNoticeShown: boolean;
+  /** Mirrors the daemon's embedder health as of the last /prompt, so manual decisions can be tagged in the journal. */
+  routingDegraded: boolean;
   /** Serializes every request for this project — see withProjectLock. */
   lock: Promise<unknown>;
 }
@@ -154,6 +159,8 @@ async function openProject(projectPath: string): Promise<ProjectState> {
     mode: session.mode,
     lastAgentSessionId: null,
     pendingRestoreReceipt: false,
+    degradedNoticeShown: false,
+    routingDegraded: false,
     lock: Promise.resolve(),
   };
 }

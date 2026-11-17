@@ -47,6 +47,17 @@ const PROMPTS = [
 ];
 
 test("/prompt answers within 300ms p95 against a warm real embedder and a real store", async () => {
+  // The daemon degrades instead of failing when the model is absent, so
+  // without this the budget would be "met" by an embedder that does no
+  // work. Fetch the model once: bun run scripts/fetch-model.ts
+  const status = (await (
+    await fetch(
+      `http://127.0.0.1:${daemon.port}/status?projectPath=${encodeURIComponent(projectPath)}`,
+      { headers: { [TOKEN_HEADER]: daemon.token } },
+    )
+  ).json()) as { embedder: { state: string } };
+  expect(status.embedder).toEqual({ state: "ok" });
+
   const latencies: number[] = [];
 
   for (const prompt of PROMPTS) {

@@ -100,7 +100,7 @@ test("default headline reads 'No turns yet.' for a genuinely empty session", () 
   expect(screen.getByText("No turns yet.")).toBeDefined();
 });
 
-test("a forced continue (confidence null) shows 'forced, no score', never a fabricated 1.00", () => {
+test("a forced continue (confidence null) shows 'no score', never a fabricated 1.00", () => {
   render(
     <Inspector
       projectPath="/repo"
@@ -114,7 +114,7 @@ test("a forced continue (confidence null) shows 'forced, no score', never a fabr
       undoBusy={false}
     />,
   );
-  expect(screen.getByText("continue · forced, no score")).toBeDefined();
+  expect(screen.getByText("continue · no score")).toBeDefined();
   expect(screen.queryByText(/1\.00/)).toBeNull();
 });
 

@@ -5,9 +5,11 @@
 
 import type { Database } from "bun:sqlite";
 import { join } from "node:path";
-import type { Decision, DecisionAction } from "@context-fern/core";
 import {
   buildDecision,
+  DEGRADED_SIGNAL,
+  type Decision,
+  type DecisionAction,
   type DecisionInverse,
   type FileTouch,
   type Frond,
@@ -865,7 +867,10 @@ export async function openFernStore(fernDir: string): Promise<FernStore> {
    * alone. Rather than loosen the schema constraint, the UI-facing
    * projection derives the honest value here: `null` ("no router score"
    * — the List/Inspector show "—"/"forced, no score") for anything
-   * that isn't a real stage 0/2 router decision. See docs/decisions.md.
+   * that isn't a real stage 0/2 router decision. A decision made
+   * with no embedding model (tagged `degraded:no-embedding`) is the same
+   * case: its stored number is the complement of a structural 0, not a
+   * measurement. See docs/decisions.md.
    */
   function hasRealRouterScore(
     stage: string | null,
@@ -876,6 +881,7 @@ export async function openFernStore(fernDir: string): Promise<FernStore> {
     try {
       const signals = JSON.parse(signalsJson) as string[];
       if (signals.includes("forced-continue")) return false;
+      if (signals.includes(DEGRADED_SIGNAL)) return false;
     } catch {
       // malformed signals JSON — err on the side of trusting the stored
       // confidence rather than hiding a real one.

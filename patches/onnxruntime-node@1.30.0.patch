@@ -1,0 +1,29 @@
+diff --git a/dist/binding.js b/dist/binding.js
+index caa9c76d4678aea51b2f6ce5beabe20c3f481d8f..f380f86323ed49beb294cf841d21b0b3efaea163 100644
+--- a/dist/binding.js	
++++ b/dist/binding.js	
+@@ -5,10 +5,21 @@ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.initOrt = exports.binding = void 0;
+ const worker_threads_1 = require("worker_threads");
+ const onnxruntime_common_1 = require("onnxruntime-common");
++const path_1 = require("path");
++const fs_1 = require("fs");
++// Patched (context-fern, docs/decisions.md): the native .node binding
++// can't be embedded by Bun's --compile bundler, so it ships as a real
++// sidecar file next to the compiled exe. Check that path first (via
++// process.execPath, not import.meta.dir/__dirname, which don't point
++// at a real file inside a compiled binary); fall back to the normal
++// relative require for `bun run`/node dev usage, where no sidecar
++// exists and the package's own bundled binary is what's wanted.
++const sidecarPath = (0, path_1.join)((0, path_1.dirname)(process.execPath), "onnxruntime-native", `${process.platform}-${process.arch}`, "onnxruntime_binding.node");
+ // export native binding
+-exports.binding = 
+-// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+-require(`../bin/napi-v6/${process.platform}/${process.arch}/onnxruntime_binding.node`);
++exports.binding = (0, fs_1.existsSync)(sidecarPath)
++    ? require(sidecarPath)
++    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
++    : require(`../bin/napi-v6/${process.platform}/${process.arch}/onnxruntime_binding.node`);
+ let ortInitialized = false;
+ const initOrt = () => {
+     if (!ortInitialized) {

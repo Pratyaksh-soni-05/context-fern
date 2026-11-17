@@ -1,16 +1,7 @@
 import type { Embedder } from "@context-fern/core";
 import { env, pipeline } from "@huggingface/transformers";
 import { modelCacheDir } from "./cache-dir";
-
-/**
- * Xenova/all-MiniLM-L6-v2: the standard ONNX conversion of
- * sentence-transformers/all-MiniLM-L6-v2 used throughout the
- * transformers.js ecosystem. 384-dim, strong semantic-similarity
- * performance for its size, Apache-2.0-compatible. Quantized (q8, ~23MB)
- * for a small download and fast CPU inference — this is Stage 0's local,
- * always-on embedder, so it has to run comfortably without a GPU.
- */
-const DEFAULT_MODEL_ID = "Xenova/all-MiniLM-L6-v2";
+import { DEFAULT_MODEL_ID } from "./model-integrity";
 
 type FeatureExtractionPipeline = (
   texts: string[],
@@ -20,8 +11,17 @@ type FeatureExtractionPipeline = (
 export class TransformersEmbedder implements Embedder {
   private extractorPromise: Promise<FeatureExtractionPipeline> | null = null;
 
-  constructor(private readonly modelId: string = DEFAULT_MODEL_ID) {
-    env.cacheDir = modelCacheDir();
+  constructor(
+    private readonly modelId: string = DEFAULT_MODEL_ID,
+    cacheDir: string = modelCacheDir(),
+  ) {
+    env.cacheDir = cacheDir;
+    // Spec §3.2: observe/suggest make no network call, ever. A cache
+    // miss must fail fast, never fall through to a Hugging Face fetch —
+    // that fetch hung a CI job for four hours against a blocked host
+    // (docs/decisions.md, 2026-11-10). The daemon checks the pinned
+    // files first and degrades instead of constructing this at all.
+    env.allowRemoteModels = false;
   }
 
   private getExtractor(): Promise<FeatureExtractionPipeline> {

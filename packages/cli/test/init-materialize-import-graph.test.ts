@@ -9,7 +9,7 @@
 // dependency chain behind it specifically: the compiled binary crashed
 // on a plain `fern init` (which never embeds anything) because
 // touchRecentProject used to come from @context-fern/daemon's main
-// barrel, which also re-exports startDaemon/createWarmEmbedder and so
+// barrel, which also re-exports startDaemon/loadEmbedder and so
 // eagerly loads @huggingface/transformers + onnxruntime-node. See
 // docs/decisions.md's PR 1 addendum entry on this bug.
 

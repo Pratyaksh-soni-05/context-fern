@@ -165,3 +165,44 @@ test("new without a supplied frond id throws rather than silently inventing one"
     applyDecision(state, decision({ action: "new" }), [1, 0], []),
   ).toThrow();
 });
+
+test("a zero-length embedding (no model) counts the leaflet but never overwrites a real centroid", () => {
+  let state = emptyState();
+  state = applyDecision(
+    state,
+    decision({ action: "new" }),
+    [1, 0],
+    [],
+    "frond-1",
+  );
+  state = applyDecision(
+    state,
+    decision({ action: "continue", target: "frond-1" }),
+    new Float32Array(0),
+    ["b.ts"],
+  );
+
+  expect(frondOf(state, "frond-1").centroid).toEqual([1, 0]);
+  expect(frondOf(state, "frond-1").count).toBe(2);
+  expect(frondOf(state, "frond-1").files).toEqual(["b.ts"]);
+});
+
+test("a frond created with a zero-length embedding has no centroid, and adopts the first real one later", () => {
+  let state = emptyState();
+  state = applyDecision(
+    state,
+    decision({ action: "new" }),
+    new Float32Array(0),
+    [],
+    "frond-1",
+  );
+  expect(frondOf(state, "frond-1").centroid).toBeNull();
+
+  state = applyDecision(
+    state,
+    decision({ action: "continue", target: "frond-1" }),
+    [0, 1],
+    [],
+  );
+  expect(frondOf(state, "frond-1").centroid).toEqual([0, 1]);
+});

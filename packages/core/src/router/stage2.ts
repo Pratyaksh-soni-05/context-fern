@@ -11,7 +11,7 @@ import type {
   RouterAction,
   Stage2CallLog,
 } from "../types";
-import { bestOther } from "./decide";
+import { bestOther, DEGRADED_SIGNAL } from "./decide";
 import type {
   RouterConfig,
   RouterDecision,
@@ -162,6 +162,7 @@ export async function adjudicate(
       signals: [
         `stage2-same_goal:${parsed.same_goal}`,
         `stage2-unrelated:${parsed.unrelated}`,
+        ...(signals.embeddingUnavailable ? [DEGRADED_SIGNAL] : []),
       ],
       stage: 2,
     };

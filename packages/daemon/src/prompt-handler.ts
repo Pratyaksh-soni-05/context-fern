@@ -12,6 +12,7 @@ import {
   CLI_NAME,
   CONFIG_DIR,
   computeSignals,
+  DEGRADED_SIGNAL,
   decide,
   type Embedder,
   type FileTouch,
@@ -27,6 +28,7 @@ import {
   readBrief,
   writeBriefSections,
 } from "@context-fern/store";
+import { degradedReceipt, type EmbedderHealth } from "./embedder";
 import {
   type PendingExchange,
   type ProjectState,
@@ -55,7 +57,8 @@ import {
 
 export interface Suggestion {
   action: RouterAction;
-  confidence: number;
+  /** Null when Stage 0 had no embedding model: there is no honest number to show. */
+  confidence: number | null;
   signals: string[];
   target: string | null;
   proposedName?: string;
@@ -131,6 +134,11 @@ async function fillBriefDeterministically(
   await pushRecentEntry(briefPath, turn, goalCandidate);
 }
 
+/** Manual decisions made while the daemon has no model carry the same journal tag as Stage 0 decisions. */
+function manualSignals(state: ProjectState): string[] {
+  return state.routingDegraded ? ["manual", DEGRADED_SIGNAL] : ["manual"];
+}
+
 /**
  * Commits the in-flight exchange as a forced "continue": a real leaflet
  * (with whatever filesTouched arrived via /tools) and a "continue"
@@ -163,7 +171,11 @@ export async function finalizeExchange(state: ProjectState): Promise<void> {
     action: "continue",
     target: targetFrondId,
     stage: 0,
-    signals: ["forced-continue"],
+    // Tagged so the journal shows every turn routed without a model.
+    signals:
+      exchange.promptEmbedding === null
+        ? ["forced-continue", DEGRADED_SIGNAL]
+        : ["forced-continue"],
     confidence: 1,
     tokensBefore: 0,
     tokensAfter: 0,
@@ -302,7 +314,7 @@ async function applyManualNew(
     action: "new",
     target: null,
     stage: "manual",
-    signals: ["manual"],
+    signals: manualSignals(state),
     confidence: 1,
     tokensBefore: 0,
     tokensAfter: 0,
@@ -381,7 +393,7 @@ async function applyManualSwitch(
     action: "return",
     target: targetId,
     stage: "manual",
-    signals: ["manual"],
+    signals: manualSignals(state),
     confidence: 1,
     tokensBefore: 0,
     tokensAfter: 0,
@@ -426,7 +438,7 @@ async function applyManualStray(state: ProjectState): Promise<PromptResult> {
       action: "stray",
       target: null,
       stage: "manual",
-      signals: ["manual"],
+      signals: manualSignals(state),
       confidence: 1,
       tokensBefore: 0,
       tokensAfter: 0,
@@ -475,7 +487,7 @@ async function applyImmediateStray(
     action: "stray",
     target: null,
     stage: "manual",
-    signals: ["manual"],
+    signals: manualSignals(state),
     confidence: 1,
     tokensBefore: 0,
     tokensAfter: 0,
@@ -526,15 +538,27 @@ async function handlePlainPrompt(
     promptHash: hashPrompt(promptText),
     promptText,
     tokenCount: approxTokenCount(promptText),
-    promptEmbedding: Array.from(signals.promptEmbedding),
+    promptEmbedding: signals.embeddingUnavailable
+      ? null
+      : Array.from(signals.promptEmbedding),
     filesTouched: [],
     startedAt: nowIso(),
   } satisfies PendingExchange;
 
+  // With no model the only evidence is an explicit cue phrase the user
+  // typed, so that — not a score — is what opens the suggestion gate,
+  // and no number is shown. (decide() already returns plain `continue`
+  // for everything else in this mode.)
+  const degraded = signals.embeddingUnavailable === true;
+  const cueDriven = rawDecision.signals.some((s) => s.startsWith("cue:"));
+  const shownConfidence = degraded ? null : rawDecision.confidence;
+  const clears = (min: number) =>
+    degraded ? cueDriven : rawDecision.confidence >= min;
+
   let suggestion: Suggestion | undefined;
   if (
     rawDecision.action === "new" &&
-    rawDecision.confidence >= state.config.suggestionPrecision.new
+    clears(state.config.suggestionPrecision.new)
   ) {
     // Name proposal never runs on a short meta-question, even when an
     // explicit cue phrase fires "new" on one — a question's own wording
@@ -545,18 +569,18 @@ async function handlePlainPrompt(
       : proposeFrondName(promptText);
     suggestion = {
       action: "new",
-      confidence: rawDecision.confidence,
+      confidence: shownConfidence,
       signals: rawDecision.signals,
       target: null,
       ...(proposedName ? { proposedName } : {}),
     };
   } else if (
     rawDecision.action === "stray" &&
-    rawDecision.confidence >= state.config.suggestionPrecision.stray
+    clears(state.config.suggestionPrecision.stray)
   ) {
     suggestion = {
       action: "stray",
-      confidence: rawDecision.confidence,
+      confidence: shownConfidence,
       signals: rawDecision.signals,
       target: null,
     };
@@ -567,7 +591,7 @@ async function handlePlainPrompt(
     // always shown — no measured precision bar for these yet (spec §5)
     suggestion = {
       action: rawDecision.action,
-      confidence: rawDecision.confidence,
+      confidence: shownConfidence,
       signals: rawDecision.signals,
       target: rawDecision.target,
     };
@@ -636,12 +660,14 @@ export async function handlePrompt(
   embedder: Embedder,
   promptText: string,
   agentSessionId?: string,
+  health: EmbedderHealth = { state: "ok" },
 ): Promise<PromptResult> {
   // Captured before updateAgentSessionId overwrites it — null only on
   // this project's very first /prompt call ever (nothing to "restore"
   // then); any other change is a real resume/clear/compaction/fork
   // boundary, even though the underlying fern session itself never
   // resets (see project-registry.ts's module doc).
+  state.routingDegraded = health.state === "degraded";
   const previousAgentSessionId = state.lastAgentSessionId;
   updateAgentSessionId(state, agentSessionId);
   // ORed with pendingRestoreReceipt (set by SessionStart's own restore
@@ -705,6 +731,18 @@ export async function handlePrompt(
     result = {
       ...result,
       receipt: result.receipt ? `${restored}\n${result.receipt}` : restored,
+    };
+  }
+
+  if (health.state === "degraded" && !state.degradedNoticeShown) {
+    state.degradedNoticeShown = true;
+    const notice = degradedReceipt(health.reason);
+    result = {
+      ...result,
+      receipt: result.receipt
+        ? `${notice}
+${result.receipt}`
+        : notice,
     };
   }
 

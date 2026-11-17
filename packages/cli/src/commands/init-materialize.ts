@@ -17,7 +17,7 @@
 //
 // touchRecentProject comes from the "./project-registry-file" subpath,
 // not the package's main barrel: @context-fern/daemon's index.ts also
-// re-exports startDaemon/createWarmEmbedder, which eagerly pulls in
+// re-exports startDaemon/loadEmbedder, which eagerly pulls in
 // @context-fern/embed (@huggingface/transformers, onnxruntime-node) —
 // a real compiled-binary crash on this command, which never embeds
 // anything, confirmed in docs/decisions.md's PR 1 addendum. bun:sqlite

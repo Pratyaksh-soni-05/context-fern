@@ -15,7 +15,7 @@ import {
   deleteDaemonInfo,
   writeDaemonInfo,
 } from "./daemon-info";
-import { createWarmEmbedder } from "./embedder";
+import { type EmbedderHealth, loadEmbedder } from "./embedder";
 import {
   handleFrondBrief,
   handleFronds,
@@ -64,6 +64,8 @@ export { TOKEN_HEADER };
 export interface StartDaemonOptions {
   /** Overrides the warm embedder — tests inject a FakeEmbedder. */
   embedder?: Embedder;
+  /** Where the real embedder looks for its model — tests point this at a temp directory. Ignored when `embedder` is given. */
+  modelCacheDir?: string;
   firstPort?: number;
 }
 
@@ -158,7 +160,10 @@ async function readJsonBody(req: Request): Promise<Record<string, unknown>> {
 export async function startDaemon(
   options: StartDaemonOptions = {},
 ): Promise<DaemonHandle> {
-  const embedder = options.embedder ?? (await createWarmEmbedder());
+  const { embedder, health }: { embedder: Embedder; health: EmbedderHealth } =
+    options.embedder
+      ? { embedder: options.embedder, health: { state: "ok" } }
+      : await loadEmbedder(options.modelCacheDir);
   const token = randomToken();
   const uiSessions = new UiSessionStore();
 
@@ -171,7 +176,8 @@ export async function startDaemon(
       server = Bun.serve({
         hostname: "127.0.0.1",
         port,
-        fetch: (req) => handleRequest(req, embedder, port, token, uiSessions),
+        fetch: (req) =>
+          handleRequest(req, embedder, health, port, token, uiSessions),
       });
     } catch (err) {
       attempts++;
@@ -206,6 +212,7 @@ export async function startDaemon(
 async function handleRequest(
   req: Request,
   embedder: Embedder,
+  health: EmbedderHealth,
   port: number,
   token: string,
   uiSessions: UiSessionStore,
@@ -324,7 +331,7 @@ async function handleRequest(
   }
 
   try {
-    return await route(req, url, embedder);
+    return await route(req, url, embedder, health);
   } catch (err) {
     if (err instanceof DaemonError) {
       return jsonResponse({ ok: false, error: err.message }, 400);
@@ -356,6 +363,7 @@ async function route(
   req: Request,
   url: URL,
   embedder: Embedder,
+  health: EmbedderHealth,
 ): Promise<Response> {
   const { pathname } = url;
 
@@ -371,7 +379,7 @@ async function route(
     const agentSessionId =
       typeof body.agentSessionId === "string" ? body.agentSessionId : undefined;
     const result = await withProjectLock(state, (s) =>
-      handlePrompt(s, embedder, prompt, agentSessionId),
+      handlePrompt(s, embedder, prompt, agentSessionId, health),
     );
     return jsonResponse({ ok: true, ...result });
   }
@@ -431,7 +439,7 @@ async function route(
     updateAgentSessionId(state, url.searchParams.get("agentSessionId"));
     const markRestored = url.searchParams.get("restored") === "true";
     const result = await withProjectLock(state, (s) =>
-      handleStatus(s, markRestored),
+      handleStatus(s, markRestored, health),
     );
     return jsonResponse({ ok: true, ...result });
   }

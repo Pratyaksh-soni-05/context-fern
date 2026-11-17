@@ -125,15 +125,34 @@ async function main(): Promise<number> {
 }
 
 if (import.meta.main) {
-  // `main().then((code) => process.exit(code))` lost already-written
-  // stdout here on Windows for any command that does real I/O before
-  // its final console.log/stdout write (confirmed with `fern doctor` —
-  // exit code 0, zero output, reproduced outside this file too) — a
-  // latent bug promoted to a real one once `context-fern hook <event>`
-  // made a subcommand's stdout the actual payload Claude Code reads,
-  // not just terminal output a human skims. A plain top-level `await`
-  // (no separate .then() callback microtask) does not lose it. See
-  // docs/decisions.md's Phase-4 PR 2 entry.
-  const code = await main();
-  process.exit(code);
+  if (process.argv[2] === "--internal-daemon") {
+    // Checked before parseArgs/main() entirely, and never followed by
+    // process.exit() below — a compiled binary has no real
+    // "../serve-entrypoint.ts" file to `bun run` (import.meta.dir
+    // doesn't point at a real path inside --compile), so
+    // spawnDaemonDetached() (packages/daemon/src/client.ts) re-invokes
+    // this exact executable with this flag instead. startDaemon()'s
+    // own open listening socket is what keeps this process alive from
+    // here — exactly the same tier serve-entrypoint.ts's own
+    // top-level `if (import.meta.main)` code already occupies for the
+    // dev/bun-run path. The first attempt wired this inside main()
+    // instead, and the daemon started, printed its listening line,
+    // then immediately exited, because main()'s caller always exits
+    // once main() resolves. See docs/decisions.md's PR 1 spike finding.
+    const { startDaemon } = await import("@context-fern/daemon");
+    const handle = await startDaemon();
+    console.log(`${CLI_NAME} daemon listening on 127.0.0.1:${handle.port}`);
+  } else {
+    // `main().then((code) => process.exit(code))` lost already-written
+    // stdout here on Windows for any command that does real I/O before
+    // its final console.log/stdout write (confirmed with `fern doctor` —
+    // exit code 0, zero output, reproduced outside this file too) — a
+    // latent bug promoted to a real one once `context-fern hook <event>`
+    // made a subcommand's stdout the actual payload Claude Code reads,
+    // not just terminal output a human skims. A plain top-level `await`
+    // (no separate .then() callback microtask) does not lose it. See
+    // docs/decisions.md's Phase-4 PR 2 entry.
+    const code = await main();
+    process.exit(code);
+  }
 }

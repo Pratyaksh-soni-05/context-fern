@@ -9,7 +9,7 @@ export interface FrondState {
   id: string;
   /** Running mean of prompt embeddings seen on this frond so far. */
   centroid: number[] | null;
-  /** How many embeddings have been folded into centroid (for the running mean). */
+  /** Leaflets routed to this frond; the running-mean weight. A leaflet routed with no embedding still counts, so the first real embedding after it weighs slightly less. */
   count: number;
   files: string[];
   status: "active" | "resting";
@@ -94,6 +94,8 @@ export interface Signals {
   isShortQuestion: boolean;
   /** A short question about the conversation itself ("what were we working on?"), not about any real topic — see docs/decisions.md. */
   isConversationMeta: boolean;
+  /** True when the embedder returned a zero-length vector (no usable model): every cosine here is a structural 0, not a measurement. decide() then routes on cue phrases and file overlap only and tags the decision. See docs/decisions.md. */
+  embeddingUnavailable?: boolean;
 }
 
 /**

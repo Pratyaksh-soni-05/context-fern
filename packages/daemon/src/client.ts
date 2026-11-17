@@ -127,9 +127,34 @@ export function spawnDetached(cmd: string[]): void {
   }).unref();
 }
 
+/**
+ * Pure decision, factored out so it's directly unit-testable without
+ * mocking `Bun.spawn` or touching a real process: given whether the dev
+ * `serve-entrypoint.ts` exists on disk, which command spawns the
+ * daemon. Inside a `bun build --compile` binary, `import.meta.dir`
+ * doesn't point at a real file (there is no "../serve-entrypoint.ts" to
+ * run), and `bun`/the source tree may not even be installed on the end
+ * user's machine — `bun run <path>` cannot work there.
+ * `[process.execPath, "--internal-daemon"]` instead re-invokes this
+ * exact same executable (the compiled binary is its own daemon
+ * entrypoint via index.ts's own internal-daemon branch, handled outside
+ * main()'s process.exit() wrapper so the server's own open socket keeps
+ * the process alive) — this is also exactly correct for a `bun run` dev
+ * checkout as long as `--internal-daemon` resolves back to this same
+ * source tree, but the cheap, reliable signal to tell the two cases
+ * apart is the entrypoint file's own existence, not guessing from
+ * process.execPath's name. See docs/decisions.md's PR 1 spike finding
+ * on this exact bug.
+ */
+export function daemonSpawnCommand(entrypointExists: boolean): string[] {
+  return entrypointExists
+    ? ["bun", "run", ENTRYPOINT]
+    : [process.execPath, "--internal-daemon"];
+}
+
 /** Fire-and-forget: spawns the daemon detached and returns immediately. Never polls, never waits — the only daemon-start call a hook may make. */
 export function spawnDaemonDetached(): void {
-  spawnDetached(["bun", "run", ENTRYPOINT]);
+  spawnDetached(daemonSpawnCommand(existsSync(ENTRYPOINT)));
 }
 
 function sleep(ms: number): Promise<void> {

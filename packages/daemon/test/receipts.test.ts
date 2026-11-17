@@ -10,6 +10,7 @@ import {
   statusReceipt,
   strayMarkedReceipt,
   strayReceipt,
+  straySuggestionReceipt,
   undoneReceipt,
 } from "../src/receipts";
 
@@ -94,6 +95,18 @@ test("returnSuggestionReceipt follows the same voice as the new-suggestion recei
 test("undoneReceipt and mergedReceipt start with the fern ▸ voice marker", () => {
   expect(undoneReceipt("new")).toStartWith("fern ▸ ");
   expect(mergedReceipt("docker-build")).toStartWith("fern ▸ ");
+});
+
+test("a suggestion made with no embedding model shows a dash, never a number", () => {
+  expect(newSuggestionReceipt("auth-work", null, ["cue:new"])).toBe(
+    "fern ▸ new frond? auth-work · — · cue:new · /fern new",
+  );
+  expect(straySuggestionReceipt(null, ["cue:stray"])).toBe(
+    "fern ▸ stray? · — · cue:stray · /fern stray",
+  );
+  expect(returnSuggestionReceipt("auth-work", null, ["cue:return"])).toBe(
+    "fern ▸ return to auth-work? · — · cue:return · /fern switch",
+  );
 });
 
 test("statusReceipt names the frond-opening leaflets inside the leaflet count, and stays unchanged when there are none", () => {

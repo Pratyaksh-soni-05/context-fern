@@ -7,7 +7,12 @@ export {
   readDaemonInfo,
   writeDaemonInfo,
 } from "./daemon-info";
-export { createWarmEmbedder } from "./embedder";
+export {
+  degradedReceipt,
+  type EmbedderHealth,
+  type LoadedEmbedder,
+  loadEmbedder,
+} from "./embedder";
 export {
   type FakeLlmCall,
   FakeLlmClient,

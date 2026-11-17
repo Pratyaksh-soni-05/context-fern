@@ -10,6 +10,7 @@ import {
   readBrief,
 } from "@context-fern/store";
 import { truncateBriefForContext } from "./brief-context";
+import { degradedReceipt, type EmbedderHealth } from "./embedder";
 import type { ProjectState } from "./project-registry";
 import { DaemonError } from "./prompt-util";
 import { statuslineReceipt, statusReceipt } from "./receipts";
@@ -96,11 +97,14 @@ export interface StatusResponse {
   activeBriefPath: string | null;
   /** The active frond's accumulated touched-file count — not mode-gated, same reasoning as activeBriefPath. */
   activeFileCount: number;
+  /** Whether Stage 0 has a usable embedding model. `degraded` means cue phrases and file overlap only. */
+  embedder: EmbedderHealth;
 }
 
 export async function handleStatus(
   state: ProjectState,
   markRestored = false,
+  health: EmbedderHealth = { state: "ok" },
 ): Promise<StatusResponse> {
   // SessionStart's own restore call opts into this — a signal
   // independent of whether Claude Code mints a new agentSessionId
@@ -160,7 +164,12 @@ export async function handleStatus(
 
   return {
     receipt,
-    statusReceipt: statusReceiptText,
+    statusReceipt:
+      health.state === "degraded"
+        ? `${statusReceiptText}
+${degradedReceipt(health.reason)}`
+        : statusReceiptText,
+    embedder: health,
     activeFrondName,
     frondCount: topicFronds.length,
     strayCount,

@@ -59,5 +59,6 @@ export async function computeSignals(
       prompt,
       config.thresholds.strayMaxPromptWords,
     ),
+    ...(promptEmbedding.length === 0 ? { embeddingUnavailable: true } : {}),
   };
 }

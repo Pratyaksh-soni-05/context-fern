@@ -143,6 +143,43 @@ test("a real stage-0 router decision's confidence passes through untouched", asy
   expect(page.leaflets[0]?.confidence).toBe(0.82);
 });
 
+test("a decision made with no embedding model has no score, whatever number it stored", async () => {
+  const { store: s, sessionId, stemId } = await freshSession();
+  const before = await s.loadRouterState(sessionId);
+  const leaflet = await s.recordLeaflet({
+    sessionId,
+    index: 0,
+    frondId: stemId,
+    strayFrom: null,
+    promptHash: "sha256:degraded",
+    tokenCount: 5,
+    filesTouched: [],
+  });
+  const decision = buildDecision({
+    id: "decision-degraded",
+    createdAt: "2026-10-26T00:00:00Z",
+    sessionId,
+    leafletId: leaflet.id,
+    action: "continue",
+    target: stemId,
+    stage: 0,
+    signals: ["cue:new", "degraded:no-embedding"],
+    confidence: 0.95,
+    tokensBefore: 0,
+    tokensAfter: 0,
+    cacheReadTokens: null,
+    cacheWriteTokens: null,
+    inverse: buildDecisionInverse(before, "continue"),
+  });
+  await s.recordDecision(decision, null);
+
+  const page = await s.listLeafletsWithDecisions(sessionId, {
+    offset: 0,
+    limit: 10,
+  });
+  expect(page.leaflets[0]?.confidence).toBeNull();
+});
+
 test("a manual decision's confidence (e.g. a forced 'new') is also null, not its stored placeholder 1", async () => {
   const { store: s, sessionId, stemId } = await freshSession();
   const before = await s.loadRouterState(sessionId);

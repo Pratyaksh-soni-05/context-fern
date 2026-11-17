@@ -378,3 +378,130 @@ test("decide never produces combine — out of Stage 0's scope in this PR", () =
     }
   }
 });
+
+// Degraded Stage 0 — no usable embedding model (docs/decisions.md,
+// 2026-11-13). Every cosine is a structural 0, so only cue phrases and
+// file overlap may drive a decision, and the journal must say so.
+
+function degradedState(): RouterState {
+  return {
+    activeFrondId: "frond-1",
+    stemCentroid: null,
+    stemFiles: [],
+    fronds: {
+      "frond-1": { ...frond("frond-1", "active"), files: ["src/auth.ts"] },
+      "frond-2": { ...frond("frond-2"), files: ["src/billing.ts"] },
+    },
+  };
+}
+
+function degradedSignals(overrides: Partial<Signals> = {}): Signals {
+  return baseSignals({
+    promptEmbedding: new Float32Array(0),
+    embeddingUnavailable: true,
+    frondSignals: [
+      { frondId: "frond-1", cosine: 0, fileOverlap: 0, combined: 0 },
+      { frondId: "frond-2", cosine: 0, fileOverlap: 0, combined: 0 },
+    ],
+    ...overrides,
+  });
+}
+
+test("degraded: a short question with zero similarity everywhere is NOT a stray — zero cosine is not evidence without a model", () => {
+  const withModel = decide(
+    baseSignals({
+      isShortQuestion: true,
+      frondSignals: degradedSignals().frondSignals,
+    }),
+    degradedState(),
+    DEFAULT_CONFIG,
+  );
+  expect(withModel.action).toBe("stray"); // the heuristic this guards against
+
+  const degraded = decide(
+    degradedSignals({ isShortQuestion: true }),
+    degradedState(),
+    DEFAULT_CONFIG,
+  );
+  expect(degraded.action).toBe("continue");
+  expect(degraded.signals).toContain("degraded:no-embedding");
+});
+
+test("degraded: cue phrases still route, and the decision is tagged for the journal", () => {
+  const stray = decide(
+    degradedSignals({ hasCue: { new: false, return: false, stray: true } }),
+    degradedState(),
+    DEFAULT_CONFIG,
+  );
+  expect(stray.action).toBe("stray");
+  expect(stray.signals).toEqual(["cue:stray", "degraded:no-embedding"]);
+
+  const back = decide(
+    degradedSignals({ hasCue: { new: false, return: true, stray: false } }),
+    degradedState(),
+    DEFAULT_CONFIG,
+  );
+  expect(back.action).toBe("return");
+  expect(back.target).toBe("frond-2");
+  expect(back.signals).toContain("degraded:no-embedding");
+});
+
+test("degraded: file divergence alone proposes nothing — a prompt naming an unrelated file just continues", () => {
+  const withModel = decide(
+    baseSignals({
+      mentionedFiles: ["src/payments.ts"],
+      frondSignals: degradedSignals().frondSignals,
+    }),
+    degradedState(),
+    DEFAULT_CONFIG,
+  );
+  expect(withModel.action).toBe("new"); // what a model-backed router does
+
+  const degraded = decide(
+    degradedSignals({ mentionedFiles: ["src/payments.ts"] }),
+    degradedState(),
+    DEFAULT_CONFIG,
+  );
+  expect(degraded.action).toBe("continue");
+  expect(degraded.target).toBe("frond-1");
+  expect(degraded.signals).toEqual(["no-cue", "degraded:no-embedding"]);
+});
+
+test("degraded: even a full file match on another frond does not return without a cue phrase", () => {
+  const decision = decide(
+    degradedSignals({
+      mentionedFiles: ["src/billing.ts"],
+      frondSignals: [
+        { frondId: "frond-1", cosine: 0, fileOverlap: 0, combined: 0 },
+        {
+          frondId: "frond-2",
+          cosine: 0,
+          fileOverlap: 1,
+          combined: DEFAULT_CONFIG.weights.fileOverlap,
+        },
+      ],
+    }),
+    degradedState(),
+    DEFAULT_CONFIG,
+  );
+  expect(decision.action).toBe("continue");
+  expect(decision.target).toBe("frond-1");
+});
+
+test("degraded: a cue phrase still wins over file evidence", () => {
+  const decision = decide(
+    degradedSignals({
+      mentionedFiles: ["src/billing.ts"],
+      hasCue: { new: true, return: false, stray: false },
+    }),
+    degradedState(),
+    DEFAULT_CONFIG,
+  );
+  expect(decision.action).toBe("new");
+  expect(decision.signals).toEqual(["cue:new", "degraded:no-embedding"]);
+});
+
+test("a normal decision is never tagged degraded", () => {
+  const decision = decide(baseSignals(), degradedState(), DEFAULT_CONFIG);
+  expect(decision.signals).not.toContain("degraded:no-embedding");
+});

@@ -25,5 +25,9 @@
   "trustedDependencies": [
     "onnxruntime-node",
     "protobufjs"
-  ]
+  ],
+  "patchedDependencies": {
+    "@huggingface/transformers@4.3.1": "patches/@huggingface%2Ftransformers@4.3.1.patch",
+    "onnxruntime-node@1.30.0": "patches/onnxruntime-node@1.30.0.patch"
+  }
 }

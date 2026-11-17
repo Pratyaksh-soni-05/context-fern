@@ -61,7 +61,21 @@ export function bestOther(
   return best;
 }
 
+/** Journal tag on every decision made without a usable embedding. */
+export const DEGRADED_SIGNAL = "degraded:no-embedding";
+
 export function decide(
+  signals: Signals,
+  state: RouterState,
+  config: RouterConfig,
+): RouterDecision {
+  const decision = decideFromSignals(signals, state, config);
+  return signals.embeddingUnavailable
+    ? { ...decision, signals: [...decision.signals, DEGRADED_SIGNAL] }
+    : decision;
+}
+
+function decideFromSignals(
   signals: Signals,
   state: RouterState,
   config: RouterConfig,
@@ -131,7 +145,11 @@ export function decide(
   // fires against a still-forming active frond (see
   // FORMING_LEAFLET_THRESHOLD above) — "low similarity" against a
   // frond with almost no centroid data isn't real evidence.
+  // Without an embedding every cosine is a structural 0, so "low
+  // similarity everywhere" is always true and proves nothing — this
+  // heuristic would otherwise fire on every short question.
   if (
+    !signals.embeddingUnavailable &&
     !activeFrondIsForming &&
     hasEstablishedContext &&
     lowSimilarityEverywhere &&
@@ -164,6 +182,22 @@ export function decide(
       target: null,
       confidence: cappedComplement(Math.max(activeScore, otherScore)),
       signals: ["cue:new"],
+      stage: 0,
+    };
+  }
+
+  // No model: nothing below this line is evidence. The remaining rules
+  // lean on similarity, or on file overlap, which only ever contributes
+  // a fraction of the combined score and cannot carry a suggestion by
+  // itself — so without an explicit cue phrase the turn simply
+  // continues. The decision's numeric confidence is never displayed in
+  // this mode (see docs/decisions.md, 2026-11-14).
+  if (signals.embeddingUnavailable) {
+    return {
+      action: "continue",
+      target: state.activeFrondId,
+      confidence: clamp01(activeScore),
+      signals: ["no-cue"],
       stage: 0,
     };
   }
