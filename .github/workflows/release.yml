@@ -4,11 +4,27 @@ name: Release
 # darwin-arm64 — docs/spec.md §14) on native runners, smoke-tests each
 # compiled binary, and writes one SHA-256SUMS over everything.
 #
-# Publishing (attestation + GitHub Release) happens in exactly one job,
-# `publish`, and only when all three hold: the event is a pushed tag,
-# the tag matches v*, and the repository is public. A manual run
-# (workflow_dispatch) is always a dry run — there is no input that turns
+# Four jobs can publish: `publish` (GitHub Release and build provenance for
+# the tarballs), `publish-testpypi`, `publish-pypi` and `publish-npm`. Every
+# one needs a pushed v* tag, a public repository, a repository variable the
+# maintainer sets (PUBLISH_ENABLED, or PUBLISH_TEST_ENABLED for release
+# candidates to TestPyPI) and its own GitHub Environment, and `publish`
+# also waits for `package`, `install-smoke` and `glibc-floor`. A manual run
+# (workflow_dispatch) is always a dry run: there is no input that turns
 # publishing on. Nothing here triggers on pull_request or branch pushes.
+# What each channel carries: GitHub Release tarballs have build provenance;
+# npm packages are published with provenance; PyPI releases are
+# trusted-published WITHOUT PEP 740 attestations (docs/decisions.md).
+#
+# After the tarballs are checksummed, `package` builds the npm tarballs
+# and PyPI wheels from them (nothing is published there), `install-smoke`
+# installs those packed files on all three OSes the way a user would and
+# runs `context-fern init` and the binary smoke test against the result,
+# and `glibc-floor` runs the Linux binary on a glibc 2.28 image, the
+# floor measured from the shipped files (docs/decisions.md). Registry
+# publishing is its own set of jobs (`publish-testpypi`, `publish-pypi`,
+# `publish-npm`), each behind a repository variable the maintainer sets
+# and a GitHub Environment they configure, so a tag alone never uploads.
 #
 # Structure notes, each from a real failed run (docs/decisions.md):
 # - `inputs` cannot be referenced from the top-level `env:` block.
@@ -68,7 +84,7 @@ jobs:
           # the binary) — "win32-x64", not the target label "win-x64".
           FULL='[
             {"target":"win-x64","runs-on":"windows-latest","ext":".exe","runtime-dir":"win32-x64","native-dir":"win32/x64","native-files":"onnxruntime_binding.node onnxruntime.dll"},
-            {"target":"linux-x64","runs-on":"ubuntu-latest","ext":"","runtime-dir":"linux-x64","native-dir":"linux/x64","native-files":"onnxruntime_binding.node libonnxruntime.so.1"},
+            {"target":"linux-x64","runs-on":"ubuntu-24.04","ext":"","runtime-dir":"linux-x64","native-dir":"linux/x64","native-files":"onnxruntime_binding.node libonnxruntime.so.1"},
             {"target":"darwin-arm64","runs-on":"macos-latest","ext":"","runtime-dir":"darwin-arm64","native-dir":"darwin/arm64","native-files":"onnxruntime_binding.node libonnxruntime.1.dylib"}
           ]'
           FILTERED=$(echo "$FULL" | jq -c --arg targets "$TARGETS" '($targets | split(",")) as $wanted | [.[] | select(.target as $t | $wanted | index($t) != null)]')
@@ -257,18 +273,287 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-  # The only job that can publish, and the only one with write access.
-  # All three conditions are required: a push event, a v* tag ref, and a
-  # public repository. While the repo is private a v* tag still builds,
-  # smoke-tests and checksums, and this job is skipped.
-  publish:
+  # Builds the registry packages from the tarballs above. `npm pack` and a
+  # stdlib-only wheel builder: nothing is published here, and a size guard
+  # fails the run before PyPI's 100 MB per-file limit could.
+  package:
     needs: checksums
+    if: ${{ !cancelled() && needs.checksums.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: bun install
+        run: bun install --frozen-lockfile
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-bundle
+          path: release
+
+      # A tag must equal CLI_VERSION and the plugin manifest's version;
+      # a manual run packages whatever the checked-out source says.
+      - name: resolve and check the version
+        id: version
+        # bash with pipefail, so a failing release-version.ts fails this step even through `tee`.
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            tag="v$(bun -e 'import { CLI_VERSION } from "./packages/core/src/brand"; console.log(CLI_VERSION)')"
+          fi
+          bun scripts/release-version.ts "$tag" | tee -a "$GITHUB_OUTPUT"
+          grep -q '^npm=' "$GITHUB_OUTPUT" && grep -q '^pypi=' "$GITHUB_OUTPUT"
+
+      - name: build the npm packages
+        env:
+          NPM_VERSION: ${{ steps.version.outputs.npm }}
+        run: |
+          bun scripts/pack-npm.ts \
+            --version "$NPM_VERSION" \
+            --model-version "$(cat packaging/MODEL_VERSION)" \
+            --bundle-dir release --out packages-out/npm
+
+      - name: build the PyPI wheels
+        env:
+          PYPI_VERSION: ${{ steps.version.outputs.pypi }}
+        run: |
+          python3 -I packaging/pypi/build_wheels.py \
+            --version "$PYPI_VERSION" \
+            --model-version "$(cat packaging/MODEL_VERSION)" \
+            --bundle-dir release --out packages-out/pypi
+
+      - name: size guard (PyPI's default file limit is 100 MB)
+        run: |
+          ls -l packages-out/npm packages-out/pypi
+          big="$(find packages-out -type f -size +95M)"
+          if [ -n "$big" ]; then
+            echo "over 95 MB, too close to PyPI's 100 MB limit:"; echo "$big"; exit 1
+          fi
+
+      # No login is needed for a dry run; it validates names, metadata and
+      # file lists as a real publish would.
+      - name: npm publish --dry-run for every package
+        run: |
+          for f in packages-out/npm/*.tgz; do
+            npm publish "$f" --dry-run --access public
+          done
+
+      - name: checksums of the packages
+        run: cd packages-out && sha256sum npm/* pypi/* | tee SHA-256SUMS-packages
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: packages
+          path: packages-out/
+          if-no-files-found: error
+          retention-days: 3
+
+  # Installs the packed files (from disk, offline) three ways on three
+  # OSes, runs `context-fern init`, then the compiled-binary smoke test
+  # against the copy init installed. These names are not required checks.
+  install-smoke:
+    needs: package
+    if: ${{ !cancelled() && needs.package.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: bun install
+        run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: packages
+          path: packages
+
+      - name: install uv (pinned)
+        run: python -m pip install uv==0.9.22
+
+      - name: block huggingface.co — Linux/macOS
+        if: runner.os != 'Windows'
+        run: |
+          echo "127.0.0.1 huggingface.co" | sudo tee -a /etc/hosts
+          echo "127.0.0.1 cdn-lfs.huggingface.co" | sudo tee -a /etc/hosts
+      - name: block huggingface.co — Windows
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Add-Content -Path "$env:SystemRoot\System32\drivers\etc\hosts" -Value "`n127.0.0.1 huggingface.co`n127.0.0.1 cdn-lfs.huggingface.co"
+
+      - name: npm
+        timeout-minutes: 8
+        run: bun run scripts/install-smoke.ts --kind npm --packages packages
+      - name: pip
+        timeout-minutes: 8
+        run: bun run scripts/install-smoke.ts --kind pip --packages packages
+      - name: uvx
+        timeout-minutes: 8
+        run: bun run scripts/install-smoke.ts --kind uvx --packages packages
+
+  # The Linux binary on glibc 2.28 (AlmaLinux 8), the floor measured from
+  # the shipped files: the Bun binary needs 2.17, the bundled ONNX Runtime
+  # library 2.28. `fern new` loads the real model through that library.
+  glibc-floor:
+    needs: checksums
+    if: ${{ !cancelled() && needs.checksums.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-bundle
+          path: release
+      - name: run the linux-x64 binary on glibc 2.28
+        run: |
+          mkdir -p lf work/proj work/home/.cache/fern/models
+          tar xzf release/context-fern-linux-x64.tar.gz -C lf
+          tar xzf release/model-*.tar.gz -C work/home/.cache/fern/models
+          docker run --rm -v "$PWD/lf:/lf:ro" -v "$PWD/work:/work" almalinux:8 sh -ec '
+            ldd --version | head -1
+            export HOME=/work/home FERN_HOME=/work/home/.fern-home XDG_CACHE_HOME=/work/home/.cache
+            cd /work/proj
+            /lf/context-fern --version
+            /lf/context-fern init --no
+            /lf/context-fern new smoke
+            /lf/context-fern status --json | grep -q "\"embedder\":{\"state\":\"ok\"}"
+            /lf/context-fern daemon stop
+            echo "glibc floor: PASS"'
+
+  # --- Registry publishing -------------------------------------------------
+  # None of these run unless the maintainer has set the repository variable
+  # named in the job's `if` AND configured the matching GitHub Environment
+  # (with required reviewers) and the registry's trusted publisher. The
+  # exact settings are in the PR description that introduced this file.
+
+  # A release candidate tag (vX.Y.Z-rc.N) goes to TestPyPI only. npm gets
+  # the dry run in `package`, never a real upload from an rc.
+  publish-testpypi:
+    needs: [package, install-smoke, glibc-floor]
     if: >
       github.event_name == 'push' &&
       startsWith(github.ref, 'refs/tags/v') &&
-      github.event.repository.private == false
+      contains(github.ref_name, '-rc.') &&
+      github.event.repository.private == false &&
+      vars.PUBLISH_TEST_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: packages
+          path: packages
+      # uv, not pypa/gh-action-pypi-publish: this repository's Actions
+      # allowlist permits only GitHub-owned actions, setup-bun and setup-uv,
+      # and `uv publish` does PyPI trusted publishing (OIDC) itself.
+      - name: install uv (pinned)
+        run: python -m pip install uv==0.9.22
+      # --check-url skips files already on the index: the model wheel keeps
+      # its version across releases.
+      - name: upload with trusted publishing
+        run: |
+          uv publish --trusted-publishing always \
+            --publish-url https://test.pypi.org/legacy/ \
+            --check-url https://test.pypi.org/simple/ \
+            packages/pypi/*
+
+  publish-pypi:
+    needs: [package, install-smoke, glibc-floor, publish]
+    if: >
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      !contains(github.ref_name, '-rc.') &&
+      github.event.repository.private == false &&
+      vars.PUBLISH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: packages
+          path: packages
+      - name: install uv (pinned)
+        run: python -m pip install uv==0.9.22
+      - name: upload with trusted publishing
+        run: |
+          uv publish --trusted-publishing always \
+            --check-url https://pypi.org/simple/ \
+            packages/pypi/*
+
+  publish-npm:
+    needs: [package, install-smoke, glibc-floor, publish]
+    if: >
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      !contains(github.ref_name, '-rc.') &&
+      github.event.repository.private == false &&
+      vars.PUBLISH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: npm
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: packages
+          path: packages
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or later (docs.npmjs.com/trusted-publishers).
+      - name: npm 11.5.1
+        run: npm install -g npm@11.5.1
+      # Dependencies first, the launcher last, so nothing resolves to a package that is not there yet.
+      - name: publish
+        run: |
+          set -e
+          for f in packages/npm/context-fern-model-*.tgz packages/npm/context-fern-win-*.tgz packages/npm/context-fern-linux-*.tgz packages/npm/context-fern-darwin-*.tgz packages/npm/context-fern-[0-9]*.tgz; do
+            name="$(tar xzOf "$f" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8")).name')"
+            version="$(tar xzOf "$f" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8")).version')"
+            # The model package keeps its version across releases; npm refuses a republish.
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version is already published, skipping"
+              continue
+            fi
+            echo "publishing $name@$version"
+            npm publish "$f" --access public --provenance
+          done
+
+  # The GitHub Release and build provenance for the tarballs; the only job
+  # with contents: write. Needs a push event, a v* tag, a public repository
+  # and PUBLISH_ENABLED, runs in its own Environment, and waits for the
+  # package, install-smoke and glibc-floor jobs, so a tag that disagrees
+  # with CLI_VERSION or a package that does not install never produces a
+  # Release. A release candidate tag (-rc.) is marked a prerelease.
+  publish:
+    needs: [checksums, package, install-smoke, glibc-floor]
+    if: >
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      github.event.repository.private == false &&
+      vars.PUBLISH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: release
     permissions:
       contents: write
       id-token: write
@@ -293,5 +578,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
         run: |
-          gh release create "$TAG" --title "$TAG" --generate-notes \
+          flags=""
+          case "$TAG" in
+            *-rc.*) flags="--prerelease" ;;
+          esac
+          gh release create "$TAG" --title "$TAG" --generate-notes $flags \
             release/*.tar.gz release/SHA-256SUMS

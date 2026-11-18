@@ -1,14 +1,27 @@
 import { expect, test } from "bun:test";
-import { buildId } from "../src/build-id";
+import { CLI_VERSION } from "@context-fern/core";
+import { buildId, isShippedBinary, shippedBuildId } from "../src/build-id";
 
-test("buildId is stable within a process (memoized)", () => {
-  expect(buildId()).toBe(buildId());
+test("the shipped executable is told apart from a source checkout", () => {
+  expect(isShippedBinary("C:/x/bin/context-fern.exe")).toBe(true);
+  expect(isShippedBinary("/home/a/.local/bin/fern")).toBe(true);
+  expect(isShippedBinary("/usr/local/bin/bun")).toBe(false);
+  expect(isShippedBinary("C:/bun/bun.exe")).toBe(false);
 });
 
-test("buildId includes a git short sha when run inside a real checkout", () => {
-  // This test suite only ever runs inside this repo's own git checkout,
-  // so the sha branch (not the version-only fallback) is the one real
-  // behavior worth pinning here — `git rev-parse --short HEAD` always
-  // succeeds in CI and in a real dev checkout alike.
-  expect(buildId()).toMatch(/^\d+\.\d+\.\d+\+[0-9a-f]+$/);
+test("two different builds get different ids, so an old daemon is seen as stale", () => {
+  expect(shippedBuildId(111_000_000)).not.toBe(shippedBuildId(111_000_001));
+  expect(shippedBuildId(111_000_000)).toBe(`${CLI_VERSION}+exe111000000`);
+});
+
+test("the same file under both names gets the same id, so fern and context-fern never replace each other's daemon", () => {
+  expect(shippedBuildId(111_000_000)).toBe(shippedBuildId(111_000_000));
+});
+
+test("if the executable cannot be stat'ed the version alone is used, never a crash", () => {
+  expect(shippedBuildId(null)).toBe(CLI_VERSION);
+});
+
+test("running from source keeps the checkout fingerprint (version, plus the git sha when there is one)", () => {
+  expect(buildId().startsWith("0.0.0")).toBe(true);
 });

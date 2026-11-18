@@ -242,3 +242,19 @@ test("degraded: a cue phrase suggests, a prompt that merely names unrelated file
   await project.cleanup();
   await rm(emptyCache, { recursive: true, force: true });
 }, 30_000);
+
+test("the embedder cannot even be imported (a sidecar that fails its pinned checksum throws at import): degraded with the reason, not a crash", async () => {
+  const loaded = await loadEmbedder(undefined, {
+    check: async () => null,
+    create: async () => {
+      throw new Error(
+        "context-fern: /x/onnxruntime_binding.node does not match its pinned SHA-256; refusing to load it.\nstack line",
+      );
+    },
+  });
+  expect(loaded.health.state).toBe("degraded");
+  expect(loaded.health.state === "degraded" && loaded.health.reason).toContain(
+    "does not match its pinned SHA-256",
+  );
+  expect((await loaded.embedder.embed(["x"]))[0]?.length).toBe(0);
+});

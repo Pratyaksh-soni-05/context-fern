@@ -83,8 +83,19 @@ test("fern init also materializes .fern/fern.db and registers the project in ~/.
 }, 30_000);
 
 test("fern new creates a frond (spawning the daemon on first use)", async () => {
+  const started = performance.now();
   const res = runCli(["new", "docker-build"]);
-  expect(res.exitCode).toBe(0);
+  const elapsedMs = Math.round(performance.now() - started);
+  // Printed so a slow runner can be told from a broken daemon: the CLI waits
+  // about 5000 ms for a new daemon, and one CI run failed at exactly that.
+  console.log(`fern new (source mode, cold daemon): ${elapsedMs} ms`);
+  if (res.exitCode !== 0) {
+    throw new Error(
+      `fern new exited ${res.exitCode} after ${elapsedMs} ms
+stdout: ${res.stdout}
+stderr: ${res.stderr}`,
+    );
+  }
   expect(res.stdout).toContain("fern ▸ on docker-build");
 
   const info = await readDaemonInfo();

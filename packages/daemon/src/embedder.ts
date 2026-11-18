@@ -11,11 +11,13 @@
 // of the session and every journalled decision. See docs/decisions.md.
 
 import { CLI_NAME, type Embedder } from "@context-fern/core";
-import {
-  checkModelFiles,
-  NoModelEmbedder,
-  TransformersEmbedder,
-} from "@context-fern/embed";
+// Light subpaths, and the heavy TransformersEmbedder only by dynamic import
+// inside `create`: importing the `@context-fern/embed` barrel loads
+// onnxruntime-node at module evaluation, and its native sidecar is checked
+// against pinned checksums there, so a missing or tampered sidecar would
+// stop the daemon from starting at all instead of degrading below.
+import { checkModelFiles } from "@context-fern/embed/model-integrity";
+import { NoModelEmbedder } from "@context-fern/embed/no-model-embedder";
 
 export type EmbedderHealth =
   | { state: "ok" }
@@ -35,12 +37,17 @@ function degraded(reason: string): LoadedEmbedder {
 
 export interface EmbedderLoaders {
   check: typeof checkModelFiles;
-  create: (cacheDir?: string) => Embedder;
+  create: (cacheDir?: string) => Embedder | Promise<Embedder>;
 }
 
 const REAL_LOADERS: EmbedderLoaders = {
   check: checkModelFiles,
-  create: (cacheDir) => new TransformersEmbedder(undefined, cacheDir),
+  create: async (cacheDir) => {
+    const { TransformersEmbedder } = await import(
+      "@context-fern/embed/transformers-embedder"
+    );
+    return new TransformersEmbedder(undefined, cacheDir);
+  },
 };
 
 /** `cacheDir` and `loaders` are overridable so tests can point at a temp directory or a model that fails to load. */
@@ -57,7 +64,7 @@ export async function loadEmbedder(
     );
   }
   try {
-    const embedder = loaders.create(cacheDir);
+    const embedder = await loaders.create(cacheDir);
     await embedder.embed([""]);
     return { embedder, health: { state: "ok" } };
   } catch (err) {

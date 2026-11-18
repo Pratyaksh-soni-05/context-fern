@@ -120,7 +120,16 @@ if (
 }
 console.log("CHECK_A_SQLITE: PASS");
 
+// Timed on purpose: the CLI gives up waiting for a freshly spawned daemon
+// after ~5 s (packages/daemon/src/client.ts, MAX_POLLS x POLL_INTERVAL_MS),
+// and a CI run once failed at exactly that limit. This is the cold path:
+// CLI start, daemon spawn, model load, first reply.
+const coldStart = performance.now();
 const newRes = await runWithTimeout(["new", "smoke-test-frond"], 60_000);
+const coldMs = Math.round(performance.now() - coldStart);
+console.log(
+  `DAEMON_COLD_START_MS: ${coldMs} (the CLI waits about 5000 ms before giving up)`,
+);
 if (newRes.status !== 0) {
   fail("CHECK_B_OFFLINE_EMBED", `exit=${newRes.status}\n${newRes.output}`);
 }
@@ -140,6 +149,12 @@ if (embedderState !== "ok") {
   fail("CHECK_B_OFFLINE_EMBED", `embedder: ${JSON.stringify(status.embedder)}`);
 }
 console.log("CHECK_B_OFFLINE_EMBED: PASS");
+
+// The same command against the daemon that is now up, so a slow machine
+// (slow process start) can be told apart from a slow daemon start.
+const warmStart = performance.now();
+await runWithTimeout(["status"], 30_000);
+console.log(`WARM_CALL_MS: ${Math.round(performance.now() - warmStart)}`);
 
 const info = await readDaemonInfo(fernHome);
 if (!info) fail("CHECK_C_DAEMON_SELF_SPAWN", "no daemon.json written");

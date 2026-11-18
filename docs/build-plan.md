@@ -8,6 +8,20 @@
 - [ ] Secret scan over the *full* git history (not just the working tree) before the repo is made public.
 - [ ] GitHub email privacy: Settings → Emails → tick "Keep my email addresses private" and "Block command line pushes that expose my email", and keep the local git identity on the account's `<id>+<login>@users.noreply.github.com` address. History was rewritten into a new repository in November 2026 (see `docs/decisions.md`, 2026-11-23); every commit in it carries a noreply address.
 - [ ] Confirm `bench/denylist.txt` and `bench/data/` (especially `bench/data/private/`, which holds real non-synthetic content) are not tracked in git — point-in-time confirmed clean via `git log --all --full-history` on 2026-11-10 (`docs/decisions.md`); re-run before the actual publish, not just once.
+- [ ] Pin the plugin marketplace source to the release tag once the repo is public. `context-fern init` and its manual fallback run `claude plugin marketplace add Pratyaksh-soni-05/context-fern`, which tracks the default branch, so a user on version N gets whatever hooks are on `main` and those hooks run on every prompt. Change `MARKETPLACE_SOURCE` in `packages/cli/src/install/plugin-setup.ts` (and its tests, and the PR's manual steps) to a tag-pinned source after confirming the syntax with `claude plugin marketplace add --help`.
+- [x] PyPI attestations: decided 2026-11-18, none for launch (PyPI releases are trusted-published without PEP 740 attestations; npm releases carry provenance; the GitHub Release tarballs carry build provenance). Every document must say exactly that and no more; see the post-launch list below.
+- [x] The `publish` job (GitHub Release) is gated like the registry jobs: `PUBLISH_ENABLED`, its own Environment `release`, and `needs` on `package`, `install-smoke` and `glibc-floor`; `-rc.` tags are prereleases (decided 2026-11-18, done in #23).
+- [ ] Reserve the six npm names (`context-fern`, `context-fern-model`, four `@context-fern/<target>`) and the PyPI names by hand, then configure the trusted publishers listed in PR 23 (npm needs the package to exist first; PyPI pending publishers do not reserve a name).
+- [ ] Repository settings for publishing, set by the maintainer once the repository is public, in this order and **before the first `v*` tag**: (1) tag protection for `v*`; (2) Environments `release`, `testpypi`, `pypi`, `npm`, each with required reviewers and a deployment rule limited to `v*` tags; (3) only then the repository variables `PUBLISH_TEST_ENABLED` and `PUBLISH_ENABLED`. Also decide whether `v*` tags must point at commits on `main`, and hash-pin (or vendor) the `uv` and `npm` installs in the jobs that hold `id-token: write`. Until (1) and (2) exist, anyone with push access can tag any commit.
+
+**Post-launch (not launch scope):**
+- [ ] PyPI attestations: allow `pypa/gh-action-pypi-publish` on the repository's Actions allowlist, pin it by commit SHA, replace the `uv publish` steps with it, and publish PEP 740 attestations. Until then no document may say PyPI releases are attested.
+- [ ] `fern doctor` compares the installed native sidecar with the install manifest (Phase 4 PR 5).
+
+**Notes for Phase 4 PR 6 (site, README and install docs):**
+- Say plainly that the first daemon start on a cold Windows machine (Defender scanning an unsigned executable) can take longer than the CLI's fixed ~5 s wait; the hook fails open, so the prompt passes untouched, and the daemon keeps starting, so the next call finds it. The limit is not changed (`docs/decisions.md`, 2026-11-18).
+- `SECURITY.md`, the README and the site state the attestation position exactly: PyPI releases are trusted-published without PEP 740 attestations, npm releases carry provenance, GitHub Release tarballs carry build provenance. No stronger claim.
+- Install docs: unsigned binaries (SmartScreen and Gatekeeper interstitials are expected), Intel Macs unsupported at launch, and the `Landing.dc.html` footer still names a personal account (`docs/decisions.md`, 2026-11-10 and 2026-11-14).
 
 Historical plan, written under the working name ContextTree. Current scope: docs/spec.md (v0.2).
 

@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { CLI_BINARY_NAME, CLI_NAME, CONFIG_DIR } from "@context-fern/core";
 import { readDaemonInfo } from "@context-fern/daemon";
 import { isAlive } from "@context-fern/daemon/client";
-import { checkModelFiles } from "@context-fern/embed";
+import { checkModelFiles } from "@context-fern/embed/model-integrity";
 
 async function readStage2OllamaUrl(): Promise<string | null> {
   try {

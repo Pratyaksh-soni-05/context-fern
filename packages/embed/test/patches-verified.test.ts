@@ -11,6 +11,7 @@
 // leaves behind on a version bump).
 
 import { expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -80,4 +81,48 @@ test("the onnxruntime-node sidecar patch is actually present in the installed bi
   );
   expect(source).toContain("onnxruntime-native");
   expect(source).toContain("process.execPath");
+});
+
+test("the sidecar patch also looks in <exe-dir>/../share/context-fern, where a pip/uv wheel can put it", () => {
+  const source = readFileSync(
+    join(REPO_ROOT, "node_modules/onnxruntime-node/dist/binding.js"),
+    "utf-8",
+  );
+  expect(source).toContain('"share", "context-fern"');
+});
+
+// The native sidecar is verified against SHA-256s pinned in the patch before
+// it is loaded (a swapped .node would run arbitrary code in the daemon). The
+// pins must describe the real files of the exact pinned onnxruntime-node
+// version, or every install would refuse to load; this checks the host
+// platform's pins against the installed package, and CI runs it on Linux,
+// Windows and (through the release build) macOS.
+test("the sidecar checksums pinned in the patch equal the installed onnxruntime-node's own files for this platform", () => {
+  const source = readFileSync(
+    join(REPO_ROOT, "node_modules/onnxruntime-node/dist/binding.js"),
+    "utf-8",
+  );
+  const block = /const sidecarPins = (\{[\s\S]*?\n\});/.exec(source)?.[1];
+  expect(block).toBeDefined();
+  const pins = JSON.parse(
+    (block as string).replace(/,(\s*[}\]])/g, "$1"),
+  ) as Record<string, Record<string, string>>;
+  const key = `${process.platform}-${process.arch}`;
+  const mine = pins[key];
+  if (!mine) return; // a platform we do not ship (darwin-x64, win-arm64): nothing to compare
+  const dir = join(
+    REPO_ROOT,
+    "node_modules/onnxruntime-node/bin/napi-v6",
+    process.platform,
+    process.arch,
+  );
+  for (const [file, pinned] of Object.entries(mine)) {
+    const actual = createHash("sha256")
+      .update(readFileSync(join(dir, file)))
+      .digest("hex");
+    expect({ key, file, sha: actual }).toEqual({ key, file, sha: pinned });
+  }
+  expect(Object.keys(pins).sort()).toEqual(
+    ["darwin-arm64", "linux-arm64", "linux-x64", "win32-x64"].sort(),
+  );
 });

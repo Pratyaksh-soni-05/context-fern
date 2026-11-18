@@ -32,12 +32,33 @@ async function main(): Promise<number> {
         return 0;
       }
       case "init": {
+        // The machine-wide half first (binary, model, PATH, plugin); it
+        // installs nothing from a source checkout. Then the project half,
+        // unless this is the home directory, where `.fern/` would collide
+        // with the daemon's own state.
+        const { runGlobalInit, shouldRunProjectInit } = await import(
+          "./install/global-init"
+        );
+        await runGlobalInit(flags);
+        const { homedir } = await import("node:os");
+        if (!shouldRunProjectInit(process.cwd(), homedir(), flags)) {
+          console.log(
+            `${CLI_NAME} ▸ not a project folder, so no project set up here · run "${CLI_NAME} init" inside a project to start routing`,
+          );
+          return 0;
+        }
         const { runInit } = await import("./commands/init");
         const { materializeAndRegisterProject } = await import(
           "./commands/init-materialize"
         );
         await runInit(flags);
         await materializeAndRegisterProject(process.cwd());
+        return 0;
+      }
+      case "--version":
+      case "version": {
+        const { CLI_VERSION } = await import("@context-fern/core");
+        console.log(CLI_VERSION);
         return 0;
       }
       case "daemon": {
