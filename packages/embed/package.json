@@ -11,7 +11,8 @@
     "./model-integrity": "./src/model-integrity.ts",
     "./cache-dir": "./src/cache-dir.ts",
     "./no-model-embedder": "./src/no-model-embedder.ts",
-    "./transformers-embedder": "./src/transformers-embedder.ts"
+    "./transformers-embedder": "./src/transformers-embedder.ts",
+    "./native-pins": "./src/native-pins.ts"
   },
   "scripts": {
     "test": "bun test"

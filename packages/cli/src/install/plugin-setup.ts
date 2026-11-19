@@ -23,16 +23,21 @@ export type CommandRunner = (
   args: string[],
 ) => Promise<CommandResult>;
 
-export const defaultRunner: CommandRunner = (command, args) =>
-  new Promise((resolve) => {
-    execFile(
-      command,
-      args,
-      { timeout: 120_000, windowsHide: true },
-      (err, stdout, stderr) =>
-        resolve({ ok: err === null, output: `${stdout}${stderr}`.trim() }),
-    );
-  });
+/** Runs a command with no shell, killing it after `timeoutMs`. */
+export const makeRunner =
+  (timeoutMs: number): CommandRunner =>
+  (command, args) =>
+    new Promise((resolve) => {
+      execFile(
+        command,
+        args,
+        { timeout: timeoutMs, windowsHide: true },
+        (err, stdout, stderr) =>
+          resolve({ ok: err === null, output: `${stdout}${stderr}`.trim() }),
+      );
+    });
+
+export const defaultRunner: CommandRunner = makeRunner(120_000);
 
 export function manualPluginSteps(): string[] {
   return [
@@ -49,6 +54,7 @@ export async function setUpPlugin(
   claudePath: string | null,
   run: CommandRunner = defaultRunner,
 ): Promise<PluginSetupResult> {
+  let addedByInit: boolean | undefined;
   const manual = (
     reason: string,
     marketplaceAdded = false,
@@ -57,12 +63,22 @@ export async function setUpPlugin(
     reason,
     steps: manualPluginSteps(),
     record: marketplaceAdded
-      ? { method: "manual", marketplace: MARKETPLACE_NAME }
+      ? {
+          method: "manual",
+          marketplace: MARKETPLACE_NAME,
+          ...(addedByInit === undefined
+            ? {}
+            : { marketplaceAddedByInit: addedByInit }),
+        }
       : { method: "manual" },
   });
   if (claudePath === null) {
     return manual("the claude command is not on PATH");
   }
+  // Was it configured before we add it? `add` is idempotent, so afterwards
+  // nothing could tell, and uninstall must not remove a marketplace the
+  // user already had (on a developer machine it is often a local directory).
+  const existedBefore = await marketplaceExists(claudePath, run);
   const add = await run(claudePath, [
     "plugin",
     "marketplace",
@@ -74,6 +90,7 @@ export async function setUpPlugin(
       `adding the marketplace failed (${firstLine(add.output) || "no output"})`,
     );
   }
+  addedByInit = existedBefore === undefined ? undefined : !existedBefore;
   const install = await run(claudePath, [
     "plugin",
     "install",
@@ -91,8 +108,29 @@ export async function setUpPlugin(
       method: "claude-cli",
       marketplace: MARKETPLACE_NAME,
       plugin: `${PLUGIN_NAME}@${MARKETPLACE_NAME}`,
+      ...(addedByInit === undefined
+        ? {}
+        : { marketplaceAddedByInit: addedByInit }),
     },
   };
+}
+
+/** true/false from `claude plugin marketplace list --json`, or undefined when that could not be read. */
+async function marketplaceExists(
+  claudePath: string,
+  run: CommandRunner,
+): Promise<boolean | undefined> {
+  const r = await run(claudePath, ["plugin", "marketplace", "list", "--json"]);
+  if (!r.ok) return undefined;
+  try {
+    const list = JSON.parse(r.output.slice(r.output.indexOf("["))) as {
+      name?: unknown;
+    }[];
+    if (!Array.isArray(list)) return undefined;
+    return list.some((m) => m.name === MARKETPLACE_NAME);
+  } catch {
+    return undefined;
+  }
 }
 
 function firstLine(s: string): string {

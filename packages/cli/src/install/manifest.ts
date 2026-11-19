@@ -15,6 +15,13 @@ export interface ManifestFile {
   role: "binary" | "sidecar" | "model";
 }
 
+/** The `statusLine` entry init added to the user's ~/.claude/settings.json. */
+export interface StatuslineRecord {
+  file: string;
+  command: string;
+  backupPath: string | null;
+}
+
 export interface PendingDelete {
   path: string;
   sha256: string;
@@ -34,12 +41,16 @@ export type PathEdit =
       /** The marker lines that bracket the block we appended. */
       beginMarker: string;
       endMarker: string;
+      /** The copy of the file made before the block was appended, if the file existed. */
+      backupPath?: string;
     };
 
 export interface PluginRecord {
   method: "claude-cli" | "manual" | "skipped";
   marketplace?: string;
   plugin?: string;
+  /** True only if the marketplace was not configured before init added it; undefined when that could not be told. Uninstall removes the marketplace only when this is true. */
+  marketplaceAddedByInit?: boolean;
 }
 
 export interface InstallManifest {
@@ -53,6 +64,9 @@ export interface InstallManifest {
   files: ManifestFile[];
   /** Files init moved aside (a running program held the old one) and could not delete yet. Deleted later only if they still match this hash. */
   pendingDeletes?: PendingDelete[];
+  /** Directories init created (leaf first). Uninstall removes only these, only while empty. */
+  createdDirs?: string[];
+  statusline?: StatuslineRecord;
   pathEdit: PathEdit | null;
   plugin: PluginRecord | null;
 }

@@ -11,7 +11,7 @@
 // the same hash-checked delete as everything else.
 
 import { constants, existsSync } from "node:fs";
-import { copyFile, mkdir } from "node:fs/promises";
+import { copyFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { CLI_BINARY_NAME, ENV_PREFIX } from "@context-fern/core";
 import {
@@ -19,6 +19,7 @@ import {
   DEFAULT_MODEL_ID,
   MODEL_FILE_SHA256,
 } from "@context-fern/embed/model-integrity";
+import { mkdirTracked } from "./dirs";
 import { sha256File } from "./hash";
 import { removeIfHash } from "./safe-remove";
 
@@ -49,7 +50,7 @@ export function findModelPayload(
 
 export type ModelInstallResult =
   | { state: "already-installed" }
-  | { state: "installed"; dir: string }
+  | { state: "installed"; dir: string; createdDirs: string[] }
   | { state: "no-payload" }
   | { state: "failed"; reason: string };
 
@@ -63,6 +64,7 @@ export async function installModel(
   if (payloadDir === null) return { state: "no-payload" };
   const target = join(cacheDir, DEFAULT_MODEL_ID);
   const copied: { path: string; sha256: string }[] = [];
+  const createdDirs: string[] = [];
   try {
     for (const [file, pinned] of Object.entries(MODEL_FILE_SHA256)) {
       const dest = join(target, file);
@@ -75,7 +77,7 @@ export async function installModel(
       }
       const src = join(payloadDir, DEFAULT_MODEL_ID, file);
       const srcSha = await sha256File(src);
-      await mkdir(dirname(dest), { recursive: true });
+      createdDirs.push(...(await mkdirTracked(dirname(dest))));
       await copyFile(src, dest, constants.COPYFILE_EXCL);
       copied.push({ path: dest, sha256: srcSha });
     }
@@ -94,7 +96,7 @@ export async function installModel(
       reason: `${problem.kind} ${problem.path} (the model package does not match the pinned checksums)`,
     };
   }
-  return { state: "installed", dir: target };
+  return { state: "installed", dir: target, createdDirs };
 }
 
 /** Removes only what this run copied, and only while it still has the hash it was copied with. */

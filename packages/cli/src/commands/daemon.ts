@@ -1,6 +1,10 @@
 import { CLI_NAME } from "@context-fern/core";
-import { deleteDaemonInfo, readDaemonInfo } from "@context-fern/daemon";
-import { ensureDaemonRunning, isAlive } from "@context-fern/daemon/client";
+import { readDaemonInfo } from "@context-fern/daemon";
+import {
+  ensureDaemonRunning,
+  isAlive,
+  stopRunningDaemon,
+} from "@context-fern/daemon/client";
 
 export async function runDaemon(subcommand: string | undefined): Promise<void> {
   if (subcommand === "start") {
@@ -12,24 +16,22 @@ export async function runDaemon(subcommand: string | undefined): Promise<void> {
   }
 
   if (subcommand === "stop") {
-    const info = await readDaemonInfo();
-    if (!info) {
+    // Waits for the process to exit, so a caller that deletes the
+    // executable next is not racing it (docs/decisions.md, 2026-11-18).
+    const result = await stopRunningDaemon();
+    if (result.state === "not-running") {
       console.log(`${CLI_NAME} ▸ daemon not running`);
-      return;
+    } else if (result.state === "stale-removed") {
+      console.log(
+        `${CLI_NAME} ▸ daemon not running (removed a stale daemon.json)`,
+      );
+    } else if (result.state === "stopped") {
+      console.log(`${CLI_NAME} ▸ daemon stopped`);
+    } else {
+      console.log(
+        `${CLI_NAME} ▸ daemon (pid ${result.pid}) did not exit within 5 s · it may still be starting up or busy · run "${CLI_NAME} daemon stop" again`,
+      );
     }
-    // Only kill if this daemon.json actually still answers — a stale
-    // file left behind by a crash could otherwise name a PID the OS has
-    // since recycled for an unrelated process. Bounded — see doctor.ts's
-    // comment on why an unbounded isAlive() call is a real hang risk.
-    if (await isAlive(info, AbortSignal.timeout(2000))) {
-      try {
-        process.kill(info.pid);
-      } catch {
-        // already gone
-      }
-    }
-    await deleteDaemonInfo();
-    console.log(`${CLI_NAME} ▸ daemon stopped`);
     return;
   }
 

@@ -260,6 +260,97 @@ timed("first frond (smoke-test: sqlite, embedding, daemon, ui)", () => {
   warmMs = Number(/WARM_CALL_MS: (\d+)/.exec(r.stdout ?? "")?.[1]);
 });
 
+// `fern doctor` on the fresh install: the only thing it may complain about is
+// PATH (init does not edit PATH without --add-to-path). Anything else means a
+// real problem with what was just installed.
+const doctor = spawnSync(installed, ["doctor", "--json"], {
+  cwd: project,
+  env,
+  encoding: "utf-8",
+  timeout: 60_000,
+});
+const doctorReport = JSON.parse(doctor.stdout ?? "{}") as {
+  checks?: { id: string; status: string; message: string }[];
+};
+// The plugin check reflects whatever `claude` is on this machine, not the install under test.
+const problems = (doctorReport.checks ?? []).filter(
+  (c) => c.status === "problem" && c.id !== "plugin",
+);
+if (
+  problems.length === 0 ||
+  problems.map((c) => c.id).join() !== "context-fern"
+) {
+  console.error(
+    `FAIL: doctor on a fresh install: exit ${doctor.status}, problems: ${JSON.stringify(problems)}`,
+  );
+  process.exit(1);
+}
+const native = (doctorReport.checks ?? []).find(
+  (c) => c.id === "native library",
+);
+const manifestCheck = (doctorReport.checks ?? []).find(
+  (c) => c.id === "install",
+);
+if (native?.status !== "ok" || manifestCheck?.status !== "ok") {
+  console.error(
+    `FAIL: doctor did not verify the install: ${JSON.stringify({ native, manifestCheck })}`,
+  );
+  process.exit(1);
+}
+console.log(
+  `doctor: install ok, native library ok, one expected problem (${problems[0]?.message})`,
+);
+
+// Uninstall through the installed binary itself. On Windows that binary is
+// running, so its last file is removed by a helper just after it exits: wait
+// for the install directory to disappear.
+const dryRun = run(
+  "uninstall --dry-run",
+  installed,
+  ["uninstall", "--dry-run"],
+  project,
+);
+if (!dryRun.includes("dry run") || !existsSync(installed)) {
+  console.error("FAIL: --dry-run changed something or did not print a plan");
+  process.exit(1);
+}
+// FERN_DEL_LOG makes the Windows cleanup helper record what it does, so a run
+// where it does not finish can be diagnosed from the CI log.
+const helperLog = join(scratch, "cleanup-helper.log");
+const un = spawnSync(installed, ["uninstall", "--yes", "--keep-plugin"], {
+  cwd: project,
+  env: { ...env, FERN_DEL_LOG: helperLog },
+  encoding: "utf-8",
+  timeout: 120_000,
+});
+process.stdout.write(un.stdout ?? "");
+if (un.status !== 0) {
+  console.error(`FAIL: uninstall exited ${un.status}\n${un.stderr}`);
+  process.exit(1);
+}
+const gone = performance.now();
+while (existsSync(prefix) && performance.now() - gone < 120_000) {
+  Bun.sleepSync(250);
+}
+if (existsSync(prefix)) {
+  const left = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? left(join(dir, e.name)) : [join(dir, e.name)],
+    );
+  console.error(
+    `FAIL: ${prefix} still exists 120 s after uninstall. Left:\n${left(prefix).join("\n")}`,
+  );
+  console.error(
+    existsSync(helperLog)
+      ? `cleanup helper log:\n${readFileSync(helperLog, "utf-8")}`
+      : "the cleanup helper never wrote its log: it did not start",
+  );
+  process.exit(1);
+}
+timings.push([
+  "uninstall (until the install directory is gone)",
+  (performance.now() - gone) / 1000,
+]);
 console.log(`\n${kind} install smoke: PASS`);
 for (const [label, s] of timings)
   console.log(`  ${s.toFixed(1).padStart(6)} s  ${label}`);

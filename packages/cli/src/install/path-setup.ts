@@ -12,8 +12,8 @@
 // the install manifest so uninstall can remove exactly that block.
 
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
-import { appendFile, readFile } from "node:fs/promises";
+import { constants, existsSync } from "node:fs";
+import { appendFile, copyFile, readFile } from "node:fs/promises";
 import { basename, join, posix, win32 } from "node:path";
 import { CLI_BINARY_NAME } from "@context-fern/core";
 import type { PathEdit } from "./manifest";
@@ -85,6 +85,12 @@ export async function addToShellRc(
   const existing = existsSync(file) ? await readFile(file, "utf-8") : "";
   if (existing.includes(RC_BEGIN)) return "already";
   const lead = existing.length > 0 && !existing.endsWith("\n") ? "\n" : "";
+  // A copy first: this is the user's own file. Exclusive, so it never overwrites an earlier backup.
+  let backupPath: string | undefined;
+  if (existsSync(file)) {
+    backupPath = `${file}.context-fern-${Date.now()}.bak`;
+    await copyFile(file, backupPath, constants.COPYFILE_EXCL);
+  }
   await appendFile(
     file,
     `${lead}${RC_BEGIN}\nexport PATH='${dir}':"$PATH"\n${RC_END}\n`,
@@ -95,6 +101,7 @@ export async function addToShellRc(
     file,
     beginMarker: RC_BEGIN,
     endMarker: RC_END,
+    ...(backupPath ? { backupPath } : {}),
   };
 }
 
@@ -132,7 +139,28 @@ export interface WindowsPathOptions {
 }
 
 /** The system's own powershell.exe by full path, not found through the current directory or PATH. */
-function windowsPowerShell(): string {
+/**
+ * Environment for a Windows PowerShell child: `PSModulePath` reset to Windows
+ * PowerShell's own system modules. A parent that is PowerShell 7 (the default
+ * shell on GitHub's Windows runners) sets it for its own modules, which the 5.1
+ * child cannot use.
+ */
+export function cleanPowerShellEnv(): Record<string, string> {
+  const root = process.env.SystemRoot ?? process.env.windir;
+  return root
+    ? {
+        PSModulePath: join(
+          root,
+          "System32",
+          "WindowsPowerShell",
+          "v1.0",
+          "Modules",
+        ),
+      }
+    : {};
+}
+
+export function windowsPowerShell(): string {
   const root = process.env.SystemRoot ?? process.env.windir;
   if (root) {
     const p = join(
@@ -173,6 +201,7 @@ export function addToWindowsUserPath(
       {
         env: {
           ...process.env,
+          ...cleanPowerShellEnv(),
           FERN_PATH_ADD: dir,
           FERN_PATH_KEY: opts.registrySubKey ?? "Environment",
           FERN_PATH_VALUE: opts.valueName ?? "Path",

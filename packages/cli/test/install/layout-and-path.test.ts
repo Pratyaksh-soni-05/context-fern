@@ -84,12 +84,15 @@ test("addToShellRc appends one marked block, keeps the user's lines, and is idem
   const rc = join(dir, ".zshrc");
   await writeFile(rc, "alias a=b", "utf-8"); // no trailing newline on purpose
   const first = await addToShellRc(rc, "/p/bin");
-  expect(first).toEqual({
+  expect(first).toMatchObject({
     kind: "shell-rc",
     file: rc,
     beginMarker: RC_BEGIN,
     endMarker: RC_END,
   });
+  // The user's own file is copied before it is touched, byte for byte.
+  const backup = (first as { backupPath?: string }).backupPath as string;
+  expect(await readFile(backup, "utf-8")).toBe("alias a=b");
   const text = await readFile(rc, "utf-8");
   expect(text.startsWith("alias a=b\n")).toBe(true);
   expect(text).toContain(`export PATH='/p/bin':"$PATH"`);

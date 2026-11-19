@@ -133,6 +133,9 @@ test("the linked context-fern answers a UserPromptSubmit hook by bare name, and 
 test("the linked context-fern also serves the fern-fallback and doctor subcommands the plugin points at", async () => {
   expect((await run(["fern-fallback"])).exitCode).toBe(0);
   const doctor = await run(["doctor"]);
-  expect(doctor.exitCode).toBe(0);
+  // doctor exits 1 on any problem (for example no model downloaded on a clean CI
+  // machine), so health is not what this test is about: the linked binary must
+  // serve the subcommand and print the report.
+  expect([0, 1]).toContain(doctor.exitCode);
   expect(doctor.stdout).toContain("context-fern: on PATH");
 }, 60_000);

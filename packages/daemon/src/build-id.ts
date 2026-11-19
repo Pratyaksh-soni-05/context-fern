@@ -22,8 +22,8 @@
 
 import { execFileSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
-import { basename, join } from "node:path";
-import { CLI_BINARY_NAME, CLI_NAME, CLI_VERSION } from "@context-fern/core";
+import { join } from "node:path";
+import { CLI_VERSION, isShippedExecutable } from "@context-fern/core";
 
 let cached: string | null = null;
 
@@ -53,10 +53,7 @@ function gitShortSha(): string | null {
 
 /** True for the shipped executable (`context-fern`/`fern`), as opposed to `bun run` from a checkout. */
 export function isShippedBinary(execPath: string): boolean {
-  const name = basename(execPath)
-    .toLowerCase()
-    .replace(/\.exe$/, "");
-  return name === CLI_BINARY_NAME || name === CLI_NAME;
+  return isShippedExecutable(execPath);
 }
 
 /**

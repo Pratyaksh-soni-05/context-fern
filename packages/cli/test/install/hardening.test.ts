@@ -284,7 +284,12 @@ test("source scan: every copy is exclusive, every write is exclusive, and only t
       expect({ f, wx: /"wx"/.test(m[1] ?? "") }).toEqual({ f, wx: true });
     }
     if (/\brename\(/.test(text))
-      expect(["binary.ts", "manifest.ts"]).toContain(f);
+      expect([
+        "binary.ts",
+        "manifest.ts",
+        "uninstall.ts",
+        "uninstall-path.ts",
+      ]).toContain(f);
     if (/\bappendFile\(/.test(text)) expect(f).toBe("path-setup.ts");
     expect(/\b(truncate|ftruncate|createWriteStream)\(/.test(text)).toBe(false);
   }

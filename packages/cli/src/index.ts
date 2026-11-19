@@ -61,6 +61,10 @@ async function main(): Promise<number> {
         console.log(CLI_VERSION);
         return 0;
       }
+      case "uninstall": {
+        const { runUninstallCommand } = await import("./commands/uninstall");
+        return await runUninstallCommand(flags);
+      }
       case "daemon": {
         const { runDaemon } = await import("./commands/daemon");
         await runDaemon(positional[0]);
@@ -108,12 +112,16 @@ async function main(): Promise<number> {
       }
       case "doctor": {
         const { runDoctor } = await import("./commands/doctor");
-        await runDoctor();
-        return 0;
+        return await runDoctor(flags);
       }
       case "statusline": {
         const { runStatusline } = await import("./commands/statusline");
-        await runStatusline(flags);
+        const { recordStatusline } = await import(
+          "./install/record-statusline"
+        );
+        // `--install` records what it added in the install manifest, as init does,
+        // so an uninstall removes exactly that entry.
+        await recordStatusline(await runStatusline(flags));
         return 0;
       }
       case "ui": {

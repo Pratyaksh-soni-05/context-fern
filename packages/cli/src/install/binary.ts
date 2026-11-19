@@ -24,13 +24,13 @@ import {
   copyFile,
   link,
   lstat,
-  mkdir,
   readdir,
   rename,
   stat,
 } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { CLI_BINARY_NAME, CLI_NAME } from "@context-fern/core";
+import { mkdirTracked } from "./dirs";
 import { sha256File } from "./hash";
 import { executableNames, type InstallLayout } from "./layout";
 import type { ManifestFile, PendingDelete } from "./manifest";
@@ -121,6 +121,8 @@ export interface InstallResult {
   pending: PendingDelete[];
   /** Files init found and did not touch. */
   leftAlone: LeftAlone[];
+  /** Directories this run created, leaf first. */
+  createdDirs: string[];
 }
 
 /**
@@ -300,8 +302,9 @@ export async function installBinary(
   }
   for (const f of sidecarPlan) await assertReplaceable(f.dest, owned, f.sha);
 
-  await mkdir(layout.binDir, { recursive: true });
-  await mkdir(layout.shareDir, { recursive: true });
+  const createdDirs: string[] = [];
+  createdDirs.push(...(await mkdirTracked(layout.binDir)));
+  createdDirs.push(...(await mkdirTracked(layout.shareDir)));
 
   // The executables.
   const allowedFor = (target: string, newSha: string) =>
@@ -345,7 +348,7 @@ export async function installBinary(
   // The sidecar, one file at a time (no directory is ever removed
   // recursively, and a file that is already right is not touched).
   for (const f of sidecarPlan) {
-    await mkdir(dirname(f.dest), { recursive: true });
+    createdDirs.push(...(await mkdirTracked(dirname(f.dest))));
     if (!(existsSync(f.dest) && (await sha256File(f.dest)) === f.sha)) {
       const staged = tempName(f.dest);
       await withStaged(
@@ -387,7 +390,7 @@ export async function installBinary(
       }
     }
   }
-  return { entries, pending, leftAlone };
+  return { entries, pending, leftAlone, createdDirs };
 }
 
 function sameFileAsAny(path: string, candidates: readonly string[]): boolean {

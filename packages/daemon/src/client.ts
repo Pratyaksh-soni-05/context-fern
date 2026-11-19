@@ -60,6 +60,45 @@ export async function isAlive(
 }
 
 /**
+ * Whether what answers on the recorded port is really a fern daemon, not
+ * merely something that completes an HTTP request (`isAlive` accepts any
+ * response). It asks for `/projects` with the daemon's token and requires the
+ * answer to carry the daemon's own `pid` and `buildId`, equal to the ones in
+ * daemon.json, so a server that merely copies the response shape, or a
+ * different fern daemon, is not taken for the recorded one. This, not
+ * `isAlive`, is what gates sending a signal to the recorded pid: a stale
+ * daemon.json whose port a different server now holds, and whose pid has been
+ * recycled, must never get an unrelated process killed.
+ */
+export async function isOurDaemon(
+  info: DaemonInfo,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  try {
+    const res = await fetch(daemonUrl(info, "/projects"), {
+      headers: daemonHeaders(info),
+      ...(signal ? { signal } : {}),
+    });
+    if (!res.ok) return false;
+    const body = (await res.json()) as {
+      ok?: unknown;
+      projects?: unknown;
+      pid?: unknown;
+      buildId?: unknown;
+    };
+    return (
+      body.ok === true &&
+      Array.isArray(body.projects) &&
+      body.pid === info.pid &&
+      typeof body.buildId === "string" &&
+      body.buildId === info.buildId
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Pure peek, no side effect at all: true if a recorded daemon exists
  * and its `buildId` doesn't match this process's own code. Exists so a
  * caller that wants to show a different message for "stale, about to
@@ -91,7 +130,7 @@ export async function isDaemonRunning(
   if (!info) return null;
   const alive = await isAlive(info, signal);
   if (info.buildId !== buildId()) {
-    if (alive) {
+    if (alive && (await isOurDaemon(info, signal))) {
       try {
         process.kill(info.pid);
       } catch {
@@ -119,9 +158,16 @@ export async function isDaemonRunning(
  * this codebase must go through this one function, not call
  * `Bun.spawn` directly, so this can't regress at a new call site.
  */
-export function spawnDetached(cmd: string[]): void {
+export function spawnDetached(
+  cmd: string[],
+  env?: Record<string, string>,
+): void {
   Bun.spawn({
     cmd,
+    // Added to the current environment, never interpolated into `cmd`: the
+    // way a caller hands a detached child values it must not splice into a
+    // command line.
+    ...(env ? { env: { ...process.env, ...env } } : {}),
     stdio: ["ignore", "ignore", "ignore"],
     detached: true,
   }).unref();
@@ -159,6 +205,57 @@ export function spawnDaemonDetached(): void {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export type StopResult =
+  | { state: "not-running" }
+  /** daemon.json named a daemon that does not answer: the file is removed, the pid is never touched (it may have been recycled for an unrelated process). */
+  | { state: "stale-removed" }
+  | { state: "stopped"; pid: number; waitedMs: number }
+  | { state: "timeout"; pid: number };
+
+function processExists(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    // ESRCH: gone. EPERM: it exists but is not ours to signal.
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/**
+ * Stops the daemon recorded in daemon.json and WAITS until its process has
+ * exited before returning, so a caller that is about to delete or replace
+ * the executable (uninstall) is not racing a process that still holds it
+ * (on Windows a running image cannot be deleted). The kill only happens if
+ * what answers on the recorded port proves it is a fern daemon
+ * (`isOurDaemon`), so a stale file can never get an unrelated process
+ * killed. `timeoutMs` bounds the wait.
+ */
+export async function stopRunningDaemon(timeoutMs = 5000): Promise<StopResult> {
+  const info = await readDaemonInfo();
+  if (!info) return { state: "not-running" };
+  // Verified, not merely answering: anything else is a stale file, and the pid
+  // it names is never signalled.
+  if (!(await isOurDaemon(info, AbortSignal.timeout(2000)))) {
+    await deleteDaemonInfo();
+    return { state: "stale-removed" };
+  }
+  try {
+    process.kill(info.pid);
+  } catch {
+    // already gone
+  }
+  const started = Date.now();
+  while (processExists(info.pid)) {
+    if (Date.now() - started >= timeoutMs) {
+      return { state: "timeout", pid: info.pid };
+    }
+    await sleep(50);
+  }
+  await deleteDaemonInfo();
+  return { state: "stopped", pid: info.pid, waitedMs: Date.now() - started };
 }
 
 /** Spawns (if needed) and polls until ready. For the CLI only — hooks must never call this; use spawnDaemonDetached() or the raw*Json helpers instead. */

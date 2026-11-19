@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildDecision, buildDecisionInverse } from "@context-fern/core";
 import { FakeEmbedder } from "@context-fern/embed";
+import { buildId } from "../src/build-id";
 import { closeAllProjects, getOrOpenProject } from "../src/project-registry";
 import { type DaemonHandle, startDaemon, TOKEN_HEADER } from "../src/server";
 import { type TempDir, withTempProjectDir } from "./test-helpers";
@@ -319,7 +320,12 @@ test("the new UI data endpoints reject a request with neither a cookie nor a tok
 
 test("GET /projects starts empty and reflects a project touched via POST /projects/open", async () => {
   const empty = await rawFetch("GET", "/projects", { token: daemon?.token });
-  expect(await empty.json()).toEqual({ ok: true, projects: [] });
+  expect(await empty.json()).toEqual({
+    ok: true,
+    projects: [],
+    pid: process.pid,
+    buildId: buildId(),
+  });
 
   // Materialize .fern/fern.db for this project path first — a fresh
   // temp dir has no fern.db until something opens it.

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { CLI_NAME, CONFIG_DIR } from "@context-fern/core";
 import { renderDefaultConfigToml } from "../config-template";
 import { appendToGitignore, gitignoreHasEntry } from "../gitignore";
+import { recordStatusline } from "../install/record-statusline";
 import { renderProjectFernCommand } from "../project-fern-command";
 import { promptYesNo } from "../prompt-yes-no";
 import { runStatusline } from "./statusline";
@@ -66,8 +67,10 @@ export async function runInit(flags: Record<string, string>): Promise<void> {
     const confirmed =
       statuslineFlag === "yes" ||
       (await promptYesNo(`Install the ${CLI_NAME} statusline?`));
-    if (confirmed) await runStatusline({ install: "true" });
-    else console.log(`${CLI_NAME} ▸ skipped statusline`);
+    if (confirmed) {
+      // What was added is recorded in the install manifest, so an uninstall removes exactly that.
+      await recordStatusline(await runStatusline({ install: "true" }));
+    } else console.log(`${CLI_NAME} ▸ skipped statusline`);
   }
 
   // A bare "/fern" is rejected by Claude Code's interactive TUI as

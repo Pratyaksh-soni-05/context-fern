@@ -11,7 +11,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runDoctor } from "../src/commands/doctor";
+import { realDoctorDeps, runDoctor } from "../src/commands/doctor";
 
 let fakeHome: string;
 let originalFernHome: string | undefined;
@@ -35,7 +35,11 @@ async function runDoctorCapturingLogs(): Promise<string[]> {
     logs.push(args.map(String).join(" "));
   };
   try {
-    await runDoctor();
+    // Never the real `claude`, even for a read-only list.
+    await runDoctor(
+      {},
+      { ...realDoctorDeps(), runner: async () => ({ ok: false, output: "" }) },
+    );
   } finally {
     console.log = originalLog;
   }

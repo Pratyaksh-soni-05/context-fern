@@ -141,7 +141,9 @@ test("the plugin is registered through claude only with consent, and the manifes
     { yes: "true" },
     deps({ execPath: exe, which: () => "claude", runner }),
   );
-  expect(calls.length).toBe(2);
+  // list marketplaces (to know whether init added ours), add it, install the plugin
+  expect(calls.length).toBe(3);
+  expect(calls[0]).toContain("marketplace list");
   expect((await readManifest(manifestPath()))?.plugin?.method).toBe(
     "claude-cli",
   );

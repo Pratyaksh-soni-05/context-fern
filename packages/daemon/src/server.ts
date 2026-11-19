@@ -473,7 +473,14 @@ async function route(
 
   if (req.method === "GET" && pathname === "/projects") {
     const projects = await listRecentProjects();
-    return jsonResponse({ ok: true, projects });
+    // pid and buildId let a client tell this daemon from any other server
+    // before it signals the recorded pid (see isOurDaemon).
+    return jsonResponse({
+      ok: true,
+      projects,
+      pid: process.pid,
+      buildId: buildId(),
+    });
   }
 
   if (req.method === "POST" && pathname === "/projects/open") {

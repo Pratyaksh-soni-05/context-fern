@@ -111,6 +111,10 @@ export async function runGlobalInit(
   let pathEdit = previous?.pathEdit ?? null;
   let plugin = previous?.plugin ?? null;
   let pending: PendingDelete[] = [];
+  const createdDirs: string[] = [...(previous?.createdDirs ?? [])];
+  const addDirs = (dirs: readonly string[]) => {
+    for (const d of dirs) if (!createdDirs.includes(d)) createdDirs.push(d);
+  };
   const reportLeftAlone = (items: readonly LeftAlone[]) => {
     for (const l of items) {
       log(
@@ -159,6 +163,8 @@ export async function runGlobalInit(
       ...(pending.length + confined.ignoredPending.length > 0
         ? { pendingDeletes: [...pending, ...confined.ignoredPending] }
         : {}),
+      ...(createdDirs.length > 0 ? { createdDirs } : {}),
+      ...(previous?.statusline ? { statusline: previous.statusline } : {}),
       pathEdit,
       plugin,
     };
@@ -175,6 +181,7 @@ export async function runGlobalInit(
       const r = await installBinary(source, layout, carried);
       files.push(...r.entries);
       pending.push(...r.pending);
+      addDirs(r.createdDirs);
       reportLeftAlone(r.leftAlone);
     } catch (err) {
       log(say(`could not install: ${(err as Error).message}`));
@@ -197,6 +204,7 @@ export async function runGlobalInit(
     files.push(...(previous?.files ?? []).filter((f) => f.role === "model"));
   }
   if (model.state === "installed") {
+    addDirs(model.createdDirs);
     const dir = join(deps.modelCacheDir, DEFAULT_MODEL_ID);
     for (const p of (await listFiles(dir)).sort()) {
       files.push({
@@ -358,7 +366,11 @@ export function confineToInstallDirs(
   log: (line: string) => void,
 ): ConfinedManifest {
   if (manifest === null) {
-    return { manifest: null, ignoredFiles: [], ignoredPending: [] };
+    return {
+      manifest: null,
+      ignoredFiles: [],
+      ignoredPending: [],
+    };
   }
   // A path is inside if it is inside lexically OR once its directory is
   // resolved through symlinks and short names: the same location spelled
@@ -393,6 +405,9 @@ export function confineToInstallDirs(
   };
   const files = split(manifest.files);
   const pending = split(manifest.pendingDeletes);
+  // `createdDirs` is deliberately not confined: directories init made can sit
+  // above the install roots (a fresh ~/.cache, the share directory's parent),
+  // and an uninstall only ever `rmdir`s them while empty.
   return {
     manifest: { ...manifest, files: files.keep, pendingDeletes: pending.keep },
     ignoredFiles: files.ignored,

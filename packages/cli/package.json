@@ -12,7 +12,8 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./init": "./src/commands/init.ts"
+    "./init": "./src/commands/init.ts",
+    "./statusline": "./src/commands/statusline.ts"
   },
   "scripts": {
     "test": "bun test"
