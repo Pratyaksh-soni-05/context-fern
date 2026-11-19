@@ -312,19 +312,21 @@ jobs:
       - name: build the npm packages
         env:
           NPM_VERSION: ${{ steps.version.outputs.npm }}
+          MODEL_NPM_VERSION: ${{ steps.version.outputs.model_npm }}
         run: |
           bun scripts/pack-npm.ts \
             --version "$NPM_VERSION" \
-            --model-version "$(cat packaging/MODEL_VERSION)" \
+            --model-version "$MODEL_NPM_VERSION" \
             --bundle-dir release --out packages-out/npm
 
       - name: build the PyPI wheels
         env:
           PYPI_VERSION: ${{ steps.version.outputs.pypi }}
+          MODEL_PYPI_VERSION: ${{ steps.version.outputs.model_pypi }}
         run: |
           python3 -I packaging/pypi/build_wheels.py \
             --version "$PYPI_VERSION" \
-            --model-version "$(cat packaging/MODEL_VERSION)" \
+            --model-version "$MODEL_PYPI_VERSION" \
             --bundle-dir release --out packages-out/pypi \
             --repo-url "$(bun -e 'import { REPO_URL } from "./packages/core/src/brand"; console.log(REPO_URL)')"
 
@@ -338,10 +340,14 @@ jobs:
 
       # No login is needed for a dry run; it validates names, metadata and
       # file lists as a real publish would.
+      # npm refuses a prerelease version without --tag, so the dry run of a
+      # release candidate uses the tag the real publish will.
       - name: npm publish --dry-run for every package
+        env:
+          NPM_TAG: ${{ steps.version.outputs.npm_tag }}
         run: |
           for f in packages-out/npm/*.tgz; do
-            npm publish "$f" --dry-run --access public
+            npm publish "$f" --dry-run --access public ${NPM_TAG:+--tag "$NPM_TAG"}
           done
 
       - name: checksums of the packages
@@ -437,8 +443,8 @@ jobs:
   # (with required reviewers) and the registry's trusted publisher. The
   # exact settings are in the PR description that introduced this file.
 
-  # A release candidate tag (vX.Y.Z-rc.N) goes to TestPyPI only. npm gets
-  # the dry run in `package`, never a real upload from an rc.
+  # A release candidate tag (vX.Y.Z-rc.N) goes to TestPyPI and to npm under
+  # the `rc` dist-tag (never `latest`); PyPI proper only ever gets a stable tag.
   publish-testpypi:
     needs: [package, install-smoke, glibc-floor]
     if: >
@@ -462,8 +468,8 @@ jobs:
       # and `uv publish` does PyPI trusted publishing (OIDC) itself.
       - name: install uv (pinned)
         run: python -m pip install uv==0.9.22
-      # --check-url skips files already on the index: the model wheel keeps
-      # its version across releases.
+      # --check-url skips files already on the index: a stable release's model
+      # wheel keeps its version across releases; a candidate's is 1.0.0rcN.
       - name: upload with trusted publishing
         run: |
           uv publish --trusted-publishing always \
@@ -502,7 +508,6 @@ jobs:
     if: >
       github.event_name == 'push' &&
       startsWith(github.ref, 'refs/tags/v') &&
-      !contains(github.ref_name, '-rc.') &&
       github.event.repository.private == false &&
       vars.PUBLISH_ENABLED == 'true'
     runs-on: ubuntu-latest
@@ -524,20 +529,84 @@ jobs:
       - name: npm 11.5.1
         run: npm install -g npm@11.5.1
       # Dependencies first, the launcher last, so nothing resolves to a package that is not there yet.
+      # A release candidate publishes under the `rc` dist-tag and a stable
+      # release under no tag (so `latest`). Every tarball is checked against
+      # the tag BEFORE any is published, so a mismatch publishes nothing.
       - name: publish
+        env:
+          REF_NAME: ${{ github.ref_name }}
         run: |
           set -e
-          for f in packages/npm/context-fern-model-*.tgz packages/npm/context-fern-win-*.tgz packages/npm/context-fern-linux-*.tgz packages/npm/context-fern-darwin-*.tgz packages/npm/context-fern-[0-9]*.tgz; do
+          case "$REF_NAME" in *-rc.*) want_tag=rc ;; *) want_tag="" ;; esac
+          # An explicit order (ls would sort the launcher first), and exactly six
+          # tarballs: model, win, two linux, darwin, then the launcher.
+          files=()
+          for pattern in packages/npm/context-fern-model-*.tgz packages/npm/context-fern-win-*.tgz packages/npm/context-fern-linux-*.tgz packages/npm/context-fern-darwin-*.tgz "packages/npm/context-fern-[0-9]*.tgz"; do
+            for f in $pattern; do
+              [ -e "$f" ] || { echo "no tarball matches $pattern"; exit 1; }
+              files+=("$f")
+            done
+          done
+          [ "${#files[@]}" -eq 6 ] || { echo "expected six tarballs, found ${#files[@]}: ${files[*]}"; exit 1; }
+          for f in "${files[@]}"; do
+            version="$(tar xzOf "$f" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8")).version')"
+            case "$version" in *-rc.*) have_tag=rc ;; *) have_tag="" ;; esac
+            if [ "$have_tag" != "$want_tag" ]; then
+              echo "refusing to publish anything: $f is $version but the tag is $REF_NAME"
+              exit 1
+            fi
+          done
+          for f in "${files[@]}"; do
             name="$(tar xzOf "$f" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8")).name')"
             version="$(tar xzOf "$f" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8")).version')"
-            # The model package keeps its version across releases; npm refuses a republish.
+            # A version already on the registry is skipped, so re-running a tag finishes a half-published release.
             if npm view "$name@$version" version >/dev/null 2>&1; then
               echo "$name@$version is already published, skipping"
               continue
             fi
-            echo "publishing $name@$version"
-            npm publish "$f" --access public --provenance
+            echo "publishing $name@$version ${want_tag:+under the $want_tag tag}"
+            npm publish "$f" --access public --provenance ${want_tag:+--tag "$want_tag"}
           done
+
+  # After publish-npm: installs from the real registry on each platform and
+  # checks versions and dist-tags (scripts/verify-npm-release.ts). It reads
+  # public data only, with no secrets and no id-token.
+  verify-npm:
+    needs: [package, publish-npm]
+    if: >
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      github.event.repository.private == false &&
+      vars.PUBLISH_ENABLED == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+      - name: verify the registry and a clean install
+        shell: bash
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          out="$(bun scripts/release-version.ts "$REF_NAME")"
+          version="$(echo "$out" | sed -n 's/^npm=//p')"
+          model_version="$(echo "$out" | sed -n 's/^model_npm=//p')"
+          npm_tag="$(echo "$out" | sed -n 's/^npm_tag=//p')"
+          [ -n "$version" ] && [ -n "$model_version" ] || { echo "could not read the versions for $REF_NAME"; exit 1; }
+          tag=latest
+          [ "$npm_tag" = rc ] && tag=rc
+          bun scripts/verify-npm-release.ts --version "$version" --model-version "$model_version" --tag "$tag"
 
   # The GitHub Release and build provenance for the tarballs; the only job
   # with contents: write. Needs a push event, a v* tag, a public repository

@@ -6,7 +6,8 @@
 // and the Claude Code plugin manifest's "version" — the same two strings
 // `context-fern hook` compares at runtime. Prints the version in each
 // registry's own spelling: npm takes semver (0.1.0-rc.1), PyPI takes PEP
-// 440 (0.1.0rc1). Run by the release workflow's package job.
+// 440 (0.1.0rc1), and the model package's version for this release and the
+// npm dist-tag to publish under. Run by the release workflow's package job.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -19,6 +20,42 @@ export function toPypiVersion(semver: string): string {
   if (!m) throw new Error(`not a release version: ${semver}`);
   const base = `${m[1]}.${m[2]}.${m[3]}`;
   return m[4] ? `${base}rc${m[5]}` : base;
+}
+
+/** True for `X.Y.Z-rc.N`, false for `X.Y.Z`; anything else is not a release version. */
+export function isReleaseCandidate(semver: string): boolean {
+  const m = SEMVER.exec(semver);
+  if (!m) throw new Error(`not a release version: ${semver}`);
+  return m[4] !== undefined;
+}
+
+/**
+ * The model package's version for a release: its own version when the
+ * release is stable, `<model>-rc.N` (N from the release's rc number) for a
+ * release candidate. An npm version can never be published twice, so a
+ * candidate must not use up the model's real version.
+ */
+export function modelVersionFor(model: string, release: string): string {
+  const m = SEMVER.exec(model);
+  if (!m || m[4]) throw new Error(`the model version must be X.Y.Z: ${model}`);
+  const r = SEMVER.exec(release);
+  if (!r) throw new Error(`not a release version: ${release}`);
+  return r[4] ? `${model}-rc.${r[5]}` : model;
+}
+
+/**
+ * The npm dist-tag a version must be published under: `rc` for a release
+ * candidate, none for a stable version (so it becomes `latest`). Throws if
+ * the tag and the version disagree, so a candidate can never become `latest`
+ * and a stable release can never be tagged `rc`.
+ */
+export function npmDistTag(refName: string, version: string): "rc" | "" {
+  const fromRef = isReleaseCandidate(refName.replace(/^v/, ""));
+  if (fromRef !== isReleaseCandidate(version))
+    throw new Error(
+      `${refName} and ${version} disagree about being a release candidate`,
+    );
+  return fromRef ? "rc" : "";
 }
 
 if (import.meta.main) {
@@ -49,6 +86,14 @@ if (import.meta.main) {
     );
     process.exit(1);
   }
+  const model = readFileSync(
+    join(import.meta.dir, "../packaging/MODEL_VERSION"),
+    "utf-8",
+  ).trim();
+  const modelVersion = modelVersionFor(model, version);
   console.log(`npm=${version}`);
   console.log(`pypi=${toPypiVersion(version)}`);
+  console.log(`model_npm=${modelVersion}`);
+  console.log(`model_pypi=${toPypiVersion(modelVersion)}`);
+  console.log(`npm_tag=${npmDistTag(tag, version)}`);
 }

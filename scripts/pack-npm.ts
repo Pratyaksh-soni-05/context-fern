@@ -42,6 +42,12 @@ function arg(name: string, fallback?: string): string {
 
 const version = arg("version");
 const modelVersion = arg("model-version");
+// A candidate must pin a candidate model and a stable release a stable one,
+// or `npm i context-fern@rc` would resolve to a version only stable uses.
+if (version.includes("-rc.") !== modelVersion.includes("-rc."))
+  throw new Error(
+    `--version ${version} and --model-version ${modelVersion} must both be release candidates or both stable`,
+  );
 const bundleDir = resolve(arg("bundle-dir"));
 const out = resolve(arg("out"));
 const requested = arg("targets", "").split(",").filter(Boolean);

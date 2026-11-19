@@ -2,7 +2,12 @@ import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { CLI_VERSION } from "../packages/core/src/brand";
-import { toPypiVersion } from "../scripts/release-version";
+import {
+  isReleaseCandidate,
+  modelVersionFor,
+  npmDistTag,
+  toPypiVersion,
+} from "../scripts/release-version";
 
 const SCRIPT = join(import.meta.dir, "../scripts/release-version.ts");
 
@@ -31,4 +36,26 @@ test("a tag that disagrees with CLI_VERSION fails and says to bump both", () => 
 
 test("a tag that is not a release version fails", () => {
   expect(run("release-1").status).toBe(1);
+});
+
+test("a release candidate gets an rc model version from its own rc number; a stable release keeps the model's version", () => {
+  expect(modelVersionFor("1.0.0", "0.1.0-rc.3")).toBe("1.0.0-rc.3");
+  expect(modelVersionFor("1.0.0", "0.1.0")).toBe("1.0.0");
+  expect(() => modelVersionFor("1.0.0-rc.1", "0.1.0")).toThrow();
+});
+
+test("a release candidate is tagged rc and a stable release gets no tag; a tag and version that disagree throw", () => {
+  expect(npmDistTag("v0.1.0-rc.1", "0.1.0-rc.1")).toBe("rc");
+  expect(npmDistTag("v0.1.0", "0.1.0")).toBe("");
+  expect(() => npmDistTag("v0.1.0-rc.1", "0.1.0")).toThrow();
+  expect(() => npmDistTag("v0.1.0", "0.1.0-rc.1")).toThrow();
+  expect(isReleaseCandidate("0.1.0-rc.1")).toBe(true);
+  expect(isReleaseCandidate("0.1.0")).toBe(false);
+});
+
+test("the script prints the model versions and the npm tag for a stable tag", () => {
+  const r = run(`v${CLI_VERSION}`);
+  expect(r.stdout).toContain("model_npm=");
+  expect(r.stdout).toContain("model_pypi=");
+  expect(r.stdout).toMatch(/^npm_tag=$/m);
 });
