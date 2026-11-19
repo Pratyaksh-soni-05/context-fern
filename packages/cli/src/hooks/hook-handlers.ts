@@ -52,18 +52,23 @@ import { dispatchFernCommand } from "./fern-dispatch";
  * A call that overruns it is dropped and the hook fails open (returns {}), by design. It is an object only so a test on a starved machine can
  * widen it (hook-handlers.test.ts, and hook-subprocess.test.ts through FERN_HOOK_BUDGET_MS); nothing in production sets either.
  */
-const DEFAULT_PASSIVE_BUDGET_MS = 300;
-export const passiveBudget = { ms: budgetFromEnv() };
+export const passiveBudget = { ms: budgetFromEnv(300) };
 
 /**
- * `FERN_HOOK_BUDGET_MS` is for tests only: it lets the tests that spawn real hook processes widen the budget. It is read as an integer from 1 to 30000;
- * unset, non-numeric, zero, negative, fractional or above 30000 all mean the default 300, so a stray value in a user's environment cannot make a hook hang.
+ * The SessionStart restore is one shared deadline for both of its daemon calls (the liveness check and `GET /status?restored=true`), longer than the
+ * per-prompt budget because it runs once per session and reads a brief off disk, and it must stay well inside hooks.json's own 5 s for SessionStart
+ * (process start-up comes out of that, and a test pins the ratio). A restore that overruns it says so in one visible line instead of vanishing.
+ * An object for the same reason as passiveBudget.
  */
-export function budgetFromEnv(): number {
+export const restoreBudget = { ms: budgetFromEnv(2500) };
+
+/**
+ * `FERN_HOOK_BUDGET_MS` is for tests only: it lets the tests that spawn real hook processes widen both budgets. It is read as an integer from 1 to 30000;
+ * unset, non-numeric, zero, negative, fractional or above 30000 all mean the default (300 ms per prompt, 2500 ms for the restore), so a stray value in a user's environment cannot make a hook hang.
+ */
+export function budgetFromEnv(fallback: number): number {
   const n = Number(process.env[`${ENV_PREFIX}HOOK_BUDGET_MS`]);
-  return Number.isInteger(n) && n >= 1 && n <= 30_000
-    ? n
-    : DEFAULT_PASSIVE_BUDGET_MS;
+  return Number.isInteger(n) && n >= 1 && n <= 30_000 ? n : fallback;
 }
 
 const ESCAPED_CLI_NAME = CLI_NAME.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -394,15 +399,38 @@ export interface SessionStartInput {
   source: "startup" | "resume" | "clear" | "compact" | "fork";
 }
 
+export interface HandleSessionStartDeps {
+  /** Overridable for tests, for the same reason as HandleUserPromptSubmitDeps: the real one binds the real daemon port. Defaults to the real one. */
+  spawnDaemonDetached?: () => void;
+}
+
 export async function handleSessionStart(
   input: SessionStartInput,
+  deps: HandleSessionStartDeps = {},
 ): Promise<Record<string, unknown>> {
+  const spawn = deps.spawnDaemonDetached ?? spawnDaemonDetached;
   const fernDir = findFernDir(input.cwd);
   await debugLog(fernDir, "SessionStart", input);
   if (!fernDir) return {};
   const projectPath = canonicalizeProjectPath(dirname(fernDir));
 
-  const info = await isDaemonRunning(AbortSignal.timeout(passiveBudget.ms));
+  // One signal for the whole handler, so the two daemon calls share the budget. A fresh
+  // startup has nothing to restore and only checks that a daemon exists, so it keeps the
+  // short per-prompt budget; every other source is a restore and gets the longer one.
+  const restoring = input.source !== "startup";
+  const signal = AbortSignal.timeout(
+    restoring ? restoreBudget.ms : passiveBudget.ms,
+  );
+  const timedOut = () => ({
+    systemMessage: `${CLI_NAME} ▸ couldn't restore this frond's brief in time · run /${CLI_NAME} status`,
+  });
+
+  const info = await isDaemonRunning(signal);
+  if (!info && signal.aborted) {
+    // The daemon did not answer in time, which is not the same as no daemon: do not
+    // spawn another one (that fights the running one for the port), and say so on a restore.
+    return restoring ? timedOut() : {};
+  }
   if (!info) {
     // "Start the daemon if needed" — fire-and-forget, never wait for it
     // to come up. Spawning unconditionally (without this check) would
@@ -410,7 +438,7 @@ export async function handleSessionStart(
     // with an already-running daemon, since spawnDaemonDetached() always
     // tries to bind, forcing a port-retry churn that orphans the warm
     // daemon and wastes the embedder's warm-up on a second process.
-    spawnDaemonDetached();
+    spawn();
     return {};
   }
 
@@ -423,7 +451,7 @@ export async function handleSessionStart(
     const result = await rawGetJson(
       info,
       `/status?projectPath=${encodeURIComponent(projectPath)}&agentSessionId=${encodeURIComponent(input.session_id)}&restored=true`,
-      AbortSignal.timeout(passiveBudget.ms),
+      signal,
     );
     const frondName =
       typeof result.activeFrondName === "string"
@@ -476,6 +504,7 @@ export async function handleSessionStart(
       systemMessage: `${CLI_NAME} ▸ restored ${frondName ?? "stem"} · brief${filesPart}`,
     };
   } catch {
-    return {};
+    // Only a timeout is reported; any other failure stays a silent fail-open.
+    return signal.aborted ? timedOut() : {};
   }
 }

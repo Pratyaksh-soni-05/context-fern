@@ -31,6 +31,7 @@ import {
   handleStop,
   handleUserPromptSubmit,
   passiveBudget,
+  restoreBudget,
 } from "../../src/hooks/hook-handlers";
 
 // Fixture payloads built from the real field names and structure of each
@@ -56,6 +57,7 @@ let originalFernHome: string | undefined;
 let daemon: DaemonHandle | undefined;
 let projectDir: string;
 const productionBudgetMs = passiveBudget.ms;
+const productionRestoreBudgetMs = restoreBudget.ms;
 
 beforeEach(async () => {
   // The hooks drop any daemon call that takes longer than passiveBudget.ms (300 ms in
@@ -63,6 +65,7 @@ beforeEach(async () => {
   // these tests flaky (docs/decisions.md, known flakes), so they run with a generous
   // budget; the fail-open behaviour itself is pinned by its own test below.
   passiveBudget.ms = 30_000;
+  restoreBudget.ms = 30_000;
   originalFernHome = process.env.FERN_HOME;
   fakeHome = await mkdtemp(join(tmpdir(), "fern-home-"));
   process.env.FERN_HOME = fakeHome;
@@ -74,6 +77,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   passiveBudget.ms = productionBudgetMs;
+  restoreBudget.ms = productionRestoreBudgetMs;
   await daemon?.stop();
   daemon = undefined;
   if (originalFernHome === undefined) delete process.env.FERN_HOME;
@@ -147,10 +151,15 @@ test("FERN_HOOK_BUDGET_MS is honoured from 1 to 30000 and anything else means th
       ["Infinity", 300],
     ] as const) {
       process.env.FERN_HOOK_BUDGET_MS = value;
-      expect(budgetFromEnv(), `value ${JSON.stringify(value)}`).toBe(expected);
+      expect(budgetFromEnv(300), `value ${JSON.stringify(value)}`).toBe(
+        expected,
+      );
     }
     delete process.env.FERN_HOOK_BUDGET_MS;
-    expect(budgetFromEnv()).toBe(300);
+    expect(budgetFromEnv(300)).toBe(300);
+    expect(budgetFromEnv(2500)).toBe(2500);
+    process.env.FERN_HOOK_BUDGET_MS = "abc";
+    expect(budgetFromEnv(2500)).toBe(2500);
   } finally {
     if (saved === undefined) delete process.env.FERN_HOOK_BUDGET_MS;
     else process.env.FERN_HOOK_BUDGET_MS = saved;
@@ -179,6 +188,177 @@ test("a daemon that accepts the call but never answers is dropped after the pass
     stalled.stop(true);
   }
 });
+
+/** A stand-in daemon that answers its first requests after the given delays and never answers the rest; daemon.json is pointed at it. */
+async function pointDaemonAt(delaysMs: number[]) {
+  let call = 0;
+  const server = Bun.serve({
+    port: 0,
+    fetch: async () => {
+      const delay = delaysMs[call++];
+      if (delay === undefined) return new Promise<Response>(() => {});
+      await new Promise((r) => setTimeout(r, delay));
+      return Response.json({ ok: true });
+    },
+  });
+  const info = await readDaemonInfo();
+  if (!info) throw new Error("the test daemon wrote no daemon.json");
+  await writeDaemonInfo({ ...info, port: server.port as number });
+  return server;
+}
+
+const RESTORE_TIMEOUT_LINE =
+  "fern ▸ couldn't restore this frond's brief in time · run /fern status";
+
+test("the restore budget is longer than the per-prompt one and stays inside hooks.json's own timeout for SessionStart", () => {
+  const hooks = JSON.parse(
+    readFileSync(
+      join(import.meta.dir, "../../../plugin-claude-code/hooks/hooks.json"),
+      "utf-8",
+    ),
+  ) as {
+    hooks: Record<string, { hooks: { timeout: number }[] }[]>;
+  };
+  const outerMs =
+    (hooks.hooks.SessionStart?.[0]?.hooks[0]?.timeout ?? 0) * 1000;
+  expect(outerMs).toBeGreaterThan(0);
+  expect(productionBudgetMs).toBe(300);
+  expect(productionRestoreBudgetMs).toBeGreaterThan(productionBudgetMs);
+  // Process start-up comes out of the outer limit, so the budget may use at most half of it.
+  expect(productionRestoreBudgetMs).toBeLessThanOrEqual(outerMs / 2);
+});
+
+test("a restore against a daemon that never answers shows one visible line after the restore budget, not 300 ms and not silence", async () => {
+  passiveBudget.ms = productionBudgetMs;
+  restoreBudget.ms = productionRestoreBudgetMs;
+  const stalled = await pointDaemonAt([]);
+  try {
+    for (const source of ["resume", "clear", "compact", "fork"] as const) {
+      const started = performance.now();
+      const result = await handleSessionStart({
+        ...loadFixture("session-start.startup.json"),
+        cwd: projectDir,
+        source,
+      });
+      const elapsed = performance.now() - started;
+      expect(result, source).toEqual({ systemMessage: RESTORE_TIMEOUT_LINE });
+      // It waited for the restore budget (so it is not the 300 ms one) and no longer.
+      expect(elapsed, source).toBeGreaterThanOrEqual(
+        productionRestoreBudgetMs - 200,
+      );
+      expect(elapsed, source).toBeLessThan(productionRestoreBudgetMs + 1500);
+    }
+  } finally {
+    stalled.stop(true);
+  }
+}, 30_000);
+
+test("the restore's two daemon calls share one deadline: a slow liveness check leaves the status call only what is left", async () => {
+  passiveBudget.ms = productionBudgetMs;
+  restoreBudget.ms = productionRestoreBudgetMs;
+  // The first call answers after 1200 ms, the second never. With one deadline the whole
+  // handler takes about the restore budget; with a budget per call it would take 1200 + that.
+  const slow = await pointDaemonAt([1200]);
+  try {
+    const started = performance.now();
+    const result = await handleSessionStart({
+      ...loadFixture("session-start.startup.json"),
+      cwd: projectDir,
+      source: "resume",
+    });
+    const elapsed = performance.now() - started;
+    expect(result).toEqual({ systemMessage: RESTORE_TIMEOUT_LINE });
+    expect(elapsed).toBeLessThan(productionRestoreBudgetMs + 600);
+  } finally {
+    slow.stop(true);
+  }
+}, 30_000);
+
+test("a daemon that does not answer in time is not respawned, on any source: the restore says so (or startup says nothing) and nothing is started", async () => {
+  passiveBudget.ms = productionBudgetMs;
+  restoreBudget.ms = productionRestoreBudgetMs;
+  const stalled = await pointDaemonAt([]);
+  try {
+    for (const source of ["startup", "resume", "clear"] as const) {
+      let spawns = 0;
+      const result = await handleSessionStart(
+        {
+          ...loadFixture("session-start.startup.json"),
+          cwd: projectDir,
+          source,
+        },
+        { spawnDaemonDetached: () => spawns++ },
+      );
+      expect(result, source).toEqual(
+        source === "startup" ? {} : { systemMessage: RESTORE_TIMEOUT_LINE },
+      );
+      expect(spawns, source).toBe(0);
+    }
+  } finally {
+    stalled.stop(true);
+  }
+}, 30_000);
+
+test("a genuinely absent daemon is still started, once, without waiting for it, on every source", async () => {
+  await daemon?.stop(); // daemon.json is removed with it
+  daemon = undefined;
+  for (const source of [
+    "startup",
+    "resume",
+    "clear",
+    "compact",
+    "fork",
+  ] as const) {
+    let spawns = 0;
+    const started = performance.now();
+    const result = await handleSessionStart(
+      { ...loadFixture("session-start.startup.json"), cwd: projectDir, source },
+      { spawnDaemonDetached: () => spawns++ },
+    );
+    expect(result, source).toEqual({});
+    expect(spawns, source).toBe(1);
+    expect(performance.now() - started, source).toBeLessThan(2_000);
+  }
+});
+
+test("a daemon.json whose daemon is gone (the port refuses connections) is started again too, not mistaken for a slow one", async () => {
+  const info = await readDaemonInfo();
+  if (!info) throw new Error("the test daemon wrote no daemon.json");
+  await daemon?.stop();
+  daemon = undefined;
+  await writeDaemonInfo({ ...info, port: 1 }); // nothing listens on port 1
+  let spawns = 0;
+  const result = await handleSessionStart(
+    {
+      ...loadFixture("session-start.startup.json"),
+      cwd: projectDir,
+      source: "resume",
+    },
+    { spawnDaemonDetached: () => spawns++ },
+  );
+  expect(result).toEqual({});
+  expect(spawns).toBe(1);
+});
+
+test("a fresh startup keeps the short budget and says nothing on a timeout", async () => {
+  passiveBudget.ms = productionBudgetMs;
+  restoreBudget.ms = productionRestoreBudgetMs;
+  const stalled = await pointDaemonAt([]);
+  try {
+    const started = performance.now();
+    const result = await handleSessionStart({
+      ...loadFixture("session-start.startup.json"),
+      cwd: projectDir,
+      source: "startup",
+    });
+    expect(result).toEqual({});
+    expect(performance.now() - started).toBeLessThan(
+      productionRestoreBudgetMs - 500,
+    );
+  } finally {
+    stalled.stop(true);
+  }
+}, 30_000);
 
 test("a plain prompt against a running daemon never sets 'decision' and carries a non-empty focusNote", async () => {
   const result = await handleUserPromptSubmit({
