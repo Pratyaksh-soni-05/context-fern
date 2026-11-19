@@ -19,14 +19,18 @@ import {
   closeAllProjects,
   type DaemonHandle,
   getOrOpenProject,
+  readDaemonInfo,
   startDaemon,
+  writeDaemonInfo,
 } from "@context-fern/daemon";
 import { FakeEmbedder } from "@context-fern/embed";
 import {
+  budgetFromEnv,
   handlePostToolUse,
   handleSessionStart,
   handleStop,
   handleUserPromptSubmit,
+  passiveBudget,
 } from "../../src/hooks/hook-handlers";
 
 // Fixture payloads built from the real field names and structure of each
@@ -51,8 +55,14 @@ let fakeHome: string;
 let originalFernHome: string | undefined;
 let daemon: DaemonHandle | undefined;
 let projectDir: string;
+const productionBudgetMs = passiveBudget.ms;
 
 beforeEach(async () => {
+  // The hooks drop any daemon call that takes longer than passiveBudget.ms (300 ms in
+  // production) and fail open. On a starved CI runner that dropped real calls and made
+  // these tests flaky (docs/decisions.md, known flakes), so they run with a generous
+  // budget; the fail-open behaviour itself is pinned by its own test below.
+  passiveBudget.ms = 30_000;
   originalFernHome = process.env.FERN_HOME;
   fakeHome = await mkdtemp(join(tmpdir(), "fern-home-"));
   process.env.FERN_HOME = fakeHome;
@@ -63,6 +73,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  passiveBudget.ms = productionBudgetMs;
   await daemon?.stop();
   daemon = undefined;
   if (originalFernHome === undefined) delete process.env.FERN_HOME;
@@ -116,6 +127,56 @@ test("a missing/non-string prompt field is logged under FERN_DEBUG, never routed
   } finally {
     if (originalDebug === undefined) delete process.env.FERN_DEBUG;
     else process.env.FERN_DEBUG = originalDebug;
+  }
+});
+
+test("FERN_HOOK_BUDGET_MS is honoured from 1 to 30000 and anything else means the 300 ms default", () => {
+  const saved = process.env.FERN_HOOK_BUDGET_MS;
+  try {
+    for (const [value, expected] of [
+      ["1", 1],
+      ["30000", 30_000],
+      ["2500", 2500],
+      ["0", 300],
+      ["-5", 300],
+      ["30001", 300],
+      ["99999999", 300],
+      ["1.5", 300],
+      ["abc", 300],
+      ["", 300],
+      ["Infinity", 300],
+    ] as const) {
+      process.env.FERN_HOOK_BUDGET_MS = value;
+      expect(budgetFromEnv(), `value ${JSON.stringify(value)}`).toBe(expected);
+    }
+    delete process.env.FERN_HOOK_BUDGET_MS;
+    expect(budgetFromEnv()).toBe(300);
+  } finally {
+    if (saved === undefined) delete process.env.FERN_HOOK_BUDGET_MS;
+    else process.env.FERN_HOOK_BUDGET_MS = saved;
+  }
+});
+
+test("a daemon that accepts the call but never answers is dropped after the passive budget, and the hook fails open instead of hanging", async () => {
+  // The production budget, not the widened one the other tests use.
+  passiveBudget.ms = productionBudgetMs;
+  const stalled = Bun.serve({
+    port: 0,
+    fetch: () => new Promise<Response>(() => {}),
+  });
+  try {
+    const info = await readDaemonInfo();
+    if (!info) throw new Error("the test daemon wrote no daemon.json");
+    await writeDaemonInfo({ ...info, port: stalled.port as number });
+    const started = performance.now();
+    const result = await handleUserPromptSubmit({
+      ...loadFixture("user-prompt-submit.plain.json"),
+      cwd: projectDir,
+    });
+    expect(result).toEqual({});
+    expect(performance.now() - started).toBeLessThan(5_000);
+  } finally {
+    stalled.stop(true);
   }
 });
 

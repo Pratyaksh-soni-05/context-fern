@@ -31,6 +31,7 @@ import { dirname, join } from "node:path";
 import {
   CLI_NAME,
   CONFIG_DIR,
+  ENV_PREFIX,
   extractReplyGist,
   pluralize,
 } from "@context-fern/core";
@@ -46,8 +47,24 @@ import {
 import { extractTouchedFiles } from "./extract-touched-files";
 import { dispatchFernCommand } from "./fern-dispatch";
 
-/** Internal budget for the passive, never-wait hooks — separate from hooks.json's 5s outer cap, which covers the /fern command path instead. */
-const PASSIVE_TIMEOUT_MS = 300;
+/**
+ * Internal budget for the passive, never-wait hooks — separate from hooks.json's 5s outer cap, which covers the /fern command path instead.
+ * A call that overruns it is dropped and the hook fails open (returns {}), by design. It is an object only so a test on a starved machine can
+ * widen it (hook-handlers.test.ts, and hook-subprocess.test.ts through FERN_HOOK_BUDGET_MS); nothing in production sets either.
+ */
+const DEFAULT_PASSIVE_BUDGET_MS = 300;
+export const passiveBudget = { ms: budgetFromEnv() };
+
+/**
+ * `FERN_HOOK_BUDGET_MS` is for tests only: it lets the tests that spawn real hook processes widen the budget. It is read as an integer from 1 to 30000;
+ * unset, non-numeric, zero, negative, fractional or above 30000 all mean the default 300, so a stray value in a user's environment cannot make a hook hang.
+ */
+export function budgetFromEnv(): number {
+  const n = Number(process.env[`${ENV_PREFIX}HOOK_BUDGET_MS`]);
+  return Number.isInteger(n) && n >= 1 && n <= 30_000
+    ? n
+    : DEFAULT_PASSIVE_BUDGET_MS;
+}
 
 const ESCAPED_CLI_NAME = CLI_NAME.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // Matches both the bare form ("/fern ...") and the plugin-namespaced
@@ -160,7 +177,7 @@ export async function handleUserPromptSubmit(
     try {
       const wasStale = await isDaemonStale();
       const daemonInfo = await isDaemonRunning(
-        AbortSignal.timeout(PASSIVE_TIMEOUT_MS),
+        AbortSignal.timeout(passiveBudget.ms),
       );
       if (!daemonInfo) {
         spawn();
@@ -202,7 +219,7 @@ export async function handleUserPromptSubmit(
   if (!fernDir) return {};
   const projectPath = canonicalizeProjectPath(dirname(fernDir));
 
-  const info = await isDaemonRunning(AbortSignal.timeout(PASSIVE_TIMEOUT_MS));
+  const info = await isDaemonRunning(AbortSignal.timeout(passiveBudget.ms));
   if (!info) return {};
 
   try {
@@ -210,7 +227,7 @@ export async function handleUserPromptSubmit(
       info,
       "/prompt",
       { projectPath, prompt: text, agentSessionId: input.session_id },
-      AbortSignal.timeout(PASSIVE_TIMEOUT_MS),
+      AbortSignal.timeout(passiveBudget.ms),
     );
     const output: Record<string, unknown> = {};
     // Quiet by default: a plain continue has an empty receipt, and we
@@ -261,7 +278,7 @@ export async function handlePostToolUse(
   if (filesTouched.length === 0) return {};
   const projectPath = canonicalizeProjectPath(rawProjectPath);
 
-  const info = await isDaemonRunning(AbortSignal.timeout(PASSIVE_TIMEOUT_MS));
+  const info = await isDaemonRunning(AbortSignal.timeout(passiveBudget.ms));
   if (!info) return {};
 
   try {
@@ -269,7 +286,7 @@ export async function handlePostToolUse(
       info,
       "/tools",
       { projectPath, filesTouched, agentSessionId: input.session_id },
-      AbortSignal.timeout(PASSIVE_TIMEOUT_MS),
+      AbortSignal.timeout(passiveBudget.ms),
     );
   } catch {
     // PostToolUse can't block anyway — a dropped call just means this
@@ -294,7 +311,7 @@ export async function handleStop(
   if (!fernDir) return {};
   const projectPath = canonicalizeProjectPath(dirname(fernDir));
 
-  const info = await isDaemonRunning(AbortSignal.timeout(PASSIVE_TIMEOUT_MS));
+  const info = await isDaemonRunning(AbortSignal.timeout(passiveBudget.ms));
   if (!info) return {};
 
   // The first line of the reply, redacted and capped here so the full
@@ -311,7 +328,7 @@ export async function handleStop(
       info,
       "/exchange-end",
       { projectPath, ...(replyGist ? { replyGist } : {}) },
-      AbortSignal.timeout(PASSIVE_TIMEOUT_MS),
+      AbortSignal.timeout(passiveBudget.ms),
     );
   } catch {
     // silent — finalizeExchange also runs defensively at the top of the
@@ -385,7 +402,7 @@ export async function handleSessionStart(
   if (!fernDir) return {};
   const projectPath = canonicalizeProjectPath(dirname(fernDir));
 
-  const info = await isDaemonRunning(AbortSignal.timeout(PASSIVE_TIMEOUT_MS));
+  const info = await isDaemonRunning(AbortSignal.timeout(passiveBudget.ms));
   if (!info) {
     // "Start the daemon if needed" — fire-and-forget, never wait for it
     // to come up. Spawning unconditionally (without this check) would
@@ -406,7 +423,7 @@ export async function handleSessionStart(
     const result = await rawGetJson(
       info,
       `/status?projectPath=${encodeURIComponent(projectPath)}&agentSessionId=${encodeURIComponent(input.session_id)}&restored=true`,
-      AbortSignal.timeout(PASSIVE_TIMEOUT_MS),
+      AbortSignal.timeout(passiveBudget.ms),
     );
     const frondName =
       typeof result.activeFrondName === "string"

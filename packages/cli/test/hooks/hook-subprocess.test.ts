@@ -85,7 +85,13 @@ async function runCli(
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const proc = Bun.spawn({
     cmd: ["bun", "run", CLI_ENTRYPOINT, ...args],
-    env: { ...process.env, FERN_HOME: fakeHome },
+    env: {
+      ...process.env,
+      FERN_HOME: fakeHome,
+      // The hook drops any daemon call slower than 300 ms and fails open; on a starved
+      // runner that lost real calls here (docs/decisions.md, known flakes).
+      FERN_HOOK_BUDGET_MS: "30000",
+    },
     stdin: stdin === undefined ? "ignore" : "pipe",
     stdout: "pipe",
     stderr: "pipe",
