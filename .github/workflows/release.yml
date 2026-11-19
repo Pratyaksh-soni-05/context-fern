@@ -325,7 +325,8 @@ jobs:
           python3 -I packaging/pypi/build_wheels.py \
             --version "$PYPI_VERSION" \
             --model-version "$(cat packaging/MODEL_VERSION)" \
-            --bundle-dir release --out packages-out/pypi
+            --bundle-dir release --out packages-out/pypi \
+            --repo-url "$(bun -e 'import { REPO_URL } from "./packages/core/src/brand"; console.log(REPO_URL)')"
 
       - name: size guard (PyPI's default file limit is 100 MB)
         run: |

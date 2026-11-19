@@ -4,11 +4,6 @@
   "description": "A free, local context router for coding agents.",
   "license": "Apache-2.0",
   "author": "Context Fern contributors",
-  "homepage": "https://github.com/Pratyaksh-soni-05/context-fern",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Pratyaksh-soni-05/context-fern.git"
-  },
   "bin": {
     "context-fern": "bin/launcher.js",
     "fern": "bin/launcher.js"

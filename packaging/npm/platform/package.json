@@ -4,7 +4,6 @@
   "description": "The Context Fern binary for PLATFORM. Install `context-fern`, not this.",
   "license": "Apache-2.0",
   "author": "Context Fern contributors",
-  "homepage": "https://github.com/Pratyaksh-soni-05/context-fern",
   "os": [
     "OS"
   ],

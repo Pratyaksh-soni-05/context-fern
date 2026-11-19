@@ -21,6 +21,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { REPO_URL } from "../packages/core/src/brand";
 
 const ROOT = resolve(import.meta.dir, "..");
 const NPM_DIR = join(ROOT, "packaging", "npm");
@@ -55,6 +56,15 @@ mkdirSync(out, { recursive: true });
 
 function readJson(path: string): Record<string, unknown> {
   return JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>;
+}
+
+/** The repository links come from brand.ts (REPO_OWNER), never from the source package.json files. */
+function withRepoLinks(pkg: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...pkg,
+    homepage: REPO_URL,
+    repository: { type: "git", url: `git+${REPO_URL}.git` },
+  };
 }
 
 function pack(stage: string): string {
@@ -109,7 +119,7 @@ try {
   modelPkg.version = modelVersion;
   writeFileSync(
     join(modelStage, "package.json"),
-    `${JSON.stringify(modelPkg, null, 2)}\n`,
+    `${JSON.stringify(withRepoLinks(modelPkg), null, 2)}\n`,
   );
   cpSync(join(ROOT, "LICENSE"), join(modelStage, "LICENSE"));
   pack(modelStage);
@@ -132,7 +142,7 @@ try {
     if (t.libc) pkg.libc = [t.libc];
     writeFileSync(
       join(stage, "package.json"),
-      `${JSON.stringify(pkg, null, 2)}\n`,
+      `${JSON.stringify(withRepoLinks(pkg), null, 2)}\n`,
     );
     cpSync(join(ROOT, "LICENSE"), join(stage, "LICENSE"));
     pack(stage);
@@ -150,7 +160,7 @@ try {
   main.optionalDependencies = optional;
   writeFileSync(
     join(mainStage, "package.json"),
-    `${JSON.stringify(main, null, 2)}\n`,
+    `${JSON.stringify(withRepoLinks(main), null, 2)}\n`,
   );
   cpSync(join(ROOT, "LICENSE"), join(mainStage, "LICENSE"));
   pack(mainStage);

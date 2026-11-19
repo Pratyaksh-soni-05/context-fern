@@ -29,7 +29,6 @@ from pathlib import Path
 PRODUCT = "context-fern"
 MODEL_PRODUCT = "context-fern-model"
 SUMMARY = "A free, local context router for coding agents."
-HOMEPAGE = "https://github.com/Pratyaksh-soni-05/context-fern"
 FIXED_TIME = (2026, 1, 1, 0, 0, 0)  # reproducible archives
 
 # target -> (wheel platform tag, exe suffix). The Linux floor is glibc 2.28
@@ -97,14 +96,17 @@ class WheelWriter:
         self.zf.close()
 
 
-def metadata(name: str, version: str, requires: list[str]) -> bytes:
+def metadata(
+    name: str, version: str, requires: list[str], repo_url: str
+) -> bytes:
     lines = [
         "Metadata-Version: 2.1",
         f"Name: {name}",
         f"Version: {version}",
         f"Summary: {SUMMARY}",
         "License: Apache-2.0",
-        f"Home-page: {HOMEPAGE}",
+        f"Home-page: {repo_url}",
+        f"Project-URL: Source, {repo_url}",
         "Requires-Python: >=3.9",
     ] + [f"Requires-Dist: {r}" for r in requires]
     return ("\n".join(lines) + "\n").encode()
@@ -138,7 +140,13 @@ def read_tar(path: Path) -> list[tuple[str, bytes, bool]]:
 
 
 def build_platform_wheel(
-    version: str, model_version: str, target: str, tarball: Path, out: Path
+    version: str,
+    model_version: str,
+    target: str,
+    tarball: Path,
+    out: Path,
+    *,
+    repo_url: str,
 ) -> Path:
     tag, suffix = TARGETS[target]
     norm = PRODUCT.replace("-", "_")
@@ -164,7 +172,9 @@ def build_platform_wheel(
     w.add(f"{norm}/launcher.py", LAUNCHER.encode())
     w.add(
         f"{dist_info}/METADATA",
-        metadata(PRODUCT, version, [f"{MODEL_PRODUCT}=={model_version}"]),
+        metadata(
+            PRODUCT, version, [f"{MODEL_PRODUCT}=={model_version}"], repo_url
+        ),
     )
     w.add(f"{dist_info}/WHEEL", wheel_file(f"py3-none-{tag}", purelib=False))
     w.add(
@@ -179,7 +189,9 @@ def build_platform_wheel(
     return wheel_path
 
 
-def build_model_wheel(model_version: str, tarball: Path, out: Path) -> Path:
+def build_model_wheel(
+    model_version: str, tarball: Path, out: Path, *, repo_url: str
+) -> Path:
     norm = MODEL_PRODUCT.replace("-", "_")
     dist_info = f"{norm}-{model_version}.dist-info"
     data = f"{norm}-{model_version}.data"
@@ -188,7 +200,10 @@ def build_model_wheel(model_version: str, tarball: Path, out: Path) -> Path:
     for name, blob, _x in read_tar(tarball):
         # share/context-fern-model/ is found by `context-fern init` relative to the binary (../share/...).
         w.add(f"{data}/data/share/{MODEL_PRODUCT}/{name}", blob)
-    w.add(f"{dist_info}/METADATA", metadata(MODEL_PRODUCT, model_version, []))
+    w.add(
+        f"{dist_info}/METADATA",
+        metadata(MODEL_PRODUCT, model_version, [], repo_url),
+    )
     w.add(f"{dist_info}/WHEEL", wheel_file("py3-none-any", purelib=False))
     w.add(
         f"{dist_info}/licenses/LICENSE",
@@ -210,6 +225,11 @@ def main(argv: list[str]) -> int:
     )
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument(
+        "--repo-url",
+        required=True,
+        help="the project URL written into the metadata (the workflow passes REPO_URL from brand.ts)",
+    )
+    ap.add_argument(
         "--targets",
         default="",
         help="comma-separated subset; default: every target whose tarball is in --bundle-dir",
@@ -221,7 +241,11 @@ def main(argv: list[str]) -> int:
         raise SystemExit(
             f"expected exactly one model-*.tar.gz in {args.bundle_dir}, found {len(models)}"
         )
-    built = [build_model_wheel(args.model_version, models[0], args.out)]
+    built = [
+        build_model_wheel(
+            args.model_version, models[0], args.out, repo_url=args.repo_url
+        )
+    ]
     wanted = [t for t in args.targets.split(",") if t] or [
         t for t in TARGETS if (args.bundle_dir / f"context-fern-{t}.tar.gz").exists()
     ]
@@ -235,7 +259,12 @@ def main(argv: list[str]) -> int:
             raise SystemExit(f"missing {tarball}")
         built.append(
             build_platform_wheel(
-                args.version, args.model_version, target, tarball, args.out
+                args.version,
+                args.model_version,
+                target,
+                tarball,
+                args.out,
+                repo_url=args.repo_url,
             )
         )
     for p in built:

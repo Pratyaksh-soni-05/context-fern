@@ -4,7 +4,6 @@
   "description": "The embedding model Context Fern uses on your machine (Xenova/all-MiniLM-L6-v2, quantized). Pure data: no code.",
   "license": "Apache-2.0",
   "author": "Context Fern contributors",
-  "homepage": "https://github.com/Pratyaksh-soni-05/context-fern",
   "files": [
     "payload",
     "LICENSE"
