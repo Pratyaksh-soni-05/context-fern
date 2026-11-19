@@ -74,7 +74,7 @@ export function locateBinarySource(
   return { exePath: execPath, sidecarDir: resolve(sidecarDir) };
 }
 
-/** Real path with symlinks and Windows 8.3 short names resolved, so `C:\\Users\\USERNA~1` and `C:\\Users\\User Name` compare equal (the same case `canonicalizeProjectPath` handles for projects). */
+/** Real path with symlinks and Windows 8.3 short names resolved, so `C:\\Users\\EXAMPLE~1` and `C:\\Users\\Example User` compare equal (the same case `canonicalizeProjectPath` handles for projects). */
 function realDir(p: string): string {
   let out: string;
   try {

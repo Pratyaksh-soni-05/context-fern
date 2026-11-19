@@ -1,7 +1,7 @@
 // Regression coverage for a real bug report: `fern ui` run from a
-// Windows short path (C:\Users\USERNA~1\...) showed zero fronds/
+// Windows short path (C:\Users\EXAMPLE~1\...) showed zero fronds/
 // leaflets for a project that Claude Code's own hooks — using the long
-// path (C:\Users\User Name\...) — had already recorded real
+// path (C:\Users\Example User\...) — had already recorded real
 // history for. Root cause: `sessions.project_path` was matched by exact
 // SQL string equality everywhere, so two spellings of the same real
 // directory looked like two different projects, and the daemon silently
@@ -131,7 +131,7 @@ test.skipIf(process.platform !== "win32")(
     // A real short-path alias from the OS itself (FileSystemObject's
     // ShortPath), not a hand-rolled guess at 8.3 truncation rules —
     // the same real mechanism the original bug report hit via
-    // C:\Users\USERNA~1\... vs C:\Users\User Name\....
+    // C:\Users\EXAMPLE~1\... vs C:\Users\Example User\....
     const psScript = `(New-Object -ComObject Scripting.FileSystemObject).GetFolder(${JSON.stringify(dir)}).ShortPath`;
     const shortPath = execFileSync(
       "powershell.exe",

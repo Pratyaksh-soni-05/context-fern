@@ -2,7 +2,7 @@
 // (os.tmpdir() + Date.now(), manually cleaned in afterEach — see
 // jsonl-journal-sink.test.ts) so every store test, not just one dedicated
 // case, runs inside a directory that itself contains a space — the real
-// project path ("Example Projects") has one, and a naive path.join /
+// project path has one, and a naive path.join /
 // shell-quoting bug would only show up with a space actually present.
 
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
