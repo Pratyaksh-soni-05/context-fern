@@ -3,5 +3,6 @@ linker = "hoisted"
 
 [test]
 # Redirects HOME/USERPROFILE/APPDATA/etc. to a fake dir before any test
-# runs — see test/preload.ts for why.
-preload = ["./test/preload.ts"]
+# runs — see test/preload.ts for why. daemon-guard.ts fails the run if a
+# test leaves a daemon process running.
+preload = ["./test/preload.ts", "./test/daemon-guard.ts"]

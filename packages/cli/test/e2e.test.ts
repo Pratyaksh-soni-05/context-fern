@@ -11,14 +11,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { listRecentProjects, readDaemonInfo } from "@context-fern/daemon";
 import { canonicalizeProjectPath } from "@context-fern/daemon/client";
+import {
+  daemonPids,
+  killDaemonsStartedSince,
+  listProcesses,
+} from "../../../test/support/daemon-processes";
 
 const CLI_ENTRYPOINT = join(import.meta.dir, "../src/index.ts");
+const REPO_ROOT = join(import.meta.dir, "../../..");
+let daemonsBefore: Set<number>;
 
 let fakeHome: string;
 let projectDir: string;
 let originalFernHome: string | undefined;
 
 beforeAll(async () => {
+  daemonsBefore = new Set(daemonPids(listProcesses(), REPO_ROOT));
   originalFernHome = process.env.FERN_HOME;
   fakeHome = await mkdtemp(join(tmpdir(), "fern-home-"));
   process.env.FERN_HOME = fakeHome; // so readDaemonInfo() in this process agrees with the spawned CLI's env
@@ -29,13 +37,34 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // best-effort: stop whatever daemon this test started
-  await runCli(["daemon", "stop"]);
+  await stopEveryDaemon();
+  // Whatever is left was still starting (no daemon.json yet), so `daemon stop` could not see it.
+  await killDaemonsStartedSince(daemonsBefore, REPO_ROOT);
   if (originalFernHome === undefined) delete process.env.FERN_HOME;
   else process.env.FERN_HOME = originalFernHome;
   await rm(fakeHome, { recursive: true, force: true });
   await rm(projectDir, { recursive: true, force: true });
-});
+}, 60_000);
+
+/**
+ * Stops every daemon this file started. A `fern` call that gives up waiting for
+ * its daemon (about 5 s) leaves it still starting, and each such call spawns
+ * another; daemon.json names only the last one to write it, so one `daemon stop`
+ * is not enough. Keep stopping until no daemon answers for a while.
+ */
+async function stopEveryDaemon(): Promise<void> {
+  const deadline = Date.now() + 30_000;
+  let quiet = 0;
+  while (Date.now() < deadline && quiet < 3) {
+    if (await readDaemonInfo()) {
+      quiet = 0;
+      runCli(["daemon", "stop"]);
+    } else {
+      quiet++;
+    }
+    await Bun.sleep(500);
+  }
+}
 
 function runCli(args: string[]): {
   stdout: string;
