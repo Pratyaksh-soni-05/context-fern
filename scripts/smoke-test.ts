@@ -23,6 +23,10 @@
 //   CHECK_C_DAEMON_SELF_SPAWN — the daemon `fern new` spawned writes a
 //                               real, alive daemon.json
 //   CHECK_D_UI_SERVING        — that daemon serves /ui with a real 200
+//   CHECK_E_DAEMON_RECOGNISED — the process lookups behind `fern daemon stop`'s
+//                               hung-daemon kill work on this OS: the real compiled
+//                               daemon's command line is `<exe> --internal-daemon`
+//                               and it holds the port daemon.json records
 //
 // usage: bun run scripts/smoke-test.ts <path-to-compiled-binary>
 
@@ -33,6 +37,7 @@ import { join, resolve } from "node:path";
 import { ENV_PREFIX } from "@context-fern/core";
 import { readDaemonInfo } from "@context-fern/daemon";
 import { isAlive, rawGetJson } from "@context-fern/daemon/client";
+import { inspectDaemonProcess } from "../packages/daemon/src/process-inspect";
 
 const binaryArg = process.argv[2];
 if (!binaryArg) {
@@ -174,6 +179,14 @@ if (uiRes.status !== 200) {
   fail("CHECK_D_UI_SERVING", `http ${uiRes.status}`);
 }
 console.log(`CHECK_D_UI_SERVING: PASS (http ${uiRes.status})`);
+
+// The lookups `fern daemon stop` relies on to recognise a hung daemon of ours, run on
+// the real compiled daemon on this OS (the unit tests use stand-in processes).
+const recognised = await inspectDaemonProcess(info.pid, info.port);
+if (recognised.verdict !== "ours") {
+  fail("CHECK_E_DAEMON_RECOGNISED", JSON.stringify(recognised));
+}
+console.log(`CHECK_E_DAEMON_RECOGNISED: PASS (${recognised.commandLine})`);
 
 await runWithTimeout(["daemon", "stop"], 10_000);
 console.log("smoke test: ALL CHECKS PASSED");

@@ -95,7 +95,11 @@ test("a stale daemon.json is removed but the pid it names is never signalled", a
 
   const result = await stopRunningDaemon();
 
-  expect(result).toEqual({ state: "stale-removed" });
+  // This test process is alive and is not a daemon, so the file is stale and says why.
+  expect(result).toMatchObject({
+    state: "stale-removed",
+    pidReused: { pid: process.pid },
+  });
   expect(exists(process.pid)).toBe(true);
   expect(await readDaemonInfo()).toBeNull();
 });
@@ -131,11 +135,14 @@ test("a stale daemon.json whose port is now held by some OTHER server never gets
         buildId: "stale",
       });
       const result = await stopRunningDaemon();
-      expect(result).toEqual({ state: "stale-removed" });
+      expect(result).toMatchObject({
+        state: "stale-removed",
+        pidReused: { pid: process.pid },
+      });
       expect(exists(process.pid)).toBe(true);
       expect(await readDaemonInfo()).toBeNull();
     } finally {
       other.stop(true);
     }
   }
-});
+}, 60_000); // each pass looks the process up, which takes about a second on Windows

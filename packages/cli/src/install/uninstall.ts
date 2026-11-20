@@ -599,7 +599,17 @@ export async function runUninstall(
         `the daemon (pid ${stop.pid}) did not exit within 5 s; files it holds may be left, and uninstall can be run again`,
       ),
     );
+  } else if (stop.state === "unresponsive-left") {
+    log(
+      say(
+        `the daemon (pid ${stop.pid}) is still running and does not answer (${stop.why}) · its program files are not removed while it runs · stop it with "${CLI_NAME} daemon stop" (or end pid ${stop.pid} yourself), then run uninstall again`,
+      ),
+    );
   }
+  // The daemon is running from the installed binary and loading the sidecar: neither is deleted
+  // (or, on Windows, renamed for the helper to delete) from under it. Everything else goes, and
+  // the manifest keeps these two kinds so the next run finishes the job.
+  const daemonRunning = stop.state === "unresponsive-left" ? stop : null;
 
   // 7. The files. Entries that could not be removed stay in the manifest.
   const remainingFiles: ManifestFile[] = [];
@@ -619,6 +629,19 @@ export async function runUninstall(
   );
   const scheduledJobs: PendingDelete[] = [];
   for (const f of ordered) {
+    if (daemonRunning && (f.role === "binary" || f.role === "sidecar")) {
+      remainingFiles.push(f);
+      report.leftAlone.push({
+        path: f.path,
+        reason: `the daemon (pid ${daemonRunning.pid}) is still running`,
+      });
+      log(
+        say(
+          `left ${f.path} (the daemon, pid ${daemonRunning.pid}, is still running)`,
+        ),
+      );
+      continue;
+    }
     if (ownKey !== null && ownedKey(f.path) === ownKey) {
       const aside = await moveRunningExeAside(f);
       if (aside.state === "scheduled") {

@@ -26,6 +26,7 @@ import {
   deleteDaemonInfo,
   readDaemonInfo,
 } from "./daemon-info";
+import { inspectDaemonProcess, type ProcessInspector } from "./process-inspect";
 import { TOKEN_HEADER } from "./protocol";
 
 const ENTRYPOINT = join(import.meta.dir, "serve-entrypoint.ts");
@@ -137,6 +138,9 @@ export async function isDaemonRunning(
         // already gone
       }
     }
+    // A daemon that is alive but not answering keeps its record, so `fern daemon stop` can
+    // still judge it (and stop it if it is ours); deleting the file here would orphan it.
+    if (!alive && processExists(info.pid)) return null;
     await deleteDaemonInfo();
     return null;
   }
@@ -209,10 +213,27 @@ function sleep(ms: number): Promise<void> {
 
 export type StopResult =
   | { state: "not-running" }
-  /** daemon.json named a daemon that does not answer: the file is removed, the pid is never touched (it may have been recycled for an unrelated process). */
-  | { state: "stale-removed" }
+  /**
+   * daemon.json named a daemon that is gone, or a pid that now belongs to another program: the file is
+   * removed and the pid is never touched. `pidReused` is set in the second case.
+   */
+  | {
+      state: "stale-removed";
+      pidReused?: { pid: number; commandLine: string };
+    }
   | { state: "stopped"; pid: number; waitedMs: number }
-  | { state: "timeout"; pid: number };
+  | { state: "timeout"; pid: number }
+  /** The recorded daemon did not answer, was confirmed to be ours, and was stopped (only when the caller asked for that: `fern daemon stop`). */
+  | { state: "unresponsive-stopped"; pid: number; waitedMs: number }
+  /** The recorded pid is alive but does not answer and nothing was stopped; daemon.json is kept. `why` says what was found. */
+  | { state: "unresponsive-left"; pid: number; why: string };
+
+export interface StopOptions {
+  /** Stop a daemon that does not answer, once it is confirmed to be ours (command line and recorded port). Only `fern daemon stop` sets this; hooks and uninstall never do. */
+  killUnresponsive?: boolean;
+  /** Process lookups, replaceable in tests. */
+  inspector?: ProcessInspector;
+}
 
 function processExists(pid: number): boolean {
   try {
@@ -232,16 +253,82 @@ function processExists(pid: number): boolean {
  * what answers on the recorded port proves it is a fern daemon
  * (`isOurDaemon`), so a stale file can never get an unrelated process
  * killed. `timeoutMs` bounds the wait.
+ *
+ * A daemon that does not answer cannot prove it is ours, so that case is
+ * decided by looking at the process instead (`inspectDaemonProcess`): a
+ * pid that is gone, or now belongs to another program, makes the file stale
+ * and it is removed; a hung daemon of ours is stopped only if the caller asked
+ * (`options.killUnresponsive`) and both its command line and the recorded port
+ * confirm it; anything that cannot be confirmed leaves the process and
+ * daemon.json alone and says what was found.
  */
-export async function stopRunningDaemon(timeoutMs = 5000): Promise<StopResult> {
+export async function stopRunningDaemon(
+  timeoutMs = 5000,
+  options: StopOptions = {},
+): Promise<StopResult> {
   const info = await readDaemonInfo();
   if (!info) return { state: "not-running" };
-  // Verified, not merely answering: anything else is a stale file, and the pid
-  // it names is never signalled.
-  if (!(await isOurDaemon(info, AbortSignal.timeout(2000)))) {
+  // daemon.json is plain JSON anyone could have edited or damaged: a pid or port that is not a
+  // plain positive integer is never looked up or signalled (a pid of 0 or -1 would reach a whole
+  // process group), the file is simply stale.
+  if (!isPlainPid(info.pid) || !isPlainPort(info.port)) {
     await deleteDaemonInfo();
     return { state: "stale-removed" };
   }
+  // Verified, not merely answering: anything else is not signalled on the strength of an answer.
+  if (!(await isOurDaemon(info, AbortSignal.timeout(2000)))) {
+    if (!processExists(info.pid)) {
+      await deleteDaemonInfo();
+      return { state: "stale-removed" };
+    }
+    const found = await inspectDaemonProcess(
+      info.pid,
+      info.port,
+      options.inspector,
+    );
+    if (found.verdict === "foreign") {
+      await deleteDaemonInfo();
+      return {
+        state: "stale-removed",
+        pidReused: { pid: info.pid, commandLine: found.commandLine },
+      };
+    }
+    if (found.verdict === "unconfirmed") {
+      return { state: "unresponsive-left", pid: info.pid, why: found.why };
+    }
+    if (!options.killUnresponsive) {
+      return {
+        state: "unresponsive-left",
+        pid: info.pid,
+        why: `pid ${info.pid} is a ${CLI_NAME} daemon that does not answer`,
+      };
+    }
+    // A daemon that is only busy (the embedder warming up) can take longer than the first probe
+    // to answer; give it one more, longer chance before treating it as hung.
+    if (!(await isOurDaemon(info, AbortSignal.timeout(5000)))) {
+      return stopHungDaemon(info, timeoutMs, options.inspector);
+    }
+  }
+  return stopAnsweringDaemon(info, timeoutMs);
+}
+
+function isPlainPid(pid: unknown): pid is number {
+  return typeof pid === "number" && Number.isSafeInteger(pid) && pid > 1;
+}
+
+function isPlainPort(port: unknown): port is number {
+  return (
+    typeof port === "number" &&
+    Number.isInteger(port) &&
+    port >= 1 &&
+    port <= 65535
+  );
+}
+
+async function stopAnsweringDaemon(
+  info: DaemonInfo,
+  timeoutMs: number,
+): Promise<StopResult> {
   try {
     process.kill(info.pid);
   } catch {
@@ -256,6 +343,53 @@ export async function stopRunningDaemon(timeoutMs = 5000): Promise<StopResult> {
   }
   await deleteDaemonInfo();
   return { state: "stopped", pid: info.pid, waitedMs: Date.now() - started };
+}
+
+/**
+ * Stops a daemon already confirmed to be ours but not answering. A plain
+ * terminate first (Windows terminates outright); a hung process may ignore it,
+ * so after a short wait it is killed, but only after its command line is
+ * checked again, since the pid could have been reused in the meantime.
+ */
+async function stopHungDaemon(
+  info: DaemonInfo,
+  timeoutMs: number,
+  inspector?: ProcessInspector,
+): Promise<StopResult> {
+  const started = Date.now();
+  const waitGone = async (ms: number) => {
+    const until = Date.now() + ms;
+    while (processExists(info.pid) && Date.now() < until) await sleep(50);
+    return !processExists(info.pid);
+  };
+  try {
+    process.kill(info.pid);
+  } catch {
+    // already gone
+  }
+  if (!(await waitGone(Math.min(timeoutMs, 3000)))) {
+    const again = await inspectDaemonProcess(info.pid, info.port, inspector);
+    if (again.verdict !== "ours") {
+      return {
+        state: "unresponsive-left",
+        pid: info.pid,
+        why: `pid ${info.pid} did not exit after a terminate request, and could not be confirmed as the daemon again before a forced kill`,
+      };
+    }
+    try {
+      process.kill(info.pid, "SIGKILL");
+    } catch {
+      // already gone
+    }
+    await waitGone(timeoutMs);
+  }
+  if (processExists(info.pid)) return { state: "timeout", pid: info.pid };
+  await deleteDaemonInfo();
+  return {
+    state: "unresponsive-stopped",
+    pid: info.pid,
+    waitedMs: Date.now() - started,
+  };
 }
 
 /** Spawns (if needed) and polls until ready. For the CLI only — hooks must never call this; use spawnDaemonDetached() or the raw*Json helpers instead. */

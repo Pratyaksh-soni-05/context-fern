@@ -286,6 +286,76 @@ test("the daemon is stopped, and waited for, before any file is removed", async 
   expect(existsSync(bin("context-fern"))).toBe(false);
 });
 
+test("a daemon that is still running and does not answer: its binary and sidecar are not removed, it says so with the pid, and a re-run after it is stopped finishes the job", async () => {
+  const layout = await installFake(f);
+  const model = join(f.cache, "model-marker");
+  await mkdir(f.cache, { recursive: true });
+  await writeFile(model, "m");
+
+  const first = await runUninstall(
+    { yes: "true" },
+    uninstallDeps(f, {
+      stopDaemon: async () => ({
+        state: "unresponsive-left",
+        pid: 4242,
+        why: "pid 4242 does not hold port 7437",
+      }),
+    }),
+  );
+
+  // Nothing the running daemon uses was deleted (or renamed for a helper to delete).
+  expect(existsSync(bin("context-fern"))).toBe(true);
+  expect(existsSync(bin("fern"))).toBe(true); // the other name of the same program
+  expect(existsSync(sidecar())).toBe(true);
+  expect(first.exitCode).toBe(1);
+  expect(first.leftAlone.map((l) => l.path).sort()).toEqual(
+    [bin("context-fern"), bin("fern"), sidecar()].sort(),
+  );
+  expect(first.leftAlone.every((l) => l.reason.includes("pid 4242"))).toBe(
+    true,
+  );
+  // It says plainly that a daemon is running, which one, and what to do.
+  expect(out()).toContain("the daemon (pid 4242) is still running");
+  expect(out()).toContain('fern daemon stop"');
+  expect(out()).toContain("then run uninstall again");
+  // The manifest still lists them, so the next run knows.
+  const manifest = await readManifest(layout.manifestPath);
+  expect(manifest?.files.map((x) => x.role)).toEqual(
+    expect.arrayContaining(["binary", "sidecar"]),
+  );
+
+  // The daemon is stopped; running uninstall again finishes everything.
+  f.logs.length = 0;
+  const second = await runUninstall({ yes: "true" }, uninstallDeps(f));
+  expect(second.exitCode).toBe(0);
+  expect(second.leftAlone).toEqual([]);
+  expect(existsSync(bin("context-fern"))).toBe(false);
+  expect(existsSync(sidecar())).toBe(false);
+  expect(existsSync(f.prefix)).toBe(false);
+});
+
+test("the same when uninstall is itself running from the installed binary: that binary is not renamed for a helper either", async () => {
+  await installFake(f);
+  const installed = bin("context-fern");
+
+  const r = await runUninstall(
+    { yes: "true" },
+    uninstallDeps(f, {
+      execPath: installed, // our own running exe; the default startHelper throws if called
+      stopDaemon: async () => ({
+        state: "unresponsive-left",
+        pid: 4242,
+        why: "it does not answer",
+      }),
+    }),
+  );
+
+  expect(existsSync(installed)).toBe(true);
+  expect(r.scheduled).toEqual([]);
+  expect(r.exitCode).toBe(1);
+  expect(out()).toContain("the daemon (pid 4242) is still running");
+});
+
 test("user data is never touched: it is listed with the one command that deletes it", async () => {
   await installFake(f);
   const project = join(root, "work", "app");
