@@ -107,8 +107,7 @@ async function main(): Promise<number> {
       }
       case "mode": {
         const { runMode } = await import("./commands/frond");
-        await runMode(positional[0]);
-        return 0;
+        return runMode(positional[0]);
       }
       case "doctor": {
         const { runDoctor } = await import("./commands/doctor");

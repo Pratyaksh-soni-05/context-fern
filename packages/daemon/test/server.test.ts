@@ -741,6 +741,31 @@ test("/status's statusReceipt includes the leaflet count and mode, so dogfooding
   );
 });
 
+test("POST /mode isolate is a 400 that says isolate mode is not available, and the mode stays what it was", async () => {
+  await post("/prompt", projectBody({ prompt: "fix the login bug" }));
+  await post("/exchange-end", projectBody());
+
+  const refused = await post("/mode", projectBody({ mode: "isolate" }));
+  expect(refused.status).toBe(400);
+  expect(refused.json.error).toContain(
+    "isolate mode is not available in this release",
+  );
+
+  const unknown = await post("/mode", projectBody({ mode: "bogus" }));
+  expect(unknown.status).toBe(400);
+  expect(unknown.json.error).toContain("is not a mode");
+
+  const res = await get(
+    `/status?projectPath=${encodeURIComponent(projectDir?.path ?? "")}`,
+  );
+  expect(res.json.statusReceipt).toBe(
+    "fern ▸ stem · 0 fronds · 0 strays · 1 leaflet · suggest",
+  );
+
+  const ok = await post("/mode", projectBody({ mode: "observe" }));
+  expect(ok.status).toBe(200);
+});
+
 test("GET /tree without a projectPath is a 400, not a 500", async () => {
   const res = await get("/tree");
   expect(res.status).toBe(400);

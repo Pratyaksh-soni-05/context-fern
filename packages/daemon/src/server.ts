@@ -8,7 +8,7 @@
 // automatically, guarded by `import.meta.main`).
 
 import { basename } from "node:path";
-import type { Embedder, Mode } from "@context-fern/core";
+import type { Embedder } from "@context-fern/core";
 import { buildId } from "./build-id";
 import {
   daemonInfoPath,
@@ -425,8 +425,7 @@ async function route(
   if (req.method === "POST" && pathname === "/mode") {
     const body = await readJsonBody(req);
     const state = await projectFromBody(body);
-    const mode = body.mode as Mode;
-    await withProjectLock(state, (s) => handleMode(s, mode));
+    await withProjectLock(state, (s) => handleMode(s, body.mode));
     return jsonResponse({ ok: true });
   }
 

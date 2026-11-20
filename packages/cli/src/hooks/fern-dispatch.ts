@@ -16,7 +16,7 @@
 // this transitively, since hook.ts's dispatch imports this file for the
 // zero-turn "/fern" block path.
 
-import { CLI_NAME } from "@context-fern/core";
+import { CLI_NAME, checkMode } from "@context-fern/core";
 import {
   type DaemonInfo,
   ensureDaemonRunning,
@@ -143,11 +143,13 @@ export async function dispatchFernCommand(
   if (subcommand === "mode") {
     const mode = args[0];
     if (!mode) {
-      return `${CLI_NAME} ▸ usage: /${CLI_NAME} mode <observe|suggest|isolate>`;
+      return `${CLI_NAME} ▸ usage: /${CLI_NAME} mode <observe|suggest>`;
     }
+    const checked = checkMode(mode);
+    if (!checked.ok) return `${CLI_NAME} ▸ ${checked.message}`;
     const info = await daemonInfoOrThrow(ensureDaemon);
-    await rawPostJson(info, "/mode", { projectPath, mode });
-    return `${CLI_NAME} ▸ mode ${mode}`;
+    await rawPostJson(info, "/mode", { projectPath, mode: checked.mode });
+    return `${CLI_NAME} ▸ mode ${checked.mode}`;
   }
 
   if (subcommand === "status") {

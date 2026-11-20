@@ -82,13 +82,13 @@ const FERN_COMMAND_RE = new RegExp(
   "s",
 );
 
-/** `FERN_DEBUG=1` appends every hook's raw stdin to .fern/hook-debug.log — opt-in, since it's the project's own event stream, not something to leave on by default. */
+/** `${ENV_PREFIX}DEBUG=1` (FERN_DEBUG=1) appends every hook's raw stdin to .fern/hook-debug.log — opt-in, since it's the project's own event stream, not something to leave on by default. */
 async function debugLog(
   fernDir: string | null,
   event: string,
   raw: unknown,
 ): Promise<void> {
-  if (process.env.FERN_DEBUG !== "1" || !fernDir) return;
+  if (process.env[`${ENV_PREFIX}DEBUG`] !== "1" || !fernDir) return;
   try {
     const line = `${new Date().toISOString()} ${event} ${JSON.stringify(raw)}\n`;
     await appendFile(join(fernDir, "hook-debug.log"), line, "utf-8");

@@ -56,14 +56,14 @@ Stage 2 (optional, off by default, uncertain turns only): when enabled and Stage
 Rules:
 - Thresholds live in `.fern/config.toml`; defaults are set by the maintainer from ReplayBench, never hand-tuned in code.
 - Bias toward `continue`: `new` and `stray` require higher confidence than `continue`.
-- `continue` is the only action ever applied without the user asking for it. For `new` and `stray`, the precision bar above decides whether the decision is even shown as a suggestion; `return` and `combine` are always shown as a proposal, applied only after `/fern switch`/`[y]` as before. None of the five is auto-applied purely because the action is cheap to undo — low-precision `stray` suggestions were exactly what this rule was added to stop (`docs/decisions.md` 2026-10-26).
+- `continue` is the only action ever applied without the user asking for it. For `new` and `stray`, the precision bar above decides whether the decision is even shown as a suggestion; `return` and `combine` are always shown as a proposal, applied only after `/fern switch` as before (a bare `/fern new` or `/fern switch` with no name accepts the pending suggestion). None of the five is auto-applied purely because the action is cheap to undo — low-precision `stray` suggestions were exactly what this rule was added to stop (`docs/decisions.md` 2026-10-26).
 - A stray — whether suggested-and-accepted or set with `/fern stray`/the `?` prefix (§7) — is answered normally by the agent. It is excluded from every frond and, in isolate mode, from future payloads.
 
 ## 6. Modes
 | Mode | Changes model input? | Behaviour |
 | --- | --- | --- |
 | observe | no | grow the fern and briefs, show UI |
-| suggest | no (adds focus notes only) | `new`/`stray` are shown only once they clear the precision bar in §5; below it, the turn stays on the active frond until the user routes it manually. `return`/`combine` are always shown as a proposal (§5's older rule — no measured precision bar for them yet). Nothing is applied without `/fern new`, `/fern switch` or a `[y]` reply; restores briefs after compaction |
+| suggest | no (adds focus notes only) | `new`/`stray` are shown only once they clear the precision bar in §5; below it, the turn stays on the active frond until the user routes it manually. `return`/`combine` are always shown as a proposal (§5's older rule — no measured precision bar for them yet). Nothing is applied without `/fern new`, `/fern switch` or `/fern stray` (or the `?` prefix); a bare `/fern new` or `/fern switch` with no name accepts the pending suggestion, and there is no separate `[y]` reply; restores briefs after compaction |
 | isolate | yes | proxy assembles stem + active frond + tail; strays and resting fronds left out |
 
 ## 7. Hooks and commands (Claude Code plugin)

@@ -15,6 +15,7 @@ import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ENV_PREFIX } from "@context-fern/core";
 import {
   closeAllProjects,
   type DaemonHandle,
@@ -115,8 +116,8 @@ test("UserPromptSubmit no-ops when the daemon is down, even in an initialized pr
 test("a missing/non-string prompt field is logged under FERN_DEBUG, never routed as an empty string", async () => {
   const fixture = loadFixture("user-prompt-submit.plain.json");
   delete fixture.prompt;
-  const originalDebug = process.env.FERN_DEBUG;
-  process.env.FERN_DEBUG = "1";
+  const originalDebug = process.env[`${ENV_PREFIX}DEBUG`];
+  process.env[`${ENV_PREFIX}DEBUG`] = "1";
   try {
     const result = await handleUserPromptSubmit({
       ...fixture,
@@ -129,8 +130,8 @@ test("a missing/non-string prompt field is logged under FERN_DEBUG, never routed
     );
     expect(log).toContain("UserPromptSubmit:missing-prompt-field");
   } finally {
-    if (originalDebug === undefined) delete process.env.FERN_DEBUG;
-    else process.env.FERN_DEBUG = originalDebug;
+    if (originalDebug === undefined) delete process.env[`${ENV_PREFIX}DEBUG`];
+    else process.env[`${ENV_PREFIX}DEBUG`] = originalDebug;
   }
 });
 

@@ -1,4 +1,4 @@
-import { CLI_NAME } from "@context-fern/core";
+import { CLI_NAME, checkMode } from "@context-fern/core";
 import { postJson } from "@context-fern/daemon/client";
 
 function projectPath(): string {
@@ -42,11 +42,18 @@ export async function runMerge(name: string | undefined): Promise<void> {
   console.log(res.receipt);
 }
 
-export async function runMode(mode: string | undefined): Promise<void> {
+/** The exit code: 0 when the mode was set, 1 when it is not one a user can pick (isolate mode is not built) or is missing. Checked here first so a refused mode never starts a daemon. */
+export async function runMode(mode: string | undefined): Promise<number> {
   if (!mode) {
-    console.error(`usage: ${CLI_NAME} mode <observe|suggest|isolate>`);
-    return;
+    console.error(`usage: ${CLI_NAME} mode <observe|suggest>`);
+    return 1;
   }
-  await postJson("/mode", { projectPath: projectPath(), mode });
-  console.log(`${CLI_NAME} ▸ mode ${mode}`);
+  const checked = checkMode(mode);
+  if (!checked.ok) {
+    console.error(`${CLI_NAME} ▸ ${checked.message}`);
+    return 1;
+  }
+  await postJson("/mode", { projectPath: projectPath(), mode: checked.mode });
+  console.log(`${CLI_NAME} ▸ mode ${checked.mode}`);
+  return 0;
 }

@@ -14,9 +14,9 @@ const MODE_OPTIONS: ModeOption[] = [
   // The isolate-mode proxy is Phase 3 and doesn't exist yet
   // (packages/daemon/src/proxy/ — see CLAUDE.md's "ask before" list), so
   // choosing it here would set real router state with no corresponding
-  // backend behaviour. It stays listed (not removed) so the pill still
-  // shows the real mode correctly if something outside the UI (e.g.
-  // `fern mode isolate` from the CLI) has already set it.
+  // backend behaviour, and the daemon now refuses it. It stays listed (not
+  // removed) so the pill still shows the real mode if a stored session row
+  // already holds it (written by an older build).
   { value: "isolate", label: "isolate mode", disabled: true },
 ];
 

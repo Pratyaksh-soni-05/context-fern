@@ -28,8 +28,11 @@ bun run test:all         # test + test:e2e: run before pushing any UI string or 
 bun test packages/core   # one package (not for packages/ui; use `bun run test`)
 bun run dev              # daemon + UI in watch mode
 bun run build            # compile the fern binary for this OS
-uv run --project bench bench smoke   # small ReplayBench run
+uv run --project bench pytest        # the benchmark's own tests: fast, offline, synthetic fixtures (`bun run test` runs them too)
+uv run --project bench bench eval <streams.jsonl>   # score the router on a local spliced file: slow (about 20 min for 37k turns); the data is gitignored, not in the repo
 ```
+
+There is no `bench smoke` command. The benchmark's commands are `scrub`, `splice`, `label`, `label-export`, `eval`, `sweep` and `eval-stage2` (`bench/README.md`).
 
 ## Architecture rules
 - Monorepo packages: `core`, `store`, `embed`, `daemon`, `cli`, `plugin-claude-code`, `ui`. See `docs/architecture.md`.

@@ -3,7 +3,7 @@
 // detection is a terminal concern, not the daemon's).
 
 import { relative } from "node:path";
-import type { Mode } from "@context-fern/core";
+import { checkMode, type Mode } from "@context-fern/core";
 import {
   BRIEF_SECTIONS,
   type BriefSection,
@@ -232,10 +232,12 @@ ${degradedReceipt(health.reason)}`
 
 export async function handleMode(
   state: ProjectState,
-  mode: Mode,
+  requested: unknown,
 ): Promise<void> {
-  await state.store.setMode(state.sessionId, mode);
-  state.mode = mode;
+  const checked = checkMode(requested);
+  if (!checked.ok) throw new DaemonError(checked.message);
+  await state.store.setMode(state.sessionId, checked.mode);
+  state.mode = checked.mode;
 }
 
 export interface FrondBriefResponse {
@@ -254,7 +256,7 @@ export async function handleFrondBrief(
 ): Promise<FrondBriefResponse> {
   if (state.mode === "observe") {
     throw new DaemonError(
-      "Frond briefs aren't exposed to the model in observe mode — switch to suggest or isolate mode first.",
+      "Frond briefs aren't exposed to the model in observe mode — switch to suggest mode first.",
     );
   }
 
@@ -288,7 +290,7 @@ export async function handleSearch(
 ): Promise<{ results: SearchResult[] }> {
   if (state.mode === "observe") {
     throw new DaemonError(
-      "Frond search isn't exposed to the model in observe mode — switch to suggest or isolate mode first.",
+      "Frond search isn't exposed to the model in observe mode — switch to suggest mode first.",
     );
   }
 
