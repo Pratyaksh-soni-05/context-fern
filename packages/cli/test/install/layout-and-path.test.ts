@@ -13,6 +13,7 @@ import {
   RC_END,
   shellRcFile,
 } from "../../src/install/path-setup";
+import { win } from "./windows-test";
 
 let dir: string;
 beforeEach(async () => {
@@ -101,8 +102,8 @@ test("addToShellRc appends one marked block, keeps the user's lines, and is idem
 });
 
 // The Windows edit runs against a scratch registry key under HKCU, never
-// the real user PATH.
-const win = process.platform === "win32" ? test : test.skip;
+// the real user PATH. Each runs real powershell.exe, so `win` gives it a
+// 60 s timeout (see windows-test.ts).
 
 function regQuery(subKey: string): string {
   return execFileSync("reg.exe", ["query", `HKCU\\${subKey}`, "/v", "Path"], {

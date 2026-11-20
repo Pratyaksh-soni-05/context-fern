@@ -3,7 +3,7 @@
 // running executable with the real PowerShell cleanup helper. Skipped on other
 // platforms (CI runs them on windows-latest).
 
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -17,8 +17,7 @@ import { runUninstall } from "../../src/install/uninstall";
 import { removeFromWindowsUserPath } from "../../src/install/uninstall-path";
 import { startDeleteHelper } from "../../src/install/windows-self-delete";
 import { fixture, initDeps, uninstallDeps } from "./stub-helpers";
-
-const win = process.platform === "win32" ? test : test.skip;
+import { waitFor, win } from "./windows-test";
 
 function regQuery(subKey: string): { kind: string; value: string } {
   const out = execFileSync(
@@ -140,7 +139,7 @@ win(
       await Bun.sleep(300);
       expect(existsSync(good)).toBe(true);
 
-      for (let i = 0; i < 100 && existsSync(good); i++) await Bun.sleep(150);
+      await waitFor(() => !existsSync(good));
       expect(existsSync(good)).toBe(false);
       expect(existsSync(changed)).toBe(true); // changed since: never deleted
     } finally {
@@ -239,8 +238,7 @@ win(
 
       // Once the process is gone the helper removes the file, then the empty directories.
       sleeper.kill();
-      for (let i = 0; i < 100 && existsSync(layout.prefix); i++)
-        await Bun.sleep(150);
+      await waitFor(() => !existsSync(layout.prefix));
       expect(existsSync(join(layout.binDir, aside as string))).toBe(false);
       expect(existsSync(layout.prefix)).toBe(false);
     } finally {
@@ -364,7 +362,7 @@ win(
       startDeleteHelper([{ path: file, sha256: sha }], [], waiter.pid);
 
       // Released after ~1.5 s more; the helper must still be trying then.
-      for (let i = 0; i < 200 && existsSync(file); i++) await Bun.sleep(150);
+      await waitFor(() => !existsSync(file), 40_000);
       expect(existsSync(file)).toBe(false);
       await holder.exited;
     } finally {
