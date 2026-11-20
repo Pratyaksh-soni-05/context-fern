@@ -2,8 +2,8 @@
 // maintainer's Windows user directory, its 8.3 short form, a project folder
 // named after them, or an email address. The one deliberate appearance of a
 // personal account name is REPO_OWNER in packages/core/src/brand.ts (a GitHub
-// slug, stamped into package metadata from there). The docs are not scanned:
-// docs/decisions.md is a history and is reported on separately.
+// slug, stamped into package metadata from there). The one doc scanned is
+// docs/decisions.md; the other docs are not.
 //
 // The forbidden strings are assembled from parts so this file does not itself
 // contain them.
@@ -40,6 +40,7 @@ const SCANNED = [
   "e2e",
   "packaging",
   ".github",
+  "docs/decisions.md",
 ];
 const BINARY =
   /\.(png|jpg|jpeg|gif|ico|woff2?|onnx|node|dylib|so|dll|exe|zip|gz|tgz|whl|pdf)$/i;
@@ -67,4 +68,4 @@ test("no tracked source, test, script or workflow file contains the maintainer's
     }
   }
   expect(hits).toEqual([]);
-});
+}, 30_000); // reads every tracked source file; 5 s was not enough on a busy machine
