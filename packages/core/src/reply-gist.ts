@@ -29,10 +29,15 @@ const SECRET_PATTERNS: readonly RegExp[] = [
   /\bSG\.[A-Za-z0-9_-]{16,}/g, // SendGrid
   /\bya29\.[A-Za-z0-9._-]{16,}/g, // Google OAuth
   // "the password is hunter2" / "token was abc"
-  /\b(?:password|passwd|passphrase|secret|token|api[_-]?key|apikey|credentials?)\s+(?:is|was|are|=)\s+\S+/gi,
+  /\b(?:password|passwd|passphrase|secret|token|api[_-]?key|apikey|private[ _-]?key|credentials?)\s+(?:is|was|are|=)\s+\S+/gi,
+  // "Authorization: Basic abc" (any scheme word, any length of token): the generic pattern below stops at the first space and would leave the token itself.
+  // The scheme word is bounded (16), so a long run of letters cannot make this quadratic.
+  // A quoted value goes whole (it may hold spaces and escaped quotes); only an unquoted one takes the optional scheme word.
+  /(authorization)(?:\\?["'])?\s*[:=]\s*(?:\\"[^\\\r\n]*(?:\\(?!")[^\\\r\n]*){0,1024}\\"|"[^"\\\r\n]*(?:\\[^\r\n][^"\\\r\n]*){0,1024}"|\\'[^\\\r\n]*(?:\\(?!')[^\\\r\n]*){0,1024}\\'|'[^'\\\r\n]*(?:\\[^\r\n][^'\\\r\n]*){0,1024}'|(?:[A-Za-z]{1,16}\s+)?[^\s"',]+)/gi,
   // key = value / key: value, where the key names a credential: keep the key, drop the value (a quoted value goes whole).
   // No pattern in front of the keyword: the match starts at it, so a name of any length before it still works. A suffix up to 128 characters.
-  /((?:password|passwd|passphrase|secret|token|api[_-]?key|apikey|credential|authorization)[A-Za-z0-9_-]{0,128})\s*[:=]\s*(?:"[^"]*"|'[^']*'|\S+)/gi,
+  // The key may be quoted, as in JSON ("password": "x") and JSON inside a string (\"password\": \"x\"): an optional quote sits between the key and the colon.
+  /((?:password|passwd|passphrase|secret|token|api[_-]?key|apikey|private[_-]?key|credential|authorization)[A-Za-z0-9_-]{0,128})(?:\\?["'])?\s*[:=]\s*(?:\\"[^\\\r\n]*(?:\\(?!")[^\\\r\n]*){0,1024}\\"|"[^"\\\r\n]*(?:\\[^\r\n][^"\\\r\n]*){0,1024}"|\\'[^\\\r\n]*(?:\\(?!')[^\\\r\n]*){0,1024}\\'|'[^'\\\r\n]*(?:\\[^\r\n][^'\\\r\n]*){0,1024}'|\S+)/gi,
 ];
 
 /** Any long unbroken mixed token (hex digests, base64 blobs, random ids). The digit-and-letter test is in the replacer, not a lookahead, so there is nothing to bound. */
