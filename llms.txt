@@ -1,0 +1,25 @@
+# Context Fern
+
+> Context Fern is a free, local, open-source tool that keeps a long coding-agent session organised by topic. It splits a session into a fern (a stem plus a frond per topic), keeps each frond as a markdown brief that is restored after /clear or compaction, and logs every routing decision so it can be seen and undone. It works with Claude Code. Apache-2.0. No account, no hosted service, no telemetry on content.
+
+Status: not released yet. The install commands below work once the first release is published.
+
+Things that are true today:
+- Routing is manual-first. The user runs /fern new, /fern switch and /fern stray (or starts a prompt with ?). Suggestions to start a frond or set a stray aside appear only above a precision bar (a suggestion to return to an earlier frond is always shown), and nothing starts or switches a frond until the user says so. Every turn that is not routed stays on the active frond.
+- Modes: observe and suggest are available and work offline. Isolate mode (sending the model only the stem and the active frond) is planned and is not in this release. No token or cost saving is claimed.
+- Every routing decision is in a local journal; `fern undo` reverses the last one.
+- Data stays on the machine: `.fern/` in each project and `~/.fern`. There is no telemetry and no version check.
+- The router benchmark runs on spliced, synthetic data, not natural data, and its day-30 gate result is FAIL.
+- Platforms: Windows x64, Linux x64 and arm64 (glibc 2.28 or newer), macOS on Apple silicon (macOS 14 or newer). Binaries are not code-signed. Intel Macs are not supported.
+
+Install (once released): `pip install context-fern`, `uvx context-fern init`, or `npx context-fern init`.
+
+Vocabulary: frond (a topic thread), leaflet (one turn on a frond), stray (an off-topic question kept off every frond), stem (context shared by every frond), root (a memory from an earlier session; not built yet).
+
+## Docs
+- [README](README.md): what it is, install, how well routing works
+- [Spec](docs/spec.md): scope and acceptance
+- [Architecture](docs/architecture.md): how it is built
+- [Decisions](docs/decisions.md): why it is the way it is
+- [Telemetry and data](TELEMETRY.md): what is stored and where
+- [Security](SECURITY.md): reporting and how releases are built

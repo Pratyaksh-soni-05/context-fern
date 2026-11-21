@@ -168,7 +168,7 @@ var FRONDS = [
   { id: 'auth', name: 'auth-refactor', color: '#4F8A55', t: 0.22, side: 1, len: 330, ang: 22, turns: [2, 3, 8, 9, 17, 18, 20], goal: 'Move sessions to signed tokens', decided: 'Refresh tokens stay server-side; keys load from Vault', open: 'Token lifetime for mobile', files: 'auth/session.ts, api/login.ts, tests/auth.spec.ts' },
   { id: 'docker', name: 'docker-build', color: '#3D6FB3', t: 0.40, side: -1, len: 262, ang: 22, turns: [5, 6, 13, 19], goal: 'Find why the image build is slow', decided: 'Cache the install layer; pin the base image digest', open: 'Confirm the CI cache key', files: 'Dockerfile, .github/workflows/build.yml' },
   { id: 'flaky', name: 'flaky-test', color: '#7A5DC0', t: 0.56, side: 1, len: 214, ang: 24, turns: [10, 11, 12], merged: 12, goal: 'Stop checkout.spec failing at random', decided: 'A missing await caused a race; fixed and merged', open: 'None', files: 'tests/checkout.spec.ts' },
-  { id: 'readme', name: 'readme', color: '#B8862A', t: 0.72, side: -1, len: 172, ang: 24, turns: [15, 16], goal: 'Fix the install section', decided: 'List curl, npx, pip and brew', open: 'Windows instructions', files: 'README.md' }
+  { id: 'readme', name: 'readme', color: '#B8862A', t: 0.72, side: -1, len: 172, ang: 24, turns: [15, 16], goal: 'Fix the install section', decided: 'List pip, uvx and npx', open: 'Windows instructions', files: 'README.md' }
 ];
 var TURNS = [
   null,
@@ -187,7 +187,7 @@ var TURNS = [
   { b: 'docker', p: 'Pin the base image digest', a: 'return', c: '0.83', s: 'file overlap: Dockerfile', k: 5 },
   { b: 'stray', parent: 'stem', short: 'lunch spots?', p: 'Any good lunch spots near the office?', a: 'stray', c: '0.96', s: 'off-topic, no code context', k: 1 },
   { b: 'readme', p: 'The README install section is out of date', a: 'new', c: '0.74', s: 'low similarity, escalated to LLM', k: 6 },
-  { b: 'readme', p: 'List curl, npx, pip and brew', a: 'continue', c: '0.89', s: 'file overlap: README.md', k: 4 },
+  { b: 'readme', p: 'List pip, uvx and npx', a: 'continue', c: '0.89', s: 'file overlap: README.md', k: 4 },
   { b: 'auth', p: 'Does the docker change affect where signing keys load at build time?', a: 'combine', c: '0.71', s: 'two fronds match, escalated to LLM', k: 9, w: 'docker' },
   { b: 'auth', p: 'Rotate the keys via Vault in staging', a: 'continue', c: '0.90', s: 'root used: keys live in Vault', k: 7 },
   { b: 'docker', p: 'Push the slimmer image to staging', a: 'return', c: '0.85', s: 'cue: image, file overlap', k: 5 },
@@ -356,7 +356,7 @@ class Component extends DCLogic {
       detail = { kicker: 'turn ' + (selTurn < 10 ? '0' : '') + selTurn + ' · ' + (x.b === 'stray' ? 'stray from ' + nameOf(x.parent) : nameOf(x.b)), ink: inkOf(x.b), title: x.p, fields: [
         { k: 'routing', v: x.a + ' · confidence ' + x.c + (x.w ? ' · grafted with ' + nameOf(x.w) : '') },
         { k: 'why', v: x.s },
-        { k: 'router stage', v: x.s.indexOf('escalat') >= 0 ? 'Stage 2 · small LLM on your key' : 'Stage 0 · local, no API call' },
+        { k: 'router stage', v: x.s.indexOf('escalat') >= 0 ? 'Stage 2 · small local model' : 'Stage 0 · local, no API call' },
         { k: 'context this turn', v: x.k + 'k tokens' + (x.b === 'stray' ? ' · answered without touching any frond' : '') }
       ] };
     } else if (selFrond) {
@@ -377,7 +377,7 @@ class Component extends DCLogic {
     var mergedN = FRONDS.filter(function (f) { return f.merged && T >= f.merged; }).length;
     var rootsUsed = ROOTS.filter(function (m) { return m.turn <= T; }).length;
     var stats = [
-      { k: 'kept out of this turn', note: 'isolate', v: out + 'K', color: '#3E7344', cells: mk(full ? out / full : 0, '#4F8A55') },
+      { k: 'kept out of this turn', note: 'isolate · planned', v: 'n/a', color: MUTE, cells: mk(0, ASH) },
       { k: 'fronds', note: mergedN + ' merged', v: String(frondsLive), color: '#141413', cells: mk(frondsLive / 4, '#141413') },
       { k: 'strays caught', note: 'off-topic', v: String(strayList.length), color: EMBER_INK, cells: mk(strayList.length / 3, EMBER) },
       { k: 'roots used', note: 'memory', v: String(rootsUsed), color: MUTE, cells: mk(rootsUsed / 3, ASH) }

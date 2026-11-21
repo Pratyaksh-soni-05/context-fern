@@ -1,6 +1,6 @@
 # Context Fern spec v0.3
 
-Status: design locked 2026-10-23; routing default revised 2026-10-26 (manual-first — see §5, §6, §16 and `bench/results/day30-report.md`). Working CLI name `fern` (held in `packages/core/src/brand.ts`; may change before launch). Everything here is in scope for the launch build unless listed under Out of scope.
+Status: design locked 2026-10-23; routing default revised 2026-10-26 (manual-first — see §5, §6, §16 and `bench/results/day30-report.md`). Working CLI name `fern` (held in `packages/core/src/brand.ts`; may change before launch). Everything here is in scope for the launch build unless listed under Out of scope, except isolate mode (§3 item 6, §6, §8), which is planned and not in the launch build (2026-11-20).
 
 Design source of truth: `docs/design/DESIGN.md`, `docs/design/tokens.css`, and the reference boards in `docs/design/blueprint/`.
 
@@ -17,7 +17,7 @@ Later: Codex and OpenCode users; agent builders using SDK middleware.
 3. Every routing decision appears in the journal with action, signals and confidence, and `fern undo` reverses the last decision.
 4. After `/clear` or compaction, the active frond's brief is restored into the next turn.
 5. `fern ui` shows the Fern, List and Categories views, the inspector and the stats row, matching `docs/design/`; meets WCAG 2.2 AA.
-6. Isolate mode (opt-in) passes the cache property tests and forwards streaming responses without changing content.
+6. Isolate mode is planned and is not in the launch build. No launch document, UI string or site copy may say it exists, and none may claim a token or cost saving; the claim waits for the Day 60 gate in §16. Its design stays in §8 and, when it is built, it must pass the cache property tests and forward streaming responses without changing content.
 7. `fern uninstall` removes exactly what `context-fern init` recorded in its install manifest (the binary, its native files, the model it copied, the PATH entry, the `statusLine` entry if it is the command init recorded adding, and the plugin it added) and nothing else, and never touches project `.fern/` folders or `~/.fern`: it prints where that data lives and the one command that deletes it, and the user runs it.
 8. ReplayBench harness, scrubbed traces and results are published with the release.
 9. Launch install paths are exactly three, chosen because a bare registry package name never needs an owner or organisation in the command: `pip install context-fern`, `uvx context-fern init`, `npx context-fern init`. Any of the three also sets up the Claude Code plugin — `context-fern init` adds the marketplace and installs the plugin through the `claude` CLI when it's present, otherwise prints the exact manual steps. `install.sh`, `install.ps1`, a Homebrew tap, and a standalone `/plugin marketplace add` command all name a GitHub owner or a domain in the command itself and move to post-launch, once the repo has transferred to an organisation or a domain exists (§14; `docs/decisions.md`).
@@ -64,7 +64,7 @@ Rules:
 | --- | --- | --- |
 | observe | no | grow the fern and briefs, show UI |
 | suggest | no (adds focus notes only) | `new`/`stray` are shown only once they clear the precision bar in §5; below it, the turn stays on the active frond until the user routes it manually. `return`/`combine` are always shown as a proposal (§5's older rule — no measured precision bar for them yet). Nothing is applied without `/fern new`, `/fern switch` or `/fern stray` (or the `?` prefix); a bare `/fern new` or `/fern switch` with no name accepts the pending suggestion, and there is no separate `[y]` reply; restores briefs after compaction |
-| isolate | yes | proxy assembles stem + active frond + tail; strays and resting fronds left out |
+| isolate (planned, not in this release) | yes | proxy assembles stem + active frond + tail; strays and resting fronds left out |
 
 ## 7. Hooks and commands (Claude Code plugin)
 - `UserPromptSubmit`: if the prompt starts with `/fern`, dispatch it against the daemon directly (or run `fern init` locally) and return `decision: "block"` with the receipt as `reason` — zero model turns, the one exception to "never block" below (it's a command, not a routing decision on a real prompt; see `docs/decisions.md`). Otherwise, POST to daemon `/prompt` and return the receipt as the top-level `systemMessage` (user-visible, omitted entirely when there's nothing to show — quiet by default) and, outside observe mode, a minimal focus note as `hookSpecificOutput.additionalContext` (model-only). Never block a real prompt. 300 ms internal timeout on this passive path; on timeout or a down daemon, pass through silently.
@@ -87,7 +87,9 @@ Receipts (exact formats, see DESIGN.md §Voice):
 - `fern ▸ already on auth-refactor` (`/fern switch` to the frond you are on: nothing is recorded)
 Statusline: `fern ▸ <frond> · <n> fronds · <s> strays · <sent>/<full> ctx` (the `.../... ctx` clause is omitted until isolate-mode token accounting is real — never a fabricated `0/0`). Claude Code plugins can't register a statusline directly (confirmed against the docs); `fern statusline --install` writes the equivalent command into the user's own Claude Code settings instead, never overwriting an existing one.
 
-## 8. Assembly (isolate mode)
+## 8. Assembly (isolate mode — planned, not in this release)
+This section is the design for isolate mode, which is not in the launch build (§3 item 6; `docs/decisions.md`, 2026-11-20). Nothing here is implemented yet.
+
 Order: tools → system → stem messages → active frond messages → tail (brief, recalled snippets, router note in the latest user turn).
 Cache breakpoints: after system, after stem, after frond.
 Property tests:
@@ -143,5 +145,5 @@ Desktop app, hosted service, accounts, cross-user memory, writing to roots, auto
 - Launch: install-to-first-frond (one install command to a working routed session with its first frond, whether created manually or by a suggestion the user accepted) under 2 minutes on a clean macOS, Ubuntu and Windows machine (restates §3's acceptance item 1 as a hard gate, not just a one-time acceptance check).
 - Day 30: suggestion precision ≥ 0.85 on natural (real, hand-labelled) data for both `new` and `stray`, at whatever recall the threshold yields — the manual-first default succeeds on trustworthy suggestions, not on auto-routing every turn. Until natural labels exist, the interim bar on spliced/synthetic data is "within 0.05 F1 of the measured ceiling" (`docs/decisions.md`, 2026-10-26); the 2026-10-26 measurement on spliced data missed even that interim bar for Stage-2-assisted auto-routing (best F1(new) 0.643 vs a 0.782 bar — `bench/results/day30-report.md`). Stage 2, when a user enables it with their own model, is held to this same suggestion-precision bar, not a separate F1 target.
 - Day 30: D30 retention of active installers ≥ 20% (draft; moved up from the previous draft's Day 90 slot — a D30 figure is itself a day-30 measurement).
-- Day 60: isolate mode task success ≥ linear and ≥ 25% fewer input tokens at neutral or better cost on long or distant-tangent sessions (draft).
+- Day 60 (only once isolate mode is built; it is not in the launch build): isolate mode task success ≥ linear and ≥ 25% fewer input tokens at neutral or better cost on long or distant-tangent sessions (draft).
 - Day 90: < 30% of decisions undone (draft).
