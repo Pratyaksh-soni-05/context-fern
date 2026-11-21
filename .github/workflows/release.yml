@@ -61,7 +61,7 @@ env:
 
 jobs:
   config:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       matrix: ${{ steps.resolve.outputs.matrix }}
@@ -106,7 +106,7 @@ jobs:
     runs-on: ${{ matrix.runs-on }}
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
@@ -156,7 +156,7 @@ jobs:
         shell: bash
         run: tar czf "context-fern-${{ matrix.target }}.tar.gz" -C dist .
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: context-fern-${{ matrix.target }}
           path: context-fern-${{ matrix.target }}.tar.gz
@@ -172,7 +172,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
@@ -210,7 +210,7 @@ jobs:
       - name: package
         run: tar czf context-fern-linux-arm64.tar.gz -C dist .
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: context-fern-linux-arm64
           path: context-fern-linux-arm64.tar.gz
@@ -218,10 +218,10 @@ jobs:
           retention-days: 3
 
   model:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
@@ -234,7 +234,7 @@ jobs:
         run: |
           tar czf model-xenova-all-MiniLM-L6-v2-q8.tar.gz -C model-asset .
           du -sh model-xenova-all-MiniLM-L6-v2-q8.tar.gz
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: context-fern-model
           path: model-xenova-all-MiniLM-L6-v2-q8.tar.gz
@@ -250,10 +250,10 @@ jobs:
       !cancelled() && needs.model.result == 'success' &&
       (github.event_name == 'workflow_dispatch' ||
        (needs.build.result == 'success' && needs.build-arm64.result == 'success'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: artifacts
           pattern: "context-fern-*"
@@ -266,7 +266,7 @@ jobs:
           for f in context-fern-*.tar.gz; do tar tzvf "$f"; done
           sha256sum *.tar.gz > SHA-256SUMS && cat SHA-256SUMS
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-bundle
           path: release/
@@ -279,17 +279,17 @@ jobs:
   package:
     needs: checksums
     if: ${{ !cancelled() && needs.checksums.result == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - name: bun install
         run: bun install --frozen-lockfile
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-bundle
           path: release
@@ -353,7 +353,7 @@ jobs:
       - name: checksums of the packages
         run: cd packages-out && sha256sum npm/* pypi/* | tee SHA-256SUMS-packages
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: packages
           path: packages-out/
@@ -369,17 +369,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-24.04, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - name: bun install
         run: bun install --frozen-lockfile
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: packages
           path: packages
@@ -417,7 +417,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-bundle
           path: release
@@ -453,13 +453,13 @@ jobs:
       contains(github.ref_name, '-rc.') &&
       github.event.repository.private == false &&
       vars.PUBLISH_TEST_ENABLED == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: testpypi
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: packages
           path: packages
@@ -485,13 +485,13 @@ jobs:
       !contains(github.ref_name, '-rc.') &&
       github.event.repository.private == false &&
       vars.PUBLISH_ENABLED == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: pypi
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: packages
           path: packages
@@ -510,18 +510,18 @@ jobs:
       startsWith(github.ref, 'refs/tags/v') &&
       github.event.repository.private == false &&
       vars.PUBLISH_ENABLED == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: npm
     permissions:
       id-token: write
       contents: read
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: packages
           path: packages
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           registry-url: https://registry.npmjs.org
@@ -581,17 +581,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
+        os: [ubuntu-24.04, ubuntu-24.04-arm, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
       - name: verify the registry and a clean install
@@ -621,7 +621,7 @@ jobs:
       startsWith(github.ref, 'refs/tags/v') &&
       github.event.repository.private == false &&
       vars.PUBLISH_ENABLED == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: release
     permissions:
@@ -629,7 +629,7 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-bundle
           path: release

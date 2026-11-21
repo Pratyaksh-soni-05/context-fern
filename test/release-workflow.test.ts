@@ -196,7 +196,7 @@ test("the registry verification runs after publish-npm on all four platforms and
   const j = job("verify-npm");
   expect(j).toContain("needs: [package, publish-npm]");
   for (const os of [
-    "ubuntu-latest",
+    "ubuntu-24.04",
     "ubuntu-24.04-arm",
     "windows-latest",
     "macos-latest",
@@ -214,4 +214,53 @@ test("the packages are stamped with the release's model version, and the dry run
     `--dry-run --access public ${D}{NPM_TAG:+--tag "$NPM_TAG"}`,
   );
   expect(j).not.toContain("cat packaging/MODEL_VERSION");
+});
+
+test("no release job runs on a moving ubuntu-latest: every Linux runner is pinned to ubuntu-24.04", () => {
+  expect(yml).not.toContain("ubuntu-latest");
+  for (const name of ["config", "model", "checksums", "package"]) {
+    expect(job(name), name).toContain("runs-on: ubuntu-24.04\n");
+  }
+});
+
+test("every action is pinned by a full commit SHA with its version in a comment, and the actions that were on Node 20 are the Node 24 releases", () => {
+  const uses = [...yml.matchAll(/^\s*(?:- )?uses: (\S+)@(\S+) # (\S+)\s*$/gm)];
+  expect(uses.length).toBeGreaterThan(15);
+  for (const [line, action, ref, version] of uses) {
+    expect(ref, line).toMatch(/^[0-9a-f]{40}$/);
+    expect(version, line).toMatch(/^v\d/);
+    expect(action, line).not.toContain("@");
+  }
+  // SHAs checked against the upstream tags (docs/decisions.md): all of these declare `using: node24`.
+  const pinned = (action: string) =>
+    new Set(uses.filter((u) => u[1] === action).map((u) => `${u[2]} ${u[3]}`));
+  expect(pinned("actions/checkout")).toEqual(
+    new Set(["3d3c42e5aac5ba805825da76410c181273ba90b1 v7.0.1"]),
+  );
+  expect(pinned("actions/upload-artifact")).toEqual(
+    new Set(["cf430e030ddbb5b0abf93d22962f4752f3646cd9 v7.0.2"]),
+  );
+  expect(pinned("actions/download-artifact")).toEqual(
+    new Set(["9000827ccba6bdab643e8b6fd33ac0654aef8333 v8.0.2"]),
+  );
+  expect(pinned("actions/setup-node")).toEqual(
+    new Set(["949feb2413d6458794dcd2491c4babbbce0c15c1 v7.1.0"]),
+  );
+});
+
+test("ci.yml uses the same checkout and a Node 24 setup-uv, and keeps its two required check names", () => {
+  const ci = readFileSync(
+    join(import.meta.dir, "../.github/workflows/ci.yml"),
+    "utf-8",
+  );
+  expect(ci).toContain(
+    "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
+  );
+  expect(ci).toContain(
+    "astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3",
+  );
+  // the required checks are "test (ubuntu-latest)" and "test (windows-latest)": the job name plus matrix.os
+  expect(ci).toMatch(/^ {2}test:\n {4}strategy:/m);
+  expect(ci).toContain("os: [ubuntu-latest, windows-latest]");
+  expect(ci).not.toMatch(/^ {4}name:/m);
 });
