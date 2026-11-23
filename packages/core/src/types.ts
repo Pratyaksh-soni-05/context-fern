@@ -62,11 +62,45 @@ export interface Stage2CallLog {
 }
 
 /**
- * Everything `.fern/journal.jsonl` can carry: a Stage 2 LLM call, or a
- * full routing `Decision`. See docs/decisions.md, 2026-10-26 (closing the
- * "Decision journaling/undo stays out of scope" gap from 2026-10-25).
+ * Journal record for one mode change (`fern mode`, `/fern mode`, the UI's
+ * mode pill): a mode decides what the model is shown, so changing it is
+ * journaled like any action that changes what the model sees (CLAUDE.md's
+ * accountability rule). It carries the mode before and after and the active
+ * frond, never any prompt text. It is not a routing `Decision`: there is no
+ * leaflet, no router signal and no token count behind it, so those fields
+ * are explicit nulls and `fern undo` never reverses it; its inverse is
+ * `fern mode <before>`, which is itself journaled. See docs/decisions.md,
+ * 2026-11-20 (mode changes are journaled).
  */
-export type JournalEntry = Stage2CallLog | Decision;
+export interface ModeChangeLog {
+  id: string;
+  sessionId: string;
+  action: "mode";
+  /** The active frond when the mode changed; null only if the session has none. */
+  frondId: string | null;
+  /** A mode change is not a turn. */
+  leafletId: null;
+  before: Mode;
+  after: Mode;
+  /** A direct command, never the router. */
+  stage: "manual";
+  signals: string[];
+  confidence: 1;
+  /** Unknown: the effect on what the model sees shows on the next turn. */
+  tokensBefore: null;
+  tokensAfter: null;
+  cacheReadTokens: null;
+  cacheWriteTokens: null;
+  createdAt: string;
+}
+
+/**
+ * Everything `.fern/journal.jsonl` can carry: a Stage 2 LLM call, a full
+ * routing `Decision`, or a mode change. See docs/decisions.md, 2026-10-26
+ * (closing the "Decision journaling/undo stays out of scope" gap from
+ * 2026-10-25) and 2026-11-20 (mode changes).
+ */
+export type JournalEntry = Stage2CallLog | Decision | ModeChangeLog;
 
 /** Implemented in packages/store. Declared here for the same inward-dependency reason as Embedder/LlmClient. */
 export interface JournalSink {

@@ -49,6 +49,7 @@ import {
   alreadyOnFrondReceipt,
   alreadyOnReceipt,
   mergedReceipt,
+  modeNotUndoneNote,
   newSuggestionReceipt,
   onFrondReceipt,
   returnedReceipt,
@@ -783,10 +784,25 @@ ${result.receipt}`
 export async function handleUndo(
   state: ProjectState,
 ): Promise<{ receipt: string }> {
-  const decision = await state.store.undoLast(state.sessionId);
+  // Read before undoing: the undo is itself journaled, so afterwards the newest entry would be the undo.
+  const latest = await state.store.latestJournalEntry();
+  const note =
+    latest && "action" in latest && latest.action === "mode"
+      ? modeNotUndoneNote(latest.before)
+      : null;
+  let decision: Awaited<ReturnType<typeof state.store.undoLast>>;
+  try {
+    decision = await state.store.undoLast(state.sessionId);
+  } catch (err) {
+    if (note && err instanceof Error) {
+      throw new Error(`${err.message} · ${note}`);
+    }
+    throw err;
+  }
   state.routerState = await state.store.loadRouterState(state.sessionId);
   await refreshFrondNames(state);
-  return { receipt: undoneReceipt(decision.action) };
+  const receipt = undoneReceipt(decision.action);
+  return { receipt: note ? `${receipt} · ${note}` : receipt };
 }
 
 export async function handleMerge(

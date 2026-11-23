@@ -119,6 +119,11 @@ export function undoneReceipt(action: string): string {
   return `${PREFIX} undone · ${action} reversed`;
 }
 
+/** Appended to an undo receipt (or the nothing-to-undo message) when the newest journal entry is a mode change: undo reverses routing decisions only, so say so and name the one command that goes back. */
+export function modeNotUndoneNote(before: string): string {
+  return `mode changes are not undone by ${CLI_NAME} undo (use ${CLI_NAME} mode ${before})`;
+}
+
 export function mergedReceipt(frondName: string): string {
   return `${PREFIX} merged ${frondName} · its Decided section joined the stem`;
 }

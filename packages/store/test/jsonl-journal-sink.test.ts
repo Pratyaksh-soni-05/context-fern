@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { readFile, rm } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { JsonlJournalSink } from "../src/jsonl-journal-sink";
@@ -52,4 +52,44 @@ test("record() appends across multiple sink instances pointed at the same path",
 
   const content = await readFile(path, "utf-8");
   expect(content.trim().split("\n")).toHaveLength(2);
+});
+
+test("readLast() is null for a missing file, an empty file and a last line that is not JSON", async () => {
+  testDir = join(tmpdir(), `fern-journal-test-last-${Date.now()}`);
+  const path = join(testDir, "journal.jsonl");
+  const sink = new JsonlJournalSink(path);
+  expect(await sink.readLast()).toBeNull();
+
+  await mkdir(testDir, { recursive: true });
+  await writeFile(path, "", "utf-8");
+  expect(await sink.readLast()).toBeNull();
+
+  await writeFile(path, `${JSON.stringify(entry())}\nnot json\n`, "utf-8");
+  expect(await sink.readLast()).toBeNull();
+});
+
+test("readLast() returns the newest entry, however many came before it", async () => {
+  testDir = join(tmpdir(), `fern-journal-test-last2-${Date.now()}`);
+  const sink = new JsonlJournalSink(join(testDir, "journal.jsonl"));
+  for (let i = 0; i < 50; i++) await sink.record(entry({ inputTokens: i }));
+  const last = (await sink.readLast()) as { inputTokens: number };
+  expect(last.inputTokens).toBe(49);
+});
+
+test("readLast() reads a last line longer than the first chunk, and a single-line file", async () => {
+  testDir = join(tmpdir(), `fern-journal-test-last3-${Date.now()}`);
+  const sink = new JsonlJournalSink(join(testDir, "journal.jsonl"));
+  await sink.record(entry({ inputTokens: 1 }));
+  expect(((await sink.readLast()) as { inputTokens: number }).inputTokens).toBe(
+    1,
+  );
+
+  const long = "x".repeat(40 * 1024);
+  await sink.record(entry({ inputTokens: 2, model: long }));
+  const last = (await sink.readLast()) as {
+    inputTokens: number;
+    model: string;
+  };
+  expect(last.inputTokens).toBe(2);
+  expect(last.model.length).toBe(long.length);
 });

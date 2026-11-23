@@ -292,6 +292,155 @@ test("getMostRecentLeaflet returns the latest leaflet by index, or null for an e
   expect(latest?.id).toBe(second.id);
 });
 
+async function journalLines(
+  fernDir: string,
+): Promise<Record<string, unknown>[]> {
+  const fs = await import("node:fs/promises");
+  const text = await fs
+    .readFile(join(fernDir, "journal.jsonl"), "utf-8")
+    .catch(() => "");
+  return text
+    .split("\n")
+    .filter((l) => l.length > 0)
+    .map((l) => JSON.parse(l) as Record<string, unknown>);
+}
+
+test("a mode change is journaled with the mode before and after and the active frond, and nothing else about it", async () => {
+  dir = await withTempFernDir();
+  store = await openFernStore(dir.path);
+  const session = await store.createSession({
+    agent: "claude-code",
+    projectPath: "/repo",
+    mode: "suggest",
+  });
+  const stem = (await store.getTree(session.id)).fronds[0];
+
+  await store.setMode(session.id, "observe");
+
+  const lines = await journalLines(dir.path);
+  expect(lines).toHaveLength(1);
+  const entry = lines[0] as Record<string, unknown>;
+  expect(Object.keys(entry).sort()).toEqual(
+    [
+      "action",
+      "after",
+      "before",
+      "cacheReadTokens",
+      "cacheWriteTokens",
+      "confidence",
+      "createdAt",
+      "frondId",
+      "id",
+      "leafletId",
+      "sessionId",
+      "signals",
+      "stage",
+      "tokensAfter",
+      "tokensBefore",
+    ].sort(),
+  );
+  expect(entry).toMatchObject({
+    action: "mode",
+    before: "suggest",
+    after: "observe",
+    sessionId: session.id,
+    frondId: stem?.id,
+    leafletId: null,
+    stage: "manual",
+    tokensBefore: null,
+    tokensAfter: null,
+  });
+  expect(typeof entry.id).toBe("string");
+  expect(Number.isNaN(Date.parse(entry.createdAt as string))).toBe(false);
+});
+
+test("setting the mode a session already has changes nothing and journals nothing", async () => {
+  dir = await withTempFernDir();
+  store = await openFernStore(dir.path);
+  const session = await store.createSession({
+    agent: "claude-code",
+    projectPath: "/repo",
+    mode: "suggest",
+  });
+
+  await store.setMode(session.id, "suggest");
+
+  expect(await journalLines(dir.path)).toEqual([]);
+});
+
+test("fern undo does not reverse a mode change; setting the mode back is its inverse and is journaled too", async () => {
+  dir = await withTempFernDir();
+  store = await openFernStore(dir.path);
+  const session = await store.createSession({
+    agent: "claude-code",
+    projectPath: "/repo",
+    mode: "suggest",
+  });
+  await store.setMode(session.id, "observe");
+
+  // `fern undo` only reverses routing decisions, so with only a mode change on record there is nothing for it to undo.
+  await expect(store.undoLast(session.id)).rejects.toThrow("Nothing to undo");
+  const afterUndo = store.db
+    .query("SELECT mode FROM sessions WHERE id = ?")
+    .get(session.id) as { mode: string };
+  expect(afterUndo.mode).toBe("observe");
+
+  // The inverse is `fern mode <before>`, which the entry names.
+  const first = (await journalLines(dir.path))[0] as Record<string, unknown>;
+  await store.setMode(session.id, first.before as "suggest");
+  const row = store.db
+    .query("SELECT mode FROM sessions WHERE id = ?")
+    .get(session.id) as { mode: string };
+  expect(row.mode).toBe("suggest");
+  const lines = await journalLines(dir.path);
+  expect(lines.map((l) => [l.before, l.after])).toEqual([
+    ["suggest", "observe"],
+    ["observe", "suggest"],
+  ]);
+});
+
+test("a value that is not a mode is refused by the store: nothing is journaled and the mode stays", async () => {
+  dir = await withTempFernDir();
+  store = await openFernStore(dir.path);
+  const session = await store.createSession({
+    agent: "claude-code",
+    projectPath: "/repo",
+    mode: "suggest",
+  });
+
+  for (const bad of ["banana", "", "Suggest", undefined, 3]) {
+    await expect(
+      store.setMode(session.id, bad as unknown as "suggest"),
+    ).rejects.toThrow("Not a mode");
+  }
+
+  expect(await journalLines(dir.path)).toEqual([]);
+  const row = store.db
+    .query("SELECT mode FROM sessions WHERE id = ?")
+    .get(session.id) as { mode: string };
+  expect(row.mode).toBe("suggest");
+});
+
+test("if the journal cannot be written, the mode change fails and the stored mode does not change", async () => {
+  dir = await withTempFernDir();
+  const fs = await import("node:fs/promises");
+  // A directory where the journal file should be makes every append fail.
+  await fs.mkdir(join(dir.path, "journal.jsonl"), { recursive: true });
+  store = await openFernStore(dir.path);
+  const session = await store.createSession({
+    agent: "claude-code",
+    projectPath: "/repo",
+    mode: "suggest",
+  });
+
+  await expect(store.setMode(session.id, "observe")).rejects.toThrow();
+
+  const row = store.db
+    .query("SELECT mode FROM sessions WHERE id = ?")
+    .get(session.id) as { mode: string };
+  expect(row.mode).toBe("suggest");
+});
+
 test("setMode updates the session's mode", async () => {
   dir = await withTempFernDir();
   store = await openFernStore(dir.path);

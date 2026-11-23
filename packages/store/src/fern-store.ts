@@ -15,6 +15,7 @@ import {
   type Frond,
   type FrondStatus,
   hasMeasuredScore,
+  type JournalEntry,
   type Leaflet,
   type Mode,
   type RouterState,
@@ -258,6 +259,8 @@ export interface FernStore {
   getMostRecentLeaflet(sessionId: string): Promise<Leaflet | null>;
   markStray(leafletId: string, strayFrom: string | null): Promise<Decision>;
   undoLast(sessionId: string): Promise<Decision>;
+  /** The newest line of `.fern/journal.jsonl` (a routing decision, a Stage 2 call or a mode change), or null if there is none. Reads only the end of the file. */
+  latestJournalEntry(): Promise<JournalEntry | null>;
   mergeFrond(frondId: string): Promise<Decision>;
   /** `fern ui`'s List view — windowed, so a session with thousands of leaflets never has to render (or query) them all at once. */
   listLeafletsWithDecisions(
@@ -663,6 +666,36 @@ export async function openFernStore(fernDir: string): Promise<FernStore> {
   }
 
   async function setMode(sessionId: string, mode: Mode): Promise<void> {
+    // The journal must never carry a value that is not a Mode, whatever the caller checked.
+    if (mode !== "observe" && mode !== "suggest" && mode !== "isolate") {
+      throw new Error(
+        `Not a mode: ${JSON.stringify(String(mode)).slice(0, 60)}`,
+      );
+    }
+    const session = getSessionRow(sessionId);
+    const before = session.mode as Mode;
+    // Setting the mode it already has changes nothing the model sees, so it
+    // is not journaled.
+    if (before === mode) return;
+    // Journal first, then change the row: if the journal write fails, nothing
+    // has changed and the caller's cached mode still matches the stored one.
+    await journal.record({
+      id: newId(),
+      sessionId,
+      action: "mode",
+      frondId: session.active_frond_id,
+      leafletId: null,
+      before,
+      after: mode,
+      stage: "manual",
+      signals: ["manual-command"],
+      confidence: 1,
+      tokensBefore: null,
+      tokensAfter: null,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      createdAt: nowIso(),
+    });
     db.query("UPDATE sessions SET mode = ? WHERE id = ?").run(mode, sessionId);
   }
 
@@ -1086,6 +1119,7 @@ export async function openFernStore(fernDir: string): Promise<FernStore> {
     getMostRecentLeaflet,
     markStray,
     undoLast,
+    latestJournalEntry: () => journal.readLast(),
     mergeFrond,
     listLeafletsWithDecisions,
     getSessionStats,

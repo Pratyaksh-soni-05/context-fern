@@ -741,6 +741,89 @@ test("/status's statusReceipt includes the leaflet count and mode, so dogfooding
   );
 });
 
+test("/undo when the newest journal entry is a mode change still undoes the last routing decision, and says mode changes are not undone by it", async () => {
+  await post("/prompt", projectBody({ prompt: "/fern new docker-build" }));
+  await post("/mode", projectBody({ mode: "observe" }));
+
+  const undo = await post("/undo", projectBody());
+  expect(undo.status).toBe(200);
+  expect(undo.json.receipt).toBe(
+    "fern ▸ undone · new reversed · mode changes are not undone by fern undo (use fern mode suggest)",
+  );
+
+  const tree = await get(
+    `/tree?projectPath=${encodeURIComponent(projectDir?.path ?? "")}`,
+  );
+  const fronds = tree.json.fronds as { name: string }[];
+  expect(fronds.map((f) => f.name)).not.toContain("docker-build");
+
+  // The mode change itself was left alone.
+  const status = await get(
+    `/status?projectPath=${encodeURIComponent(projectDir?.path ?? "")}`,
+  );
+  expect(String(status.json.statusReceipt)).toEndWith("observe");
+});
+
+test("/undo says nothing about modes when a turn was recorded after the mode change", async () => {
+  await post("/prompt", projectBody({ prompt: "/fern new docker-build" }));
+  await post("/mode", projectBody({ mode: "observe" }));
+  await post("/prompt", projectBody({ prompt: "keep working on the build" }));
+  await post("/exchange-end", projectBody());
+
+  const undo = await post("/undo", projectBody());
+  expect(undo.status).toBe(200);
+  expect(undo.json.receipt).toBe("fern ▸ undone · new reversed");
+});
+
+test("/undo with nothing to undo but a mode change newest in the journal fails with the same note", async () => {
+  await post("/prompt", projectBody({ prompt: "hello there" }));
+  await post("/exchange-end", projectBody());
+  await post("/mode", projectBody({ mode: "observe" }));
+
+  const undo = await post("/undo", projectBody());
+  expect(undo.status).not.toBe(200);
+  expect(String(undo.json.error)).toContain("Nothing to undo");
+  expect(String(undo.json.error)).toContain(
+    "mode changes are not undone by fern undo (use fern mode suggest)",
+  );
+});
+
+test("POST /mode journals the change with the mode before and after and no prompt text; a repeat of the same mode adds nothing", async () => {
+  const secretLooking = "zebra-quartz-prompt-text-7731";
+  await post(
+    "/prompt",
+    projectBody({ prompt: `please look at ${secretLooking}` }),
+  );
+  await post("/exchange-end", projectBody());
+  const { readFile } = await import("node:fs/promises");
+  const journalPath = join(projectDir?.path ?? "", ".fern", "journal.jsonl");
+  const modeEntries = async () =>
+    (await readFile(journalPath, "utf-8").catch(() => ""))
+      .split("\n")
+      .filter((l) => l.length > 0)
+      .map((l) => JSON.parse(l) as Record<string, unknown>)
+      .filter((e) => e.action === "mode");
+
+  expect(await modeEntries()).toHaveLength(0);
+
+  const changed = await post("/mode", projectBody({ mode: "observe" }));
+  expect(changed.status).toBe(200);
+  const entries = await modeEntries();
+  expect(entries).toHaveLength(1);
+  expect(entries[0]).toMatchObject({
+    action: "mode",
+    before: "suggest",
+    after: "observe",
+    leafletId: null,
+    stage: "manual",
+  });
+  expect(JSON.stringify(entries[0])).not.toContain(secretLooking);
+
+  const again = await post("/mode", projectBody({ mode: "observe" }));
+  expect(again.status).toBe(200);
+  expect(await modeEntries()).toHaveLength(1);
+});
+
 test("POST /mode isolate is a 400 that says isolate mode is not available, and the mode stays what it was", async () => {
   await post("/prompt", projectBody({ prompt: "fix the login bug" }));
   await post("/exchange-end", projectBody());
