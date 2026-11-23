@@ -89,7 +89,7 @@ export async function dispatchFernCommand(
   }
 
   if (subcommand === "ui") {
-    return `${CLI_NAME} ▸ ui: not built yet`;
+    return `${CLI_NAME} ▸ ui: not available as a slash command · run "${CLI_NAME} ui" in a terminal`;
   }
 
   // Not a real dispatch target — the active frond's brief path is

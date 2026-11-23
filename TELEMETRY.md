@@ -25,7 +25,7 @@ There is also no version check in this release. Context Fern never contacts a se
 - A frond's brief keeps the first line of each of your last five prompts for that frond (up to 140 characters, as you typed it) and, under each, a one-line gist of the reply (up to 120 characters). It also keeps the frond's goal, which is the first line of its opening prompt, and the paths of files touched.
 - The reply gist is passed through a secret filter before it is written. Your own prompt lines are not filtered when they are written, so a secret at the start of a prompt can be in the brief file.
 - When a brief is handed back to the model after `/clear`, compaction, resume or fork, every line of it is passed through the filter and quoted as data, not as instructions. The filter looks for API keys, tokens, `Authorization` headers, private keys, `password = ...` style lines and long random-looking strings, and it drops lines that read like instructions to the model. It is best-effort and can miss a secret.
-- The three lookup tools (`frond_list`, `frond_search` and `frond_recall`) return brief text as stored, without the filter, and only in suggest mode.
+- The model can look up briefs with `frond_search` and `frond_recall`; they return brief text as stored, without the filter, and are refused in observe mode. `frond_list` returns only frond names and counts.
 - Keep `.fern/` out of version control (`fern init` offers to add it to `.gitignore`), and delete a brief you do not want kept.
 
 ## One local switch to know about

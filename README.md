@@ -55,7 +55,7 @@ The measurements behind this are below.
 | Mode | What the model sees | State |
 | --- | --- | --- |
 | observe | Unchanged. Context Fern grows the fern and the briefs and shows them in the UI. | Available |
-| suggest | Unchanged, plus one line naming the active frond, its goal and where its brief lives. After `/clear`, compaction, resume or fork it also restores the stem brief and the active frond's brief, quoted and secret-filtered, up to about 8 KB. The model can also look up briefs through three read-only tools, which return brief text as stored, without the filter. The default. | Available |
+| suggest | Unchanged, plus one line naming the active frond, its goal and where its brief lives. After `/clear`, compaction, resume or fork it also restores the stem brief and the active frond's brief, quoted and secret-filtered, up to about 8 KB. The model can also look up briefs through three read-only tools; two of them (`frond_search`, `frond_recall`) return brief text as stored, without the filter, and are refused in observe mode, and the third (`frond_list`) returns only frond names and counts. The default. | Available |
 | isolate | Would send the model only the stem and the active frond. | Planned, not in this release |
 
 Isolate mode would need a proxy between Claude Code and your model provider. That proxy does not exist yet, so nothing in this release changes how much context is sent, and Context Fern makes no claim about saving tokens or cost. `fern mode isolate`, `/fern mode isolate` and the daemon's `POST /mode` all answer "isolate mode is not available in this release"; the command exits 1 and nothing is started or changed.
