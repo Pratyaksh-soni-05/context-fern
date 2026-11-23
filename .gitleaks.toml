@@ -1,0 +1,66 @@
+# gitleaks configuration for Context Fern.
+#
+# The default rules stay on. The entries below allow exactly nine fixture lines (the GitLab
+# one under two rules: the generic rule flags it once the specific one is allowed),
+# each in one named test file, each for the rules that flag it, and each only if
+# the flagged value has the given shape (its first six characters, its length and its last eight characters; never the whole value).
+# They are fixtures of the redaction tests: strings made to look like
+# credentials so that redactSecrets can be shown to remove them
+# (packages/core/test/reply-gist.test.ts, redact-secrets.test.ts and
+# packages/daemon/test/brief-context.test.ts). None is a real credential.
+# A condition of "AND" means a finding is ignored only when the rule, the file
+# and the value shape all match; the same string in another file, or a
+# different value in these files, is still reported. There is no path-wide
+# allowlist.
+
+title = "Context Fern"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "reply-gist.test.ts: values shaped like an API key, for the generic-api-key rule"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''(^|/)packages/core/test/reply-gist\.test\.ts$''']
+regexes = [
+  '''^abcdef.{18}34567890$''',
+  '''^AIzaSy.{26}opqrstuv$''',
+  '''^glpat-.{12}34567890$''',
+  '''^xoxb-1.{12}cdefghij$''',
+]
+
+[[allowlists]]
+description = "reply-gist.test.ts: a sample JWT"
+condition = "AND"
+targetRules = ["jwt"]
+paths = ['''(^|/)packages/core/test/reply-gist\.test\.ts$''']
+regexes = ['''^eyJhbG.{64}bUJU1p1r$''']
+
+[[allowlists]]
+description = "reply-gist.test.ts: a sample Stripe key (the example key from Stripe's public documentation)"
+condition = "AND"
+targetRules = ["stripe-access-token"]
+paths = ['''(^|/)packages/core/test/reply-gist\.test\.ts$''']
+regexes = ['''^sk_liv.{18}T1zdp7dc$''']
+
+[[allowlists]]
+description = "reply-gist.test.ts: a sample GitLab token"
+condition = "AND"
+targetRules = ["gitlab-pat"]
+paths = ['''(^|/)packages/core/test/reply-gist\.test\.ts$''']
+regexes = ['''^glpat-.{12}34567890$''']
+
+[[allowlists]]
+description = "redact-secrets.test.ts: a private key block built from a filler function, not a real key"
+condition = "AND"
+targetRules = ["private-key"]
+paths = ['''(^|/)packages/core/test/redact-secrets\.test\.ts$''']
+regexes = ['''(?s)^-----BEGIN RSA PRIVATE KEY-----.{49}-----END RSA PRIVATE KEY-----$''']
+
+[[allowlists]]
+description = "brief-context.test.ts: an sk- shaped value in a recorded note"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''(^|/)packages/daemon/test/brief-context\.test\.ts$''']
+regexes = ['''^sk-pro.{20}CdEf0123$''']
