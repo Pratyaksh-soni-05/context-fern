@@ -41,6 +41,7 @@ import {
   type PendingDelete,
   writeManifest,
 } from "./manifest";
+import { PATH_NOTIFICATION_NOTE } from "./path-setup";
 import { type CommandRunner, defaultRunner, PLUGIN_NAME } from "./plugin-setup";
 import { removeEmptyDir, removeIfHash } from "./safe-remove";
 import {
@@ -557,7 +558,12 @@ export async function runUninstall(
   if (!keepPath && m.pathEdit) {
     try {
       if (m.pathEdit.kind === "windows-user-path") {
-        const r = await deps.removeWindowsPath(m.pathEdit.added);
+        let notificationFailed = false;
+        const r = await deps.removeWindowsPath(m.pathEdit.added, {
+          onNotificationFailed: () => {
+            notificationFailed = true;
+          },
+        });
         if (r === "removed") {
           report.removed.push(`${m.pathEdit.added} from the user PATH`);
           log(
@@ -565,6 +571,7 @@ export async function runUninstall(
               `removed ${m.pathEdit.added} from your user PATH · open a new terminal`,
             ),
           );
+          if (notificationFailed) log(say(PATH_NOTIFICATION_NOTE));
         } else {
           report.alreadyGone.push(`${m.pathEdit.added} in the user PATH`);
         }

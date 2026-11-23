@@ -36,6 +36,7 @@ import {
   addToShellRc,
   addToWindowsUserPath,
   isOnPath,
+  PATH_NOTIFICATION_NOTE,
   pathFixCommand,
   RC_BEGIN,
   RC_END,
@@ -246,7 +247,12 @@ export async function runGlobalInit(
       if (wantsEdit && pathEdit === null) {
         try {
           if (platform === "win32") {
-            const r = await deps.addToWindowsPath(layout.binDir);
+            let notificationFailed = false;
+            const r = await deps.addToWindowsPath(layout.binDir, {
+              onNotificationFailed: () => {
+                notificationFailed = true;
+              },
+            });
             if (r === "already") {
               log(
                 say(
@@ -256,6 +262,7 @@ export async function runGlobalInit(
             } else {
               pathEdit = r;
               log(say(`added ${layout.binDir} to your user PATH`));
+              if (notificationFailed) log(say(PATH_NOTIFICATION_NOTE));
             }
           } else {
             const rc = shellRcFile(env, deps.home, platform);

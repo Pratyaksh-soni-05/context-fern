@@ -17,6 +17,7 @@ import {
   cleanPowerShellEnv,
   RC_BEGIN,
   RC_END,
+  readWindowsPathOutput,
   windowsPowerShell,
 } from "./path-setup";
 import { discardOwnTemp } from "./safe-remove";
@@ -47,12 +48,19 @@ if ($idx -lt 0) { Write-Output 'absent'; exit 0 }
 $keep = @()
 for ($i = 0; $i -lt $parts.Count; $i++) { if ($i -ne $idx) { $keep += $parts[$i] } }
 $key.SetValue($name, ($keep -join ';'), [Microsoft.Win32.RegistryValueKind]$kind)
+Write-Output "written|$kind"
+$broadcast = 'skipped'
 if ($env:FERN_PATH_BROADCAST -ne '0') {
-  Add-Type -Namespace FernNative -Name Env -MemberDefinition '[System.Runtime.InteropServices.DllImport("user32.dll", SetLastError=true, CharSet=System.Runtime.InteropServices.CharSet.Auto)] public static extern System.IntPtr SendMessageTimeout(System.IntPtr hWnd, uint Msg, System.UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out System.UIntPtr lpdwResult);'
-  $r = [UIntPtr]::Zero
-  [void][FernNative.Env]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$r)
+  $broadcast = 'failed'
+  try {
+    if ($env:FERN_PATH_BROADCAST_STUB -eq 'fail') { throw 'stubbed broadcast failure' }
+    Add-Type -Namespace FernNative -Name Env -MemberDefinition '[System.Runtime.InteropServices.DllImport("user32.dll", SetLastError=true, CharSet=System.Runtime.InteropServices.CharSet.Auto)] public static extern System.IntPtr SendMessageTimeout(System.IntPtr hWnd, uint Msg, System.UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out System.UIntPtr lpdwResult);'
+    $r = [UIntPtr]::Zero
+    $sent = [FernNative.Env]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$r)
+    if ($sent.ToInt64() -ne 0) { $broadcast = 'sent' }
+  } catch { }
 }
-Write-Output "removed|$kind"
+Write-Output "removed|$kind|$broadcast"
 `;
 
 export interface WindowsPathRemoveOptions {
@@ -60,6 +68,10 @@ export interface WindowsPathRemoveOptions {
   registrySubKey?: string;
   valueName?: string;
   broadcast?: boolean;
+  /** Test seam: "fail" makes the change notification fail inside the script. Only ever set by tests, and only with a scratch `registrySubKey`. */
+  broadcastStub?: "fail";
+  /** Called once if the PATH value was written but the notification to other windows failed or timed out. The removal is still a success; the caller shows PATH_NOTIFICATION_NOTE. */
+  onNotificationFailed?: () => void;
 }
 
 /** Removes the last occurrence of `dir` from the user PATH. "absent" if it is not there (already removed). */
@@ -86,19 +98,42 @@ export function removeFromWindowsUserPath(
           FERN_PATH_KEY: opts.registrySubKey ?? "Environment",
           FERN_PATH_VALUE: opts.valueName ?? "Path",
           FERN_PATH_BROADCAST: opts.broadcast === false ? "0" : "1",
+          FERN_PATH_BROADCAST_STUB: opts.broadcastStub ?? "",
         },
         timeout: 30_000,
         windowsHide: true,
       },
       (err, stdout, stderr) => {
-        if (err) {
-          reject(new Error(`${stderr || err.message}`.trim()));
-          return;
+        try {
+          const settled = settleWindowsPathRemove(err, stdout, stderr);
+          if (settled.notificationFailed) opts.onNotificationFailed?.();
+          resolve(settled.result);
+        } catch (failure) {
+          reject(failure);
         }
-        resolve(stdout.trim().startsWith("removed") ? "removed" : "absent");
       },
     );
   });
+}
+
+/**
+ * What a finished PowerShell removal means. Written: the removal succeeded,
+ * whatever `err` says (a process killed at the time limit after the write is
+ * still a written value); only telling other windows can have failed. Not
+ * written: a real failure if `err` is set, otherwise there was nothing to
+ * remove ("absent").
+ */
+export function settleWindowsPathRemove(
+  err: Error | null,
+  stdout: string,
+  stderr: string,
+): { result: "removed" | "absent"; notificationFailed: boolean } {
+  const out = readWindowsPathOutput(stdout, "removed");
+  if (!out.written) {
+    if (err) throw new Error(`${stderr || err.message}`.trim());
+    return { result: "absent", notificationFailed: false };
+  }
+  return { result: "removed", notificationFailed: out.notificationFailed };
 }
 
 export type FileEditOutcome =

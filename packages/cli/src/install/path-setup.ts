@@ -123,19 +123,73 @@ foreach ($p in $parts) {
   if ($x -ieq $want -or $p.TrimEnd('\\') -ieq $want) { Write-Output "already|$kind"; exit 0 }
 }
 $key.SetValue($name, (($parts + $dir) -join ';'), [Microsoft.Win32.RegistryValueKind]$kind)
+Write-Output "written|$kind"
+$broadcast = 'skipped'
 if ($env:FERN_PATH_BROADCAST -ne '0') {
-  Add-Type -Namespace FernNative -Name Env -MemberDefinition '[System.Runtime.InteropServices.DllImport("user32.dll", SetLastError=true, CharSet=System.Runtime.InteropServices.CharSet.Auto)] public static extern System.IntPtr SendMessageTimeout(System.IntPtr hWnd, uint Msg, System.UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out System.UIntPtr lpdwResult);'
-  $r = [UIntPtr]::Zero
-  [void][FernNative.Env]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$r)
+  $broadcast = 'failed'
+  try {
+    if ($env:FERN_PATH_BROADCAST_STUB -eq 'fail') { throw 'stubbed broadcast failure' }
+    Add-Type -Namespace FernNative -Name Env -MemberDefinition '[System.Runtime.InteropServices.DllImport("user32.dll", SetLastError=true, CharSet=System.Runtime.InteropServices.CharSet.Auto)] public static extern System.IntPtr SendMessageTimeout(System.IntPtr hWnd, uint Msg, System.UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out System.UIntPtr lpdwResult);'
+    $r = [UIntPtr]::Zero
+    $sent = [FernNative.Env]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$r)
+    if ($sent.ToInt64() -ne 0) { $broadcast = 'sent' }
+  } catch { }
 }
-Write-Output "added|$kind"
+Write-Output "added|$kind|$broadcast"
 `;
+
+/**
+ * What the PowerShell scripts printed. The value is written first and
+ * announced on its own line ("written|<kind>"); the change notification
+ * (WM_SETTINGCHANGE) comes after, and its outcome is the last field of the
+ * final line ("added|<kind>|sent|failed|skipped"). So a failure of the
+ * notification, however it happens (the Add-Type shim, the call, a time-out
+ * that kills the process), never hides that the registry value was written:
+ * once "written" has been printed, the edit is a success and only the
+ * notification is in doubt.
+ */
+export interface WindowsPathOutput {
+  /** The registry value was changed: the script printed its "written" line. */
+  written: boolean;
+  /** The kind on the "written" line. */
+  valueKind: string | null;
+  /** The script ran to its last line. */
+  finished: boolean;
+  /** The value was written but other windows may not have been told: the notification failed, timed out or never ran to its end. */
+  notificationFailed: boolean;
+}
+
+export function readWindowsPathOutput(
+  stdout: string,
+  finalLine: "added" | "removed",
+): WindowsPathOutput {
+  const lines = stdout.split(/\r?\n/).map((l) => l.trim());
+  const written = lines.find((l) => l.startsWith("written|"));
+  const final = lines.find((l) => l.startsWith(`${finalLine}|`));
+  const finalFields = final?.split("|") ?? [];
+  const wasWritten = written !== undefined || final !== undefined;
+  return {
+    written: wasWritten,
+    valueKind: written?.split("|")[1] ?? finalFields[1] ?? null,
+    finished: final !== undefined,
+    notificationFailed:
+      wasWritten && (final === undefined || finalFields[2] === "failed"),
+  };
+}
+
+/** The one note shown when the PATH value was written but telling other windows failed or timed out. */
+export const PATH_NOTIFICATION_NOTE =
+  "PATH was updated; other open windows may not see it until a new terminal is opened";
 
 export interface WindowsPathOptions {
   /** Test seam: a scratch key under HKCU instead of the real `Environment`. */
   registrySubKey?: string;
   valueName?: string;
   broadcast?: boolean;
+  /** Test seam: "fail" makes the change notification fail inside the script, as a missing Add-Type shim or a refused call would. Only ever set by tests, and only with a scratch `registrySubKey`. */
+  broadcastStub?: "fail";
+  /** Called once if the PATH value was written but the notification to other windows failed or timed out. The edit is still a success; the caller shows PATH_NOTIFICATION_NOTE. */
+  onNotificationFailed?: () => void;
 }
 
 /** The system's own powershell.exe by full path, not found through the current directory or PATH. */
@@ -206,24 +260,51 @@ export function addToWindowsUserPath(
           FERN_PATH_KEY: opts.registrySubKey ?? "Environment",
           FERN_PATH_VALUE: opts.valueName ?? "Path",
           FERN_PATH_BROADCAST: opts.broadcast === false ? "0" : "1",
+          FERN_PATH_BROADCAST_STUB: opts.broadcastStub ?? "",
         },
         timeout: 30_000,
         windowsHide: true,
       },
       (err, stdout, stderr) => {
-        if (err) {
-          reject(new Error(`${stderr || err.message}`.trim()));
-          return;
+        try {
+          const settled = settleWindowsPathAdd(err, stdout, stderr, dir);
+          if (settled.notificationFailed) opts.onNotificationFailed?.();
+          resolvePromise(settled.result);
+        } catch (failure) {
+          reject(failure);
         }
-        const [state, kind] = stdout.trim().split("|");
-        if (state === "already") resolvePromise("already");
-        else
-          resolvePromise({
-            kind: "windows-user-path",
-            added: dir,
-            valueKind: kind ?? "ExpandString",
-          });
       },
     );
   });
+}
+
+/**
+ * What a finished PowerShell add means. Written: the edit succeeded, whatever
+ * `err` says (a process killed at the time limit after the write is still a
+ * written value); only telling other windows can have failed. Not written:
+ * `already` if the entry was there, otherwise a real failure, which throws
+ * (the key, the value, the script itself; an unexpected silence counts).
+ */
+export function settleWindowsPathAdd(
+  err: Error | null,
+  stdout: string,
+  stderr: string,
+  dir: string,
+): { result: PathEdit | "already"; notificationFailed: boolean } {
+  const out = readWindowsPathOutput(stdout, "added");
+  if (!out.written) {
+    if (err) throw new Error(`${stderr || err.message}`.trim());
+    if (/^already\|/m.test(stdout)) {
+      return { result: "already", notificationFailed: false };
+    }
+    throw new Error("the PATH script printed nothing it should have");
+  }
+  return {
+    result: {
+      kind: "windows-user-path",
+      added: dir,
+      valueKind: out.valueKind ?? "ExpandString",
+    },
+    notificationFailed: out.notificationFailed,
+  };
 }
