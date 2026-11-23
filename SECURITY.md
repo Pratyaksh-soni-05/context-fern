@@ -18,7 +18,7 @@ In scope: the daemon, the hooks and plugin, the installer and uninstaller, the r
 
 ## What the build does to keep you safe
 
-- The daemon listens on `127.0.0.1` only, rejects any other `Host` or `Origin`, and requires its token (or the browser session that token mints) for everything except the static files of `fern ui`.
+- The daemon listens on `127.0.0.1` only, rejects any other `Host` and any browser `Origin` that is not local (a request with no `Origin` header still needs the token), and requires its token (or the browser session that token mints) for everything except the static files of `fern ui`.
 - The embedding model and the native library are pinned by checksum and verified before use.
 - `fern uninstall` removes only files that `fern init` recorded and whose contents still match; it never deletes `.fern/` or `~/.fern`.
 - Isolate mode, which would proxy model traffic and forward your auth headers, is planned and is not in this release. This release has no proxy and forwards no auth header.

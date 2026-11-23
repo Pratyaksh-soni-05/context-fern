@@ -2,15 +2,9 @@
 
 Thanks for your interest in Context Fern.
 
-## Developer Certificate of Origin
+## Licensing of contributions
 
-Every commit must be signed off under the [Developer Certificate of Origin](https://developercertificate.org/) instead of a CLA. Add `-s` to your commit:
-
-```
-git commit -s -m "your message"
-```
-
-This appends a `Signed-off-by: Your Name <you@example.com>` line certifying you wrote the change or otherwise have the right to submit it under this project's license. PRs with unsigned commits will be asked to amend before merge.
+Context Fern is licensed under Apache-2.0. As section 5 of the license ("Submission of Contributions") provides, unless you explicitly state otherwise, any contribution you intentionally submit for inclusion in the project is licensed under the terms of Apache-2.0, without any additional terms or conditions. There is no CLA and no sign-off to add to your commits.
 
 ## Before opening a PR
 

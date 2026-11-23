@@ -229,7 +229,7 @@ Phases 0 and 1 overlap in week 1; gates are amber diamonds and the launch week i
 ### Phase 0 · Foundations (week 1, 26 Oct – 1 Nov)
 
 - [x] Check "ContextTree", `ctree` (npm, Homebrew, PyPI, GitHub) and a domain for collisions; pick the final name. — done as "Context Fern" / `fern`, locked in `packages/core/src/brand.ts`.
-- [x] Create the repo under an org, Apache-2.0, DCO, CODE\_OF\_CONDUCT, SECURITY.md. — `LICENSE`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `CONTRIBUTING.md` all exist at the repo root.
+- [x] Create the repo under an org, Apache-2.0, CODE\_OF\_CONDUCT, SECURITY.md. — `LICENSE`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `CONTRIBUTING.md` all exist at the repo root.
 - [x] Write `CLAUDE.md`, `docs/spec.md`, `docs/architecture.md` from the starter kit.
 - [x] Monorepo scaffold, Biome, strict TypeScript, `bun test`, CI. — `.github/workflows/ci.yml`.
 - [ ] Transcript scrubber (secrets, emails, paths, keys) and collect 50+ of our own Claude Code sessions. — the scrubber shipped (`bench/src/bench/scrub.py`, tested); collecting 50+ real sessions isn't confirmed done.

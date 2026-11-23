@@ -51,8 +51,10 @@ when an individual is officially representing the community in public spaces.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the maintainer. All complaints will be reviewed and investigated
-promptly and fairly.
+reported privately through this repository's private vulnerability reporting
+form: open the repository's **Security** tab, choose **Report a vulnerability**
+and say it is a conduct report. No email address is published for this. All
+complaints will be reviewed and investigated promptly and fairly.
 
 ## Attribution
 

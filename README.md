@@ -10,7 +10,7 @@ No account, no hosted service, no telemetry on your content. Apache-2.0.
 
 - **Keeps a brief per topic.** Each frond has a markdown brief in `.fern/fronds/`. In `suggest` mode, after `/clear` or compaction, the active frond's brief is handed back to the model on the next turn.
 - **You route, it suggests.** Starting a new frond, switching back, and setting a question aside as a stray are things you do with `/fern new`, `/fern switch` and `/fern stray` (or the `?` prefix). Context Fern shows a suggestion to start a frond or set a stray aside only when it is confident enough, and it never starts a frond, switches frond or sets a stray aside until you say so. See [Routing is manual-first](#routing-is-manual-first).
-- **Logs every decision.** Each routing decision is written to the journal with the action, the signals behind it and its confidence. `fern undo` reverses the last one.
+- **Logs every decision.** Each routing decision and each mode change is written to the journal with the action, the signals behind it and its confidence. `fern undo` reverses the last routing decision (plain turns that stayed on the frond are never undone). A mode change is journaled but not undone by `fern undo`; the receipt names the `fern mode` command that goes back.
 - **Shows the fern.** `fern ui` opens a local page with the Fern, List and Categories views and an inspector for any leaflet.
 - **Works offline.** Observe and suggest mode run with the embedding model that ships in the package, and make no API calls. (A second-stage router that asks a local Ollama model exists only in the replay and benchmark tools. It is not connected to the running product in this release.)
 
@@ -26,7 +26,7 @@ uvx context-fern init
 npx context-fern init
 ```
 
-`init` asks before it adds the install folder to your `PATH`, before it registers the plugin with your `claude` command, and before it adds a status line (an existing status line is left alone). In a project it also offers to add `.fern/` to `.gitignore` and to add a project-level `/fern` command at `.claude/commands/fern.md`. `fern uninstall` removes exactly what `init` recorded and nothing else: those two project files stay, and it never deletes `.fern/` or `~/.fern`. It tells you where they are and the one command that deletes them.
+`init` asks before it adds the install folder to your `PATH`, before it registers the plugin with your `claude` command, and before it adds a status line (an existing status line is left alone). In a project it also offers to add `.fern/` to `.gitignore` and to add a project-level `/fern` command at `.claude/commands/fern.md`. `fern uninstall` removes exactly what `init` recorded and nothing else: those two project files stay, and it never deletes `.fern/` or `~/.fern`. It tells you where they are and the one command that deletes them. On Windows, if telling other windows about the `PATH` change fails or times out, `init` and `uninstall` still succeed and say: PATH was updated; other open windows may not see it until a new terminal is opened.
 
 Platforms: Windows x64, Linux x64 and arm64 (glibc 2.28 or newer), and macOS on Apple silicon (macOS 14 or newer). Intel Macs are not supported. The binaries are not code-signed, so Windows SmartScreen and macOS Gatekeeper may warn; see [`SECURITY.md`](SECURITY.md).
 
@@ -34,7 +34,7 @@ Platforms: Windows x64, Linux x64 and arm64 (glibc 2.28 or newer), and macOS on 
 
 1. Install with one of the commands above, then run `context-fern init` (or `fern init`) inside a project.
 2. Work as you normally do. A new session starts in `suggest` mode.
-3. When you change topic, type `/fern new <name>`. To ask a side question without it joining the task, start the prompt with `?` or use `/fern stray`.
+3. When you change topic, type `/fern new <name>`. To ask a side question without it joining the task, start the prompt with `? ` (a question mark, then a space) or use `/fern stray`.
 4. `/fern status` shows where you are, `/fern undo` takes back the last decision, and `fern ui` shows the whole fern.
 
 A new user in an existing project starts with an empty fern: just the stem and no fronds. Context Fern does not read your earlier sessions or anyone else's, so there is nothing to see until you have worked with it for a while. Roots (memories from earlier sessions) are not built yet.
@@ -55,18 +55,18 @@ The measurements behind this are below.
 | Mode | What the model sees | State |
 | --- | --- | --- |
 | observe | Unchanged. Context Fern grows the fern and the briefs and shows them in the UI. | Available |
-| suggest | Unchanged, plus one line naming the active frond, its goal and where its brief lives. After `/clear`, compaction, resume or fork it also restores the stem brief and the active frond's brief, quoted and secret-filtered, up to about 8 KB. The model can also look up briefs through three read-only tools. The default. | Available |
+| suggest | Unchanged, plus one line naming the active frond, its goal and where its brief lives. After `/clear`, compaction, resume or fork it also restores the stem brief and the active frond's brief, quoted and secret-filtered, up to about 8 KB. The model can also look up briefs through three read-only tools, which return brief text as stored, without the filter. The default. | Available |
 | isolate | Would send the model only the stem and the active frond. | Planned, not in this release |
 
-Isolate mode would need a proxy between Claude Code and your model provider. That proxy does not exist yet, so nothing in this release changes how much context is sent, and Context Fern makes no claim about saving tokens or cost.
+Isolate mode would need a proxy between Claude Code and your model provider. That proxy does not exist yet, so nothing in this release changes how much context is sent, and Context Fern makes no claim about saving tokens or cost. `fern mode isolate`, `/fern mode isolate` and the daemon's `POST /mode` all answer "isolate mode is not available in this release"; the command exits 1 and nothing is started or changed.
 
 ## How well does the router work?
 
 Not well enough to route for you, and that is why routing is manual-first. The day-30 gate run is written up in [`bench/results/day30-report.md`](bench/results/day30-report.md); the table below is a fresh re-run of the router on the same kind of data.
 
-**Read this before the numbers.** The data is **spliced and synthetic**: segments of real, scrubbed sessions stitched together so that the topic changes are known. It is **not natural data**, and there are no hand-labelled natural sessions yet. The planned gate was a suggestion precision of at least 0.85, and on the interim spliced-data bar the **day-30 gate result is FAIL**.
+**Read this before the numbers.** The data is **spliced and synthetic**: segments of real, scrubbed sessions stitched together so that the topic changes are known. It is **not natural data**, and there are no hand-labelled natural sessions yet. The day-30 interim bar for routing automatically was an F1 for a new frond within 0.05 of the 0.832 ceiling, and the result against it is **FAIL**; the 0.85 suggestion-precision gate on natural, hand-labelled data has not been run.
 
-Re-run on 2026-11-20 with `uv run --project bench bench eval` over 36,964 spliced turns, with the router's default settings and no tuning. F1 is the score for finding each kind of turn; accuracy is the share of turns given the right action.
+Re-run on 2026-11-20 with `uv run --project bench bench eval <streams.jsonl>` over 36,964 spliced turns (36,914 scored: the 50 combine turns are left out because the router never predicts combine), with the router's default settings and no tuning. F1 is the score for finding each kind of turn; accuracy is the share of turns given the right action.
 
 | splice variant | turns | F1 new frond | F1 return | F1 stray | accuracy | accuracy if every turn just continues |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -81,9 +81,9 @@ What this says:
 - The router is **worse than doing nothing** on accuracy in four of the five variants, because most turns really do continue the active frond. Its F1 for finding a new frond is 0% to 15%.
 - Stray turns exist only in the `stray` variant, which is the only place a stray score means anything (n/a elsewhere).
 - Cue phrases carry most of what it finds: cue phrases alone average F1 0.051 and embeddings alone 0.000, against 0.275 for the full router.
-- A tuned run on a 471-turn sample, in the day-30 report, did better: F1 for a new frond 0.615, return 0.398, stray 0.484 (the second-stage local-model router, which is not connected to the running product, reached 0.643, 0.404 and 0.515 at its best setting).
+- On a 471-turn sample chosen to over-represent topic changes (not the natural mix), in the day-30 report, Stage 0 alone scored F1 0.615 for a new frond, 0.398 for return and 0.484 for stray. The second-stage local-model router, which is not connected to the running product, was estimated at 0.643, 0.404 and 0.515 at its best setting (an estimate from simulated confidence bands, not a real run).
 - A blind judge (Claude, shown 120 turns without the answers) scores F1 0.832 on finding a new frond, so the task can be learned; the router is not there.
-- The day-30 bar was within 0.05 of that ceiling, or 0.782. The best result was 0.643, so the gate is **FAIL**, and the literal target of suggestion precision 0.85 is further off.
+- The day-30 bar was within 0.05 of that ceiling, or 0.782. The best result was 0.643, so that bar is missed (**FAIL**) and automatic routing stays off. The suggestion bars the product ships with were measured on spliced data only: precision 0.87 for a new frond at recall 0.41, and 0.88 for a stray at recall 0.50.
 
 ReplayBench, the scrubber and the scoring code are in [`bench/`](bench/), so you can check how these numbers were made.
 

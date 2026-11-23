@@ -5,9 +5,9 @@
 Status: not released yet. The install commands below work once the first release is published.
 
 Things that are true today:
-- Routing is manual-first. The user runs /fern new, /fern switch and /fern stray (or starts a prompt with ?). Suggestions to start a frond or set a stray aside appear only above a precision bar (a suggestion to return to an earlier frond is always shown), and nothing starts or switches a frond until the user says so. Every turn that is not routed stays on the active frond.
+- Routing is manual-first. The user runs /fern new, /fern switch and /fern stray (or starts a prompt with a question mark and a space). Suggestions to start a frond or set a stray aside appear only above a precision bar (a suggestion to return to an earlier frond is always shown), and nothing starts or switches a frond until the user says so. Every turn that is not routed stays on the active frond.
 - Modes: observe and suggest are available and work offline. Isolate mode (sending the model only the stem and the active frond) is planned and is not in this release. No token or cost saving is claimed.
-- Every routing decision is in a local journal; `fern undo` reverses the last one.
+- Every routing decision and every mode change is in a local journal; `fern undo` reverses the last routing decision, not a mode change (the receipt names the `fern mode` command that goes back).
 - Data stays on the machine: `.fern/` in each project and `~/.fern`. There is no telemetry and no version check.
 - The router benchmark runs on spliced, synthetic data, not natural data, and its day-30 gate result is FAIL.
 - Platforms: Windows x64, Linux x64 and arm64 (glibc 2.28 or newer), macOS on Apple silicon (macOS 14 or newer). Binaries are not code-signed. Intel Macs are not supported.

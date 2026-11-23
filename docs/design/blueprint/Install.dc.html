@@ -15,44 +15,45 @@ body{margin:0}
 </helmet>
 <div style="width: 1200px; height: 760px; box-sizing: border-box; padding: 48px 56px; background-color: #F2EEE6; background-image: linear-gradient(#E8E2D7 1px, transparent 1px), linear-gradient(90deg, #E8E2D7 1px, transparent 1px); background-size: 80px 80px; color: #141413; font-family: 'Geist', system-ui, sans-serif; display: flex; flex-direction: column; gap: 22px">
 <div style="display: flex; align-items: center; gap: 14px; padding-bottom: 12px; border-bottom: 1px solid #D8D1C4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 13px"><span style="width: 9px; height: 9px; border: 1.5px solid #141413; transform: rotate(45deg)"></span>First run<span style="flex-grow: 1; height: 6px; background-image: radial-gradient(#9A948A 1px, transparent 1.3px); background-size: 7px 6px"></span><span style="color: #6E6A62">002</span></div>
-<h2 style="margin: 0; font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: 50px; line-height: 52px; color: #9A948A">One command. <span style="color: #24402C">Nothing changes until you choose.</span></h2>
+<h2 style="margin: 0; font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: 50px; line-height: 52px; color: #9A948A">One command. <span style="color: #24402C">It asks before it changes anything.</span></h2>
 <div style="flex-grow: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 13.5px; line-height: 23px; color: #F2EEE6">
 <div style="border-radius: 12px; background: #1E1E1C; box-shadow: 0 18px 40px rgba(20, 20, 19, 0.14); display: flex; flex-direction: column; overflow: hidden">
 <div style="padding: 12px 18px; border-bottom: 1px solid #34332F; font-size: 12px; color: #A7A39A">zsh · macOS / Linux</div>
 <div style="padding: 20px; display: flex; flex-direction: column; color: #A7A39A; white-space: pre">
-<div><span style="color: #8DB886">$</span> <span style="color: #F2EEE6">curl -fsSL https://[domain]/install.sh | sh</span></div>
+<div><span style="color: #8DB886">$</span> <span style="color: #F2EEE6">uvx context-fern init</span></div>
 <div style="height: 14px"></div>
-<div>  fetching fern 0.1.0 · darwin-arm64</div>
-<div>  <span style="color: #8DB886">✓</span> checksum verified</div>
-<div>  <span style="color: #8DB886">✓</span> installed ~/.local/bin/fern</div>
-<div>  <span style="color: #8DB886">✓</span> found Claude Code · plugin added</div>
-<div>  <span style="color: #8DB886">✓</span> mode <span style="color: #F2EEE6">observe</span> · the model sees no change</div>
+<div>  installing context-fern</div>
+<div>  <span style="color: #8DB886">✓</span> installed the embedding model in your cache folder</div>
+<div>  <span style="color: #8DB886">✓</span> installed context-fern in ~/.local/bin</div>
+<div>  <span style="color: #8DB886">✓</span> found Claude Code · plugin added (after you agree)</div>
+<div>  <span style="color: #8DB886">✓</span> mode <span style="color: #F2EEE6">suggest</span> · one short focus line; nothing moves unless you say so</div>
 <div style="height: 14px"></div>
 <div>  work as usual, then:</div>
 <div>  <span style="color: #F2EEE6">fern ui</span>             open your fern</div>
-<div>  <span style="color: #F2EEE6">fern mode suggest</span>   turn on suggestions</div>
-<div>  <span style="color: #F2EEE6">fern uninstall</span>      remove everything</div>
+<div>  <span style="color: #F2EEE6">fern mode observe</span>   the model sees no change</div>
+<div>  <span style="color: #F2EEE6">fern uninstall</span>      remove what init added</div>
 </div>
 </div>
 <div style="display: flex; flex-direction: column; gap: 18px">
 <div style="border-radius: 12px; background: #1E1E1C; box-shadow: 0 18px 40px rgba(20, 20, 19, 0.14); overflow: hidden">
-<div style="padding: 12px 18px; border-bottom: 1px solid #34332F; font-size: 12px; color: #A7A39A">PowerShell · or pip anywhere</div>
+<div style="padding: 12px 18px; border-bottom: 1px solid #34332F; font-size: 12px; color: #A7A39A">pip or npx · any shell</div>
 <div style="padding: 20px; display: flex; flex-direction: column; color: #A7A39A; white-space: pre">
 <div><span style="color: #8DB886">PS&gt;</span> <span style="color: #F2EEE6">pip install context-fern</span></div>
-<div><span style="color: #8DB886">PS&gt;</span> <span style="color: #F2EEE6">fern init</span></div>
-<div>  <span style="color: #8DB886">✓</span> plugin added · mode observe</div>
+<div><span style="color: #8DB886">PS&gt;</span> <span style="color: #F2EEE6">context-fern init</span></div>
+<div>  <span style="color: #8DB886">✓</span> plugin added · mode suggest</div>
+<div><span style="color: #8DB886">PS&gt;</span> <span style="color: #F2EEE6">npx context-fern init</span></div>
 </div>
 </div>
 <div style="flex-grow: 1; border-radius: 12px; background: #1E1E1C; box-shadow: 0 18px 40px rgba(20, 20, 19, 0.14); overflow: hidden">
 <div style="padding: 12px 18px; border-bottom: 1px solid #34332F; font-size: 12px; color: #A7A39A">an hour later</div>
 <div style="padding: 20px; display: flex; flex-direction: column; color: #A7A39A; white-space: pre">
 <div><span style="color: #8DB886">$</span> <span style="color: #F2EEE6">fern tree</span></div>
-<div>  <span style="color: #F2EEE6">main</span> ─┬─ <span style="color: #8DB886">auth-refactor  ●●●●●●●  active</span></div>
+<div>  <span style="color: #F2EEE6">stem</span> ─┬─ <span style="color: #8DB886">auth-refactor  ●●●●●●●  active</span></div>
 <div>        ├─ <span style="color: #8FB2E6">docker-build   ●●●●</span></div>
 <div>        ├─ <span style="color: #B7A4F2">flaky-test     ●●●  merged</span></div>
 <div>        ├─ <span style="color: #E2C792">readme         ●●</span></div>
 <div>        └╌ <span style="color: #F0875A">strays         ○○○</span></div>
-<div>  roots: 3 memories · 41k kept out last turn</div>
+<div>  4 fronds · 3 strays</div>
 </div>
 </div>
 </div>

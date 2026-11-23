@@ -6,7 +6,7 @@ There is also no version check in this release. Context Fern never contacts a se
 
 ## Where your data lives
 
-- Per project, in `.fern/` inside the project folder: the fern database (`fern.db`), one markdown brief per frond, and the journal of routing decisions (`journal.jsonl`).
+- Per project, in `.fern/` inside the project folder: the fern database (`fern.db`), one markdown brief per frond, and the journal of routing decisions and mode changes (`journal.jsonl`).
 - Per machine, in `~/.fern`: the running daemon's address and token, and the list of projects it has seen.
 - The embedding model ships inside the package you install, and `init` copies it into your operating system's user cache folder. It is read from disk and is never downloaded when you run Context Fern.
 
@@ -14,9 +14,10 @@ There is also no version check in this release. Context Fern never contacts a se
 
 ## Network traffic
 
-- **The daemon** listens on `127.0.0.1` only and rejects any other `Host` or `Origin`. It requires its token, or the browser session that token mints, for everything except the static files of `fern ui`. Nothing outside your machine can reach it.
+- **The daemon** listens on `127.0.0.1` only, rejects any other `Host` and any browser `Origin` that is not local (a request with no `Origin` header still needs the token). It requires its token, or the browser session that token mints, for everything except the static files of `fern ui`. Nothing outside your machine can reach it.
 - **Your prompts** go to your model provider exactly as they do without Context Fern. Context Fern runs beside Claude Code and does not change where Claude Code sends them.
 - **Context Fern itself makes no model calls in this release.** A second-stage router that would ask a local Ollama model exists only in the replay and benchmark tools and is not connected to the running product. When it is connected, each call will be recorded in the journal with the model name and token counts.
+- **`fern doctor`** makes one request to the Ollama address you put under `[stage2]` in the config, if you set one (local by default). It sends no prompt.
 - **Isolate mode** is planned and is not in this release, so Context Fern does not proxy model traffic or forward any auth header.
 
 ## What is stored, and what is only best-effort
@@ -24,6 +25,7 @@ There is also no version check in this release. Context Fern never contacts a se
 - A frond's brief keeps the first line of each of your last five prompts for that frond (up to 140 characters, as you typed it) and, under each, a one-line gist of the reply (up to 120 characters). It also keeps the frond's goal, which is the first line of its opening prompt, and the paths of files touched.
 - The reply gist is passed through a secret filter before it is written. Your own prompt lines are not filtered when they are written, so a secret at the start of a prompt can be in the brief file.
 - When a brief is handed back to the model after `/clear`, compaction, resume or fork, every line of it is passed through the filter and quoted as data, not as instructions. The filter looks for API keys, tokens, `Authorization` headers, private keys, `password = ...` style lines and long random-looking strings, and it drops lines that read like instructions to the model. It is best-effort and can miss a secret.
+- The three lookup tools (`frond_list`, `frond_search` and `frond_recall`) return brief text as stored, without the filter, and only in suggest mode.
 - Keep `.fern/` out of version control (`fern init` offers to add it to `.gitignore`), and delete a brief you do not want kept.
 
 ## One local switch to know about
