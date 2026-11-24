@@ -1,7 +1,7 @@
 {
   "name": "fern",
   "description": "Context Fern's Claude Code integration: hooks that route your session into topic fronds, a /fern command, and MCP tools to recall a frond's brief.",
-  "version": "0.1.0",
+  "version": "0.1.0-rc.1",
   "author": { "name": "Context Fern contributors" },
   "license": "Apache-2.0",
   "mcpServers": {
