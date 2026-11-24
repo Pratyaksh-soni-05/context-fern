@@ -562,6 +562,25 @@ test("when init added the marketplace, uninstall removes the plugin and then the
   expect(r.exitCode).toBe(0);
 });
 
+test("a marketplace init added from the pinned release tag is removed by name, with no source or ref on the command line", async () => {
+  const log = await withPlugin({ marketplaceAddedByInit: true });
+  await runUninstall(
+    { yes: "true" },
+    uninstallDeps(f, { which: () => stubPath }),
+  );
+  const calls = await stubCalls(log);
+  expect(calls.flat().some((a) => a.includes("#") || a.includes("/"))).toBe(
+    false,
+  );
+  expect(calls).toContainEqual([
+    "plugin",
+    "marketplace",
+    "remove",
+    "--",
+    "context-fern",
+  ]);
+});
+
 test("when the marketplace was configured before init, only the plugin is removed", async () => {
   const log = await withPlugin({ marketplaceAddedByInit: false });
   await runUninstall(
