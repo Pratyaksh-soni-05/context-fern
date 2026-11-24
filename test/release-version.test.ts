@@ -53,9 +53,11 @@ test("a release candidate is tagged rc and a stable release gets no tag; a tag a
   expect(isReleaseCandidate("0.1.0")).toBe(false);
 });
 
-test("the script prints the model versions and the npm tag for a stable tag", () => {
+test("the script prints the model versions and the npm tag that matches the current version", () => {
   const r = run(`v${CLI_VERSION}`);
   expect(r.stdout).toContain("model_npm=");
   expect(r.stdout).toContain("model_pypi=");
-  expect(r.stdout).toMatch(/^npm_tag=$/m);
+  // rc for a release candidate, empty (so npm's latest) for a stable version
+  const tag = isReleaseCandidate(CLI_VERSION) ? "rc" : "";
+  expect(r.stdout).toMatch(new RegExp(`^npm_tag=${tag}$`, "m"));
 });
