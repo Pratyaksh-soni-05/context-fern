@@ -5,14 +5,23 @@
 // The marketplace source names the GitHub account today (REPO_OWNER);
 // that is the one place an install step still does, until the repo moves
 // to an organisation or a domain exists (docs/decisions.md 2026-11-10).
+//
+// The source is pinned to this binary's release tag, "v" + CLI_VERSION,
+// so the hooks Claude Code runs on every prompt are the ones released with
+// this binary, not whatever is on the repository's default git branch.
+// `claude plugin marketplace add owner/repo#ref` clones that ref (a tag or a
+// git branch name). A build whose tag does not exist on GitHub (a build made
+// before its release) fails that add, and init then prints the manual
+// commands with the same pinned source (docs/decisions.md 2026-11-24).
 
 import { execFile } from "node:child_process";
-import { CLI_NAME, REPO_OWNER } from "@context-fern/core";
+import { CLI_NAME, CLI_VERSION, REPO_OWNER } from "@context-fern/core";
 import type { PluginRecord } from "./manifest";
 
 export const MARKETPLACE_NAME = "context-fern";
 export const PLUGIN_NAME = "fern";
-export const MARKETPLACE_SOURCE = `${REPO_OWNER}/context-fern`;
+export const MARKETPLACE_REF = `v${CLI_VERSION}`;
+export const MARKETPLACE_SOURCE = `${REPO_OWNER}/context-fern#${MARKETPLACE_REF}`;
 
 export interface CommandResult {
   ok: boolean;

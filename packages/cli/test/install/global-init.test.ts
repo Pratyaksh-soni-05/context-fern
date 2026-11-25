@@ -9,7 +9,10 @@ import {
   shouldRunProjectInit,
 } from "../../src/install/global-init";
 import { readManifest } from "../../src/install/manifest";
-import type { CommandRunner } from "../../src/install/plugin-setup";
+import {
+  type CommandRunner,
+  MARKETPLACE_SOURCE,
+} from "../../src/install/plugin-setup";
 
 const EXE = process.platform === "win32" ? ".exe" : "";
 let root: string;
@@ -157,7 +160,7 @@ test("when claude is missing or a step fails, the exact manual commands are prin
   );
   const out = logs.join("\n");
   expect(out).toContain("Claude Code plugin not installed");
-  expect(out).toContain("claude plugin marketplace add");
+  expect(out).toContain(`claude plugin marketplace add ${MARKETPLACE_SOURCE}`);
   expect(out).toContain("claude plugin install fern@context-fern");
   expect((await readManifest(manifestPath()))?.plugin?.method).toBe("manual");
 
