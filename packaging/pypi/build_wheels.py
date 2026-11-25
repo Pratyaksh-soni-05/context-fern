@@ -28,7 +28,7 @@ from pathlib import Path
 
 PRODUCT = "context-fern"
 MODEL_PRODUCT = "context-fern-model"
-SUMMARY = "A free, local context router for coding agents."
+SUMMARY = "Local, manual-first context manager for coding agents. Free and open source."
 FIXED_TIME = (2026, 1, 1, 0, 0, 0)  # reproducible archives
 
 # target -> (wheel platform tag, exe suffix). The Linux floor is glibc 2.28

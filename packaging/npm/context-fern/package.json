@@ -1,7 +1,7 @@
 {
   "name": "context-fern",
   "version": "0.0.0-stamped-at-pack-time",
-  "description": "A free, local context router for coding agents.",
+  "description": "Local, manual-first context manager for coding agents. Free and open source.",
   "license": "Apache-2.0",
   "author": "Context Fern contributors",
   "bin": {
