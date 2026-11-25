@@ -115,14 +115,15 @@ export async function runInit(flags: Record<string, string>): Promise<void> {
 
   // The daemon defaults every new session to "suggest" mode
   // (project-registry.ts) — this message used to claim "observe", which
-  // was stale/never-true text: nothing in fern init ever set observe,
-  // and a project in observe mode shows no suggestions or focus notes
-  // at all, which isn't a sensible silent default for a tool whose
-  // entire value is manual-first suggestions. See docs/decisions.md.
+  // was stale/never-true text: nothing in fern init ever set observe.
+  // Observe is not a sensible silent default for a tool whose entire
+  // value is manual-first suggestions: it leaves the model's input
+  // unchanged (no focus note, no brief restore, no brief lookups), spec §6.
+  // See docs/decisions.md.
   console.log(
     `${CLI_NAME} ▸ briefs keep short prompt and reply snippets in ${CONFIG_DIR}/fronds/*.md on this machine only, never in the database · to stop keeping reply snippets set record_reply_gist = false under [briefs] in ${CONFIG_DIR}/config.toml`,
   );
   console.log(
-    `${CLI_NAME} ▸ ready · mode suggest · run "${CLI_NAME} mode observe" for a quiet, no-suggestions mode`,
+    `${CLI_NAME} ▸ ready · mode suggest · run "${CLI_NAME} mode observe" so the model sees no change (no focus note, no brief restore)`,
   );
 }
