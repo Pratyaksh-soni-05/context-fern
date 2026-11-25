@@ -468,14 +468,26 @@ jobs:
       # and `uv publish` does PyPI trusted publishing (OIDC) itself.
       - name: install uv (pinned)
         run: python -m pip install uv==0.9.22
-      # --check-url skips files already on the index: a stable release's model
-      # wheel keeps its version across releases; a candidate's is 1.0.0rcN.
-      - name: upload with trusted publishing
+      # One `uv publish` per project, each minting its own trusted-publishing
+      # token: a token created from a pending publisher can create only one
+      # new project, so two new projects in one command fail with "Non-user
+      # identities cannot create new projects" (the rc.1 run). The model wheel
+      # goes first, then the four platform wheels. --check-url skips files
+      # already on the index, so a retry of a failed step uploads only what is
+      # missing; a stable release's model wheel keeps its version across
+      # releases, a candidate's is 1.0.0rcN.
+      - name: upload the context-fern-model wheel
         run: |
           uv publish --trusted-publishing always \
             --publish-url https://test.pypi.org/legacy/ \
             --check-url https://test.pypi.org/simple/ \
-            packages/pypi/*
+            packages/pypi/context_fern_model-*.whl
+      - name: upload the context-fern wheels
+        run: |
+          uv publish --trusted-publishing always \
+            --publish-url https://test.pypi.org/legacy/ \
+            --check-url https://test.pypi.org/simple/ \
+            packages/pypi/context_fern-*.whl
 
   publish-pypi:
     needs: [package, install-smoke, glibc-floor, publish]
@@ -497,11 +509,18 @@ jobs:
           path: packages
       - name: install uv (pinned)
         run: python -m pip install uv==0.9.22
-      - name: upload with trusted publishing
+      # One `uv publish` per project, each with its own token; see the
+      # TestPyPI job above for why.
+      - name: upload the context-fern-model wheel
         run: |
           uv publish --trusted-publishing always \
             --check-url https://pypi.org/simple/ \
-            packages/pypi/*
+            packages/pypi/context_fern_model-*.whl
+      - name: upload the context-fern wheels
+        run: |
+          uv publish --trusted-publishing always \
+            --check-url https://pypi.org/simple/ \
+            packages/pypi/context_fern-*.whl
 
   publish-npm:
     needs: [package, install-smoke, glibc-floor, publish]
