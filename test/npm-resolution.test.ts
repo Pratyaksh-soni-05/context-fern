@@ -124,7 +124,8 @@ test("a stable release pins stable versions: no rc anywhere", () => {
   const { r, out } = pack("0.1.0", "1.0.0");
   expect(r.status).toBe(0);
   const main = packageJsonOf(out, "context-fern-0.1.0.tgz".replace(".tgz", ""));
-  expect(JSON.stringify(main)).not.toContain("rc");
+  // an rc version string, not the letters "rc" (the description says "open source")
+  expect(JSON.stringify(main)).not.toMatch(/-rc\./);
   expect(main.dependencies).toEqual({ "context-fern-model": "1.0.0" });
 }, 120_000);
 

@@ -1,7 +1,7 @@
 {
   "name": "context-fern",
   "owner": { "name": "Context Fern" },
-  "description": "Context Fern — a free, local, open-source context router for coding agents.",
+  "description": "Context Fern — local, manual-first context manager for coding agents. Free and open source.",
   "plugins": [
     {
       "name": "fern",
