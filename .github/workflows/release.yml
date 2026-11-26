@@ -549,14 +549,31 @@ jobs:
         run: npm install -g npm@11.5.1
       # Dependencies first, the launcher last, so nothing resolves to a package that is not there yet.
       # A release candidate publishes under the `rc` dist-tag and a stable
-      # release under no tag (so `latest`). Every tarball is checked against
-      # the tag BEFORE any is published, so a mismatch publishes nothing.
+      # release under `next`: no release moves `latest`. The maintainer
+      # promotes a stable release with `npm dist-tag add` after verify-npm is
+      # green (docs/build-plan.md). Every tarball is checked against the tag
+      # BEFORE any is published, so a mismatch publishes nothing. The launcher
+      # goes up only once the other five are visible on the registry, because
+      # a registry that lags would otherwise hand out a launcher whose
+      # platform package does not resolve yet (the rc.1 verify-npm failures).
       - name: publish
         env:
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -e
-          case "$REF_NAME" in *-rc.*) want_tag=rc ;; *) want_tag="" ;; esac
+          case "$REF_NAME" in *-rc.*) want_tag=rc ;; *) want_tag=next ;; esac
+          # How long to wait for the five packages: 40 tries, 15 s apart (10 minutes).
+          tries="${VISIBLE_POLL_TRIES:-40}"; pause="${VISIBLE_POLL_SECONDS:-15}"
+          wait_visible() {
+            i=1
+            while [ "$i" -le "$tries" ]; do
+              if npm view "$1" version --prefer-online >/dev/null 2>&1; then return 0; fi
+              echo "waiting for $1 on the registry ($i/$tries)"
+              sleep "$pause"; i=$((i + 1))
+            done
+            echo "$1 is still not visible on the registry after $tries tries, so the launcher was NOT published. Re-run this job; it skips what is already published."
+            return 1
+          }
           # An explicit order (ls would sort the launcher first), and exactly six
           # tarballs: model, win, two linux, darwin, then the launcher.
           files=()
@@ -569,22 +586,31 @@ jobs:
           [ "${#files[@]}" -eq 6 ] || { echo "expected six tarballs, found ${#files[@]}: ${files[*]}"; exit 1; }
           for f in "${files[@]}"; do
             version="$(tar xzOf "$f" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8")).version')"
-            case "$version" in *-rc.*) have_tag=rc ;; *) have_tag="" ;; esac
+            case "$version" in *-rc.*) have_tag=rc ;; *) have_tag=next ;; esac
             if [ "$have_tag" != "$want_tag" ]; then
               echo "refusing to publish anything: $f is $version but the tag is $REF_NAME"
               exit 1
             fi
           done
-          for f in "${files[@]}"; do
+          last=$(( ${#files[@]} - 1 ))
+          for idx in "${!files[@]}"; do
+            f="${files[$idx]}"
             name="$(tar xzOf "$f" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8")).name')"
             version="$(tar xzOf "$f" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8")).version')"
+            if [ "$idx" -eq "$last" ]; then
+              for g in "${files[@]:0:$last}"; do
+                dep="$(tar xzOf "$g" package/package.json | node -p 'const p=JSON.parse(require("fs").readFileSync(0,"utf8"));p.name+"@"+p.version')"
+                [ -n "$dep" ] || { echo "could not read the name and version of $g"; exit 1; }
+                wait_visible "$dep" || exit 1
+              done
+            fi
             # A version already on the registry is skipped, so re-running a tag finishes a half-published release.
-            if npm view "$name@$version" version >/dev/null 2>&1; then
+            if npm view "$name@$version" version --prefer-online >/dev/null 2>&1; then
               echo "$name@$version is already published, skipping"
               continue
             fi
-            echo "publishing $name@$version ${want_tag:+under the $want_tag tag}"
-            npm publish "$f" --access public --provenance ${want_tag:+--tag "$want_tag"}
+            echo "publishing $name@$version under the $want_tag tag"
+            npm publish "$f" --access public --provenance --tag "$want_tag"
           done
 
   # After publish-npm: installs from the real registry on each platform and
@@ -623,9 +649,8 @@ jobs:
           model_version="$(echo "$out" | sed -n 's/^model_npm=//p')"
           npm_tag="$(echo "$out" | sed -n 's/^npm_tag=//p')"
           [ -n "$version" ] && [ -n "$model_version" ] || { echo "could not read the versions for $REF_NAME"; exit 1; }
-          tag=latest
-          [ "$npm_tag" = rc ] && tag=rc
-          bun scripts/verify-npm-release.ts --version "$version" --model-version "$model_version" --tag "$tag"
+          [ "$npm_tag" = rc ] || [ "$npm_tag" = next ] || { echo "unexpected npm tag [$npm_tag] for $REF_NAME"; exit 1; }
+          bun scripts/verify-npm-release.ts --version "$version" --model-version "$model_version" --tag "$npm_tag"
 
   # The GitHub Release and build provenance for the tarballs; the only job
   # with contents: write. Needs a push event, a v* tag, a public repository

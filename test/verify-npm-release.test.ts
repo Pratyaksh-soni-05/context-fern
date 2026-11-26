@@ -3,6 +3,8 @@ import {
   checkDistTags,
   checkInstalled,
   expectedVersions,
+  INSTALL_RETRY,
+  onlyPlatformPackageMissing,
   platformPackageFor,
 } from "../scripts/verify-npm-release";
 
@@ -39,7 +41,7 @@ test("a release candidate that became latest on any package is a problem", () =>
   const problems = checkDistTags(tags, RC, "rc");
   expect(problems).toHaveLength(1);
   expect(problems[0]).toContain("context-fern-model");
-  expect(problems[0]).toContain("never be latest");
+  expect(problems[0]).toContain("only promoted to latest by hand");
 });
 
 test("a package whose rc tag is wrong, or that is missing, is a problem", () => {
@@ -55,16 +57,57 @@ test("a package whose rc tag is wrong, or that is missing, is a problem", () => 
   );
 });
 
-test("a stable release needs latest on every package", () => {
+test("a stable release is checked under next, with latest left where it was", () => {
   const stable = expectedVersions("0.1.0", "1.0.0");
   expect(
-    checkDistTags(tagsFor("latest", "0.1.0", stable), stable, "latest"),
+    checkDistTags(tagsFor("next", "0.0.0", stable), stable, "next"),
   ).toEqual([]);
-  const tags = tagsFor("latest", "0.1.0", stable);
-  (tags["context-fern-model"] as Record<string, string>).latest = "0.0.0";
-  expect(checkDistTags(tags, stable, "latest")[0]).toContain(
-    "context-fern-model",
+  // a package still waiting on its next tag is a problem
+  const tags = tagsFor("next", "0.0.0", stable);
+  (tags["context-fern-model"] as Record<string, string>).next = "0.9.0";
+  expect(checkDistTags(tags, stable, "next")[0]).toContain(
+    "context-fern-model: next is 0.9.0",
   );
+});
+
+test("a stable release that already moved latest is a problem: promotion is manual, after this check", () => {
+  const stable = expectedVersions("0.1.0", "1.0.0");
+  const tags = tagsFor("next", "0.0.0", stable);
+  (tags["@context-fern/win-x64"] as Record<string, string>).latest = "0.1.0";
+  const problems = checkDistTags(tags, stable, "next");
+  expect(problems).toHaveLength(1);
+  expect(problems[0]).toContain("@context-fern/win-x64: latest is 0.1.0");
+});
+
+test("only a missing platform package is retried; a wrong version or a missing launcher is not", () => {
+  const P = "@context-fern/linux-x64";
+  expect(
+    onlyPlatformPackageMissing(
+      { "context-fern": "0.1.0-rc.1", "context-fern-model": "1.0.0-rc.1" },
+      P,
+    ),
+  ).toBe(true);
+  expect(
+    onlyPlatformPackageMissing(
+      {
+        "context-fern": "0.1.0-rc.1",
+        "context-fern-model": "1.0.0-rc.1",
+        [P]: "0.1.0-rc.1",
+      },
+      P,
+    ),
+  ).toBe(false);
+  expect(onlyPlatformPackageMissing({}, P)).toBe(false);
+  expect(
+    onlyPlatformPackageMissing({ "context-fern-model": "1.0.0-rc.1" }, P),
+  ).toBe(false);
+});
+
+test("the install retry lasts several minutes, in steps of 15 s", () => {
+  expect(INSTALL_RETRY.everyMs).toBe(15_000);
+  const minutes = (INSTALL_RETRY.tries * INSTALL_RETRY.everyMs) / 60_000;
+  expect(minutes).toBeGreaterThanOrEqual(3);
+  expect(minutes).toBeLessThanOrEqual(10);
 });
 
 test("an install that got the launcher, the model and only this machine's platform package at the rc versions passes", () => {

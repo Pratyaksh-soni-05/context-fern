@@ -7,7 +7,8 @@
 // `context-fern hook` compares at runtime. Prints the version in each
 // registry's own spelling: npm takes semver (0.1.0-rc.1), PyPI takes PEP
 // 440 (0.1.0rc1), and the model package's version for this release and the
-// npm dist-tag to publish under. Run by the release workflow's package job.
+// npm dist-tag to publish under (`rc` or `next`, never `latest`). Run by the
+// release workflow's package job.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -45,17 +46,18 @@ export function modelVersionFor(model: string, release: string): string {
 
 /**
  * The npm dist-tag a version must be published under: `rc` for a release
- * candidate, none for a stable version (so it becomes `latest`). Throws if
- * the tag and the version disagree, so a candidate can never become `latest`
- * and a stable release can never be tagged `rc`.
+ * candidate, `next` for a stable version. Neither is `latest`: the
+ * maintainer moves `latest` by hand once the release is verified. Throws if
+ * the tag and the version disagree, so a stable release can never be tagged
+ * `rc` and a candidate can never be tagged `next`.
  */
-export function npmDistTag(refName: string, version: string): "rc" | "" {
+export function npmDistTag(refName: string, version: string): "rc" | "next" {
   const fromRef = isReleaseCandidate(refName.replace(/^v/, ""));
   if (fromRef !== isReleaseCandidate(version))
     throw new Error(
       `${refName} and ${version} disagree about being a release candidate`,
     );
-  return fromRef ? "rc" : "";
+  return fromRef ? "rc" : "next";
 }
 
 if (import.meta.main) {

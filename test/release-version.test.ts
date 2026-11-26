@@ -44,9 +44,9 @@ test("a release candidate gets an rc model version from its own rc number; a sta
   expect(() => modelVersionFor("1.0.0-rc.1", "0.1.0")).toThrow();
 });
 
-test("a release candidate is tagged rc and a stable release gets no tag; a tag and version that disagree throw", () => {
+test("a release candidate is tagged rc and a stable release next, never latest; a tag and version that disagree throw", () => {
   expect(npmDistTag("v0.1.0-rc.1", "0.1.0-rc.1")).toBe("rc");
-  expect(npmDistTag("v0.1.0", "0.1.0")).toBe("");
+  expect(npmDistTag("v0.1.0", "0.1.0")).toBe("next");
   expect(() => npmDistTag("v0.1.0-rc.1", "0.1.0")).toThrow();
   expect(() => npmDistTag("v0.1.0", "0.1.0-rc.1")).toThrow();
   expect(isReleaseCandidate("0.1.0-rc.1")).toBe(true);
@@ -57,7 +57,7 @@ test("the script prints the model versions and the npm tag that matches the curr
   const r = run(`v${CLI_VERSION}`);
   expect(r.stdout).toContain("model_npm=");
   expect(r.stdout).toContain("model_pypi=");
-  // rc for a release candidate, empty (so npm's latest) for a stable version
-  const tag = isReleaseCandidate(CLI_VERSION) ? "rc" : "";
+  // rc for a release candidate, next for a stable version, never latest
+  const tag = isReleaseCandidate(CLI_VERSION) ? "rc" : "next";
   expect(r.stdout).toMatch(new RegExp(`^npm_tag=${tag}$`, "m"));
 });
