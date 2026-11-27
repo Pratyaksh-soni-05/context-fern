@@ -39,4 +39,4 @@ export const CLI_BINARY_NAME = "context-fern";
  * stamps a real per-build version in, this is the only version either
  * side has.
  */
-export const CLI_VERSION = "0.1.0-rc.1";
+export const CLI_VERSION = "0.1.0-rc.2";
