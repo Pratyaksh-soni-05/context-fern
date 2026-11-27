@@ -39,6 +39,46 @@ test("npm publishes both release candidates and stable releases, gated on PUBLIS
   expect(j).toContain("environment: npm");
 });
 
+test("each PyPI job uploads one project per `uv publish`, the model wheel first, each with its own token and --check-url", () => {
+  const cases = [
+    {
+      name: "publish-testpypi",
+      env: "environment: testpypi",
+      index: "https://test.pypi.org/simple/",
+      extra: "--publish-url https://test.pypi.org/legacy/",
+    },
+    {
+      name: "publish-pypi",
+      env: "environment: pypi",
+      index: "https://pypi.org/simple/",
+      extra: "",
+    },
+  ];
+  for (const c of cases) {
+    const j = job(c.name);
+    // command lines only: the comments above them mention `uv publish` too
+    const calls = j.split(/^\s+uv publish /m).slice(1);
+    expect(calls.length).toBe(2);
+    // the model wheel first, then the platform wheels; the two globs cannot overlap
+    expect(calls[0]).toContain("packages/pypi/context_fern_model-*.whl");
+    expect(calls[1]).toContain("packages/pypi/context_fern-*.whl");
+    for (const call of calls) {
+      expect(call).toContain("--trusted-publishing always");
+      expect(call).toContain(`--check-url ${c.index}`);
+      if (c.extra) expect(call).toContain(c.extra);
+      expect(call).not.toContain("packages/pypi/*");
+    }
+    // unchanged: the Environment and the permissions
+    expect(j).toContain(c.env);
+    expect(j).toContain("id-token: write");
+  }
+  // unchanged: the conditions
+  expect(job("publish-testpypi")).toContain(
+    "vars.PUBLISH_TEST_ENABLED == 'true'",
+  );
+  expect(job("publish-pypi")).toContain("vars.PUBLISH_ENABLED == 'true'");
+});
+
 test("PyPI proper still skips release candidates and TestPyPI still takes only them", () => {
   expect(job("publish-pypi")).toContain("!contains(github.ref_name, '-rc.')");
   expect(job("publish-testpypi")).toContain(
