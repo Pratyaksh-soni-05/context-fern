@@ -2,15 +2,19 @@
 // clean directory on the machine it runs on:
 //
 //   bun scripts/verify-npm-release.ts --version 0.1.0-rc.1 --model-version 1.0.0-rc.1 --tag rc
-//   bun scripts/verify-npm-release.ts --version 0.1.0 --model-version 1.0.0 --tag latest
+//   bun scripts/verify-npm-release.ts --version 0.1.0 --model-version 1.0.0 --tag next
 //
 // 1. All six packages are on the registry at the expected version (waits for
 //    the registry to catch up).
-// 2. Each package's `tag` dist-tag is that version; for a release candidate
-//    `latest` is NOT that version, and for a stable release it is.
+// 2. Each package's `tag` dist-tag (`rc` or `next`) is that version, and
+//    `latest` is NOT that version: this job never touches `latest`. The
+//    maintainer moves it by hand once every platform is green.
 // 3. `npm install context-fern@<tag>` installs the launcher, exactly this
 //    machine's platform package and the model, each at the expected version,
-//    and `context-fern --version` prints the release version.
+//    and `context-fern --version` prints the release version. The registry
+//    can hand out stale metadata for a minute or two after a publish, which
+//    makes npm skip an optional package without an error, so a missing
+//    platform package is retried in a fresh directory (see INSTALL_RETRY).
 //
 // The checks themselves are pure functions so test/verify-npm-release.test.ts
 // can run them offline; only `main` talks to the network.
@@ -65,7 +69,7 @@ export function expectedVersions(
 export function checkDistTags(
   tagsByPackage: Record<string, Record<string, string> | undefined>,
   expected: Record<string, string>,
-  tag: "rc" | "latest",
+  tag: "rc" | "next",
 ): string[] {
   const problems: string[] = [];
   for (const [name, version] of Object.entries(expected)) {
@@ -76,9 +80,9 @@ export function checkDistTags(
     }
     if (tags[tag] !== version)
       problems.push(`${name}: ${tag} is ${tags[tag]}, expected ${version}`);
-    if (tag === "rc" && tags.latest === version)
+    if (tags.latest === version)
       problems.push(
-        `${name}: latest is ${version}, a release candidate must never be latest`,
+        `${name}: latest is ${version}, but a release is only promoted to latest by hand after this check`,
       );
   }
   return problems;
@@ -106,6 +110,25 @@ export function checkInstalled(
       );
   }
   return problems;
+}
+
+/** How long a missing platform package is retried: 20 tries 15 s apart (about 5 minutes). */
+export const INSTALL_RETRY = { tries: 20, everyMs: 15_000 };
+
+/**
+ * True when the install left everything but this machine's platform package,
+ * which npm skips without an error if the registry has not caught up. Any
+ * other problem (a wrong version, a failed install) is real and is not retried.
+ */
+export function onlyPlatformPackageMissing(
+  installed: Record<string, string | undefined>,
+  platformPackage: string,
+): boolean {
+  return (
+    installed[platformPackage] === undefined &&
+    installed[MAIN_PACKAGE] !== undefined &&
+    installed[MODEL_PACKAGE] !== undefined
+  );
 }
 
 function npm(args: string[], cwd?: string): string {
@@ -136,9 +159,8 @@ function installedVersion(root: string, name: string): string | undefined {
 async function main(): Promise<number> {
   const version = arg("version");
   const modelVersion = arg("model-version");
-  const tag = arg("tag") as "rc" | "latest";
-  if (tag !== "rc" && tag !== "latest")
-    throw new Error("--tag is rc or latest");
+  const tag = arg("tag") as "rc" | "next";
+  if (tag !== "rc" && tag !== "next") throw new Error("--tag is rc or next");
   const expected = expectedVersions(version, modelVersion);
 
   // The registry can lag a few minutes behind a publish.
@@ -178,28 +200,53 @@ async function main(): Promise<number> {
 
   const problems = checkDistTags(tagsByPackage, expected, tag);
 
-  const dir = mkdtempSync(join(tmpdir(), "fern-verify-npm-"));
-  try {
+  const platformPackage = platformPackageFor(process.platform, process.arch);
+  // Each attempt installs into a fresh directory; --prefer-online makes npm
+  // ask the registry again instead of trusting a cached package document.
+  let dir = "";
+  for (let attempt = 1; ; attempt++) {
+    dir = mkdtempSync(join(tmpdir(), "fern-verify-npm-"));
     writeFileSync(
       join(dir, "package.json"),
       '{"name":"verify","private":true}\n',
     );
+    const attemptProblems: string[] = [];
     try {
       npm(
-        ["install", `${MAIN_PACKAGE}@${tag}`, "--no-audit", "--no-fund"],
+        [
+          "install",
+          `${MAIN_PACKAGE}@${tag}`,
+          "--prefer-online",
+          "--no-audit",
+          "--no-fund",
+        ],
         dir,
       );
     } catch (e) {
-      problems.push(
+      attemptProblems.push(
         `npm install ${MAIN_PACKAGE}@${tag} failed: ${(e as Error).message}`,
       );
     }
-    const platformPackage = platformPackageFor(process.platform, process.arch);
     const installed: Record<string, string | undefined> = {};
     for (const n of [MAIN_PACKAGE, MODEL_PACKAGE, ...PLATFORM_PACKAGES])
       installed[n] = installedVersion(dir, n);
-    problems.push(...checkInstalled(installed, platformPackage, expected));
-
+    attemptProblems.push(
+      ...checkInstalled(installed, platformPackage, expected),
+    );
+    const retry =
+      onlyPlatformPackageMissing(installed, platformPackage) &&
+      attempt < INSTALL_RETRY.tries;
+    console.log(
+      `install attempt ${attempt}/${INSTALL_RETRY.tries}: ${attemptProblems.length === 0 ? "ok" : attemptProblems.join("; ")}${retry ? `; retrying in ${INSTALL_RETRY.everyMs / 1000} s in a fresh directory` : ""}`,
+    );
+    if (!retry) {
+      problems.push(...attemptProblems);
+      break;
+    }
+    rmSync(dir, { recursive: true, force: true });
+    await sleep(INSTALL_RETRY.everyMs);
+  }
+  try {
     // Run the launcher the way `npx` would, with node: no .cmd shim, no shell.
     const launcher = join(
       dir,

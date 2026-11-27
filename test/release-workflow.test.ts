@@ -130,7 +130,7 @@ function stubTarball(dir: string, file: string, name: string, version: string) {
 function runPublish(
   refName: string,
   versions: { main: string; model: string; mixed?: string },
-  options: { omit?: string } = {},
+  options: { omit?: string; hide?: string; already?: string[] } = {},
 ) {
   const dir = mkdtempSync(join(tmpdir(), "fern-publish-step-"));
   try {
@@ -154,11 +154,32 @@ function runPublish(
     ];
     for (const [stem, name, v] of all)
       if (stem !== options.omit) stubTarball(dir, `${stem}-${v}.tgz`, name, v);
-    // A fake npm: records every call; `view` says "not published yet".
+    // A fake npm: records every call. `publish` remembers name@version from
+    // the tarball; `view name@version` succeeds only for a remembered one,
+    // except the one named in HIDE, which never becomes visible.
     writeFileSync(
       join(dir, "bin", "npm"),
-      '#!/bin/sh\necho "$@" >> "$NPM_LOG"\n[ "$1" = view ] && exit 1\nexit 0\n',
+      [
+        "#!/bin/sh",
+        'echo "$@" >> "$NPM_LOG"',
+        'if [ "$1" = publish ]; then',
+        '  tar xzOf "$2" package/package.json | node -p \'const p=JSON.parse(require("fs").readFileSync(0,"utf8"));p.name+"@"+p.version\' >> "$NPM_PUBLISHED"',
+        "  exit 0",
+        "fi",
+        'if [ "$1" = view ]; then',
+        '  [ -n "$HIDE" ] && [ "$2" = "$HIDE" ] && exit 1',
+        '  grep -qxF "$2" "$NPM_PUBLISHED" 2>/dev/null && exit 0',
+        "  exit 1",
+        "fi",
+        "exit 0",
+        "",
+      ].join("\n"),
       { mode: 0o755 },
+    );
+    // name@version pairs that are already on the registry before the step starts
+    writeFileSync(
+      join(dir, "published.txt"),
+      (options.already ?? []).map((l) => `${l}\n`).join(""),
     );
     writeFileSync(join(dir, "step.sh"), publishScript());
     const r = spawnSync("bash", ["-e", "step.sh"], {
@@ -168,6 +189,10 @@ function runPublish(
         ...process.env,
         PATH: `${join(dir, "bin")}${delimiter}${process.env.PATH}`,
         NPM_LOG: join(dir, "npm.log"),
+        NPM_PUBLISHED: join(dir, "published.txt"),
+        HIDE: options.hide ?? "",
+        VISIBLE_POLL_TRIES: "3",
+        VISIBLE_POLL_SECONDS: "0",
         REF_NAME: refName,
       },
     });
@@ -197,12 +222,55 @@ test("a release candidate publishes all six, the launcher last, each under --tag
   }
 }, 60_000);
 
-test("a stable release publishes all six with no --tag, so latest moves, the launcher last", () => {
+test("a stable release publishes all six under --tag next, so latest does not move, the launcher last", () => {
   const { r, publishes } = runPublish("v0.1.0", STABLE);
   expect(r.status).toBe(0);
   expect(publishes).toHaveLength(6);
   expect(publishes[5]).toContain("packages/npm/context-fern-0.1.0.tgz");
-  for (const p of publishes) expect(p).not.toContain("--tag");
+  for (const p of publishes) {
+    expect(p).toContain("--tag next");
+    expect(p).not.toContain("--tag latest");
+  }
+}, 60_000);
+
+test("the launcher is published only after the model and the four platform packages are visible on the registry", () => {
+  const { r, publishes } = runPublish("v0.1.0-rc.1", RC);
+  expect(r.status).toBe(0);
+  expect(publishes).toHaveLength(6);
+  // the launcher is the last publish, after the five others
+  expect(publishes.slice(0, 5).join("\n")).not.toContain(
+    "packages/npm/context-fern-0.1.0-rc.1.tgz",
+  );
+  expect(publishes[5]).toContain("packages/npm/context-fern-0.1.0-rc.1.tgz");
+}, 60_000);
+
+test("a re-run after the five were published (and a launcher that was not) skips the five and publishes only the launcher", () => {
+  const { r, publishes } = runPublish("v0.1.0-rc.1", RC, {
+    already: [
+      "context-fern-model@1.0.0-rc.1",
+      "@context-fern/win-x64@0.1.0-rc.1",
+      "@context-fern/linux-x64@0.1.0-rc.1",
+      "@context-fern/linux-arm64@0.1.0-rc.1",
+      "@context-fern/darwin-arm64@0.1.0-rc.1",
+    ],
+  });
+  expect(r.status).toBe(0);
+  expect(r.stdout).toContain("is already published, skipping");
+  expect(publishes).toHaveLength(1);
+  expect(publishes[0]).toContain("packages/npm/context-fern-0.1.0-rc.1.tgz");
+}, 60_000);
+
+test("if one of the five never becomes visible, the launcher is not published and the step says so", () => {
+  const { r, publishes } = runPublish("v0.1.0-rc.1", RC, {
+    hide: "@context-fern/linux-arm64@0.1.0-rc.1",
+  });
+  expect(r.status).not.toBe(0);
+  expect(r.stdout).toContain(
+    "waiting for @context-fern/linux-arm64@0.1.0-rc.1 on the registry",
+  );
+  expect(r.stdout).toContain("the launcher was NOT published");
+  expect(publishes).toHaveLength(5);
+  expect(publishes.join("\n")).not.toContain("context-fern-0.1.0-rc.1.tgz");
 }, 60_000);
 
 test("a release-candidate tag with a stable tarball, or a stable tag with an rc one, publishes nothing at all", () => {
