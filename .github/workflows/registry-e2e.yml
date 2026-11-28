@@ -1,0 +1,113 @@
+name: Registry e2e
+
+# Installs context-fern from the REAL registries on clean runners and checks
+# what a user gets: init, doctor, a scripted hook run, daemon stop and
+# uninstall (scripts/registry-e2e.ts), and the TestPyPI wheels with pip and
+# uvx. Run it by hand after a release candidate or a stable `next` publish:
+#
+#   gh workflow run registry-e2e.yml -f spec=rc
+#
+# It cannot publish. It only reads: no secrets, no id-token, no Environment,
+# a read-only token, and only actions the repository already allows. A runner
+# is a fresh virtual machine that is discarded afterwards, so the install it
+# makes (a profile under a scratch HOME, and on Windows the runner's own user
+# PATH) disappears with it. test/registry-e2e-workflow.test.ts pins all of this.
+
+on:
+  workflow_dispatch:
+    inputs:
+      spec:
+        description: "npm tag or version to test (rc, next, or for example 0.1.0-rc.2)"
+        required: false
+        default: rc
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  BUN_VERSION: "1.4.4"
+
+jobs:
+  npm:
+    name: npm (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-24.04, ubuntu-24.04-arm, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      # The input reaches the script only through the environment, never
+      # through the shell text, and the script checks its shape.
+      - name: install from npm and run init, doctor, hooks, daemon stop and uninstall
+        shell: bash
+        env:
+          SPEC: ${{ inputs.spec }}
+        run: bun scripts/registry-e2e.ts --spec "$SPEC" --add-to-path
+
+  # TestPyPI only ever holds release candidates, so this job runs for the rc
+  # tag or an exact rc version and is skipped for `next` and stable versions.
+  testpypi:
+    if: ${{ inputs.spec == 'rc' || contains(inputs.spec, '-rc.') }}
+    name: TestPyPI (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      # TestPyPI holds only our files, so the dependencies come from pypi.org
+      # through an extra index; --index-strategy unsafe-best-match lets uv
+      # take them from there.
+      - name: resolve the version, then install with pip and run it with uvx
+        shell: bash
+        env:
+          SPEC: ${{ inputs.spec }}
+        run: |
+          set -euo pipefail
+          case "$SPEC" in
+            *[!A-Za-z0-9.-]*|"") echo "spec must be an npm tag or a version: [$SPEC]"; exit 1 ;;
+          esac
+          # the registry can lag a publish by a few minutes: ask again before giving up
+          for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+            ver="$(npm view "context-fern@$SPEC" version --prefer-online 2>/dev/null || true)"
+            model="$(npm view "context-fern-model@$SPEC" version --prefer-online 2>/dev/null || true)"
+            [ -n "$ver" ] && [ -n "$model" ] && break
+            [ "$i" -lt 20 ] || { echo "npm does not resolve $SPEC for both packages"; exit 1; }
+            echo "npm attempt $i/20: $SPEC does not resolve yet, retrying in 15 s"; sleep 15
+          done
+          case "$ver$model" in *[!A-Za-z0-9.-]*) echo "unexpected npm answer: [$ver] [$model]"; exit 1 ;; esac
+          # npm spells a candidate 0.1.0-rc.2, PyPI 0.1.0rc2
+          pyver="${ver/-rc./rc}"
+          pymodel="${model/-rc./rc}"
+          echo "testing context-fern==$pyver and context-fern-model==$pymodel (npm $ver)"
+          INDEX=(--index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/)
+          python -m venv venv
+          if [ -x venv/Scripts/python.exe ]; then py=venv/Scripts/python.exe; bin=venv/Scripts; else py=venv/bin/python; bin=venv/bin; fi
+          for i in 1 2 3 4 5 6 7 8; do
+            if "$py" -m pip install --quiet "${INDEX[@]}" "context-fern==$pyver" "context-fern-model==$pymodel"; then break; fi
+            [ "$i" -lt 8 ] || { echo "pip could not install from TestPyPI"; exit 1; }
+            echo "pip attempt $i/8 failed; TestPyPI may still be catching up, retrying in 15 s"; sleep 15
+          done
+          "$py" -m pip list | grep -i "context-fern"
+          printed="$("$bin"/context-fern --version | tr -d '\r')"
+          [ "$printed" = "$ver" ] || { echo "pip install printed [$printed], expected [$ver]"; exit 1; }
+          printed="$(uvx --no-cache "${INDEX[@]}" --index-strategy unsafe-best-match --prerelease allow --from "context-fern==$pyver" context-fern --version | tr -d '\r')"
+          [ "$printed" = "$ver" ] || { echo "uvx printed [$printed], expected [$ver]"; exit 1; }
+          echo "pip and uvx both print $ver"
